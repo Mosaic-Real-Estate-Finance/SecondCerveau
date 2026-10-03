@@ -37,8 +37,31 @@ function taskpaneHeaders(): Plugin {
     writeHead(...args: unknown[]): unknown;
   };
 
-  const strip = (req: { url?: string }, res: Res, next: () => void) => {
+  const strip = (
+    req: { url?: string; method?: string; headers: Record<string, string | string[] | undefined> },
+    res: Res,
+    next: () => void,
+  ) => {
     if (!(req.url ?? "").startsWith("/outlook")) return next();
+
+    // Private Network Access: Outlook on the web is a public origin asking a
+    // loopback one for the taskpane, and Chromium guards that.
+    //
+    // Under the old PNA model the browser sends a preflight carrying
+    // `Access-Control-Request-Private-Network` and expects this answer, so the
+    // answer is given. Under Local Network Access, which replaced PNA in
+    // Chrome 141, no header helps at all: the gate is a user permission that
+    // the *embedding* site has to hold, and that is Microsoft's page, not
+    // ours. This block therefore only covers Chromium builds still on PNA.
+    //
+    // It costs one branch and runs only when a browser actually asks.
+    if (req.headers["access-control-request-private-network"]) {
+      res.setHeader("Access-Control-Allow-Private-Network", "true");
+      res.setHeader("Access-Control-Allow-Origin", req.headers.origin ?? "*");
+      res.setHeader("Access-Control-Allow-Headers", req.headers["access-control-request-headers"] ?? "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
+      res.setHeader("Access-Control-Max-Age", "600");
+    }
 
     // Whichever side of this middleware `server.headers` lands on: take them
     // off if they are already there, and keep them off if they are not yet.
@@ -63,14 +86,23 @@ function taskpaneHeaders(): Plugin {
     next();
   };
 
+  // Connect runs its layers in order, and Vite installs its own CORS and
+  // header middlewares before any plugin's. The CORS one answers an OPTIONS
+  // preflight and ends it, so a middleware added normally never sees one.
+  // Moving this layer to the front of the stack is the only way to be ahead of
+  // both — and it is why the isolation headers are handled by intercepting
+  // `setHeader` as well as by removing them: from the front, there is nothing
+  // to remove yet.
+  const first = (middlewares: { use(fn: unknown): unknown; stack: unknown[] }) => {
+    middlewares.use(strip);
+    const layer = middlewares.stack.pop();
+    if (layer) middlewares.stack.unshift(layer);
+  };
+
   return {
     name: "taskpane-headers",
-    configureServer(server) {
-      server.middlewares.use(strip);
-    },
-    configurePreviewServer(server) {
-      server.middlewares.use(strip);
-    },
+    configureServer: (server) => first(server.middlewares as never),
+    configurePreviewServer: (server) => first(server.middlewares as never),
   };
 }
 

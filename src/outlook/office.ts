@@ -49,6 +49,23 @@ export async function ready(): Promise<boolean> {
 }
 
 /**
+ * Whether there is an Outlook mailbox behind this page at all.
+ *
+ * office.js loads perfectly well from its CDN in an ordinary browser tab, and
+ * `Office.onReady` resolves there too — so the mere presence of the library
+ * says nothing. What distinguishes a host is the mailbox. Without this check
+ * the panel mistakes a browser tab for an Outlook too old to sign in, and
+ * tells the reader to update a version of Outlook they are not running.
+ */
+export function inMailbox(): boolean {
+  try {
+    return Boolean(office()?.context?.mailbox);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Whether this Outlook can do nested app authentication.
  *
  * It cannot be declared in an add-in manifest, so it has to be asked at

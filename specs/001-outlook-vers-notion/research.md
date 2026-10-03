@@ -285,6 +285,45 @@ l'épinglage.
   serveur de développement ; en production il aurait servi l'application de dictée. Il pointe
   sur le taskpane.
 
+### G-2. Chrome bloque localhost depuis Outlook sur le web — **vérifié, et aucun en-tête n'y peut rien**
+
+Après la correction du manifeste, le sideload échoue encore sur Chrome, et la console donne
+`localhost:5173/outlook/icon-128.png net::ERR_FAILED`, **sans erreur de certificat**.
+
+C'est *Local Network Access*. Une origine publique — `outlook.office.com` — demande une
+origine loopback, et Chrome le refuse depuis la version 141.
+
+- **L'en-tête `Access-Control-Allow-Private-Network` ne résout pas ce cas.** Il appartient au
+  modèle précédent, *Private Network Access*, que LNA remplace. Sous LNA la barrière est une
+  **permission utilisateur**, et elle est détenue par le site **englobant** : la page de
+  Microsoft, pas la nôtre. Une iframe ne l'obtient que par délégation
+  (`Permissions-Policy: local-network-access`), ce qu'Outlook n'accorde pas.
+- **Décision** : l'en-tête est tout de même renvoyé, mais seulement en réponse à un préflight
+  qui le demande, et seulement sur `/outlook*`. Il couvre les navigateurs Chromium encore sur
+  PNA — ce qui inclut des WebView2 en retard, donc le nouvel Outlook Windows. Il ne coûte
+  qu'une branche et ne s'exécute que si un navigateur pose réellement la question.
+- **Contournements, par ordre de solidité** :
+  1. **Servir le taskpane depuis une origine publique.** C'est la vraie réponse, et la
+     migration vers `mosaicref.vercel.app` est déjà décidée, ses redirections Entra déjà
+     déclarées. Cela retire localhost de la boucle.
+  2. **Safari**, qui n'applique pas LNA.
+  3. **Politique d'entreprise `LocalNetworkAccessAllowedForUrls`** sur
+     `https://outlook.office.com`. Supportée, contrairement au drapeau.
+  4. `about://flags/#local-network-access-check`, pour une session de développement. L'ancien
+     `LocalNetworkAccessRestrictionsTemporaryOptOut` disparaît avec Chrome 156.
+
+### G-3. office.js se charge hors d'Outlook, et le panneau s'y trompait — **corrigé**
+
+`Office.onReady` se résout dans n'importe quel onglet : la bibliothèque vient du CDN et
+s'initialise sans hôte. Le panneau en déduisait la présence d'Outlook, puis constatait
+l'absence de `NestedAppAuth` et annonçait **« Cette version d'Outlook est trop ancienne »** à
+quelqu'un qui n'utilisait pas Outlook du tout.
+
+Ce qui distingue un hôte n'est pas la bibliothèque mais la boîte mail. `inMailbox()` teste
+`Office.context.mailbox`, et il est consulté **avant** le test de version. Les trois cas sont
+désormais distincts, vérifiés au navigateur : pas d'office.js, office.js sans boîte mail, et
+un Outlook réel trop ancien — qui lui mérite bien son message.
+
 ## F. Inconnues restantes
 
 Les deux dépendances bloquantes sont levées. La seule question ouverte ne bloque que la convergence.

@@ -21,7 +21,15 @@ import { apiToken, AuthError, configured, graphToken } from "./auth";
 import { INTERNAL_DOMAINS, USERS_EMAILS } from "./config";
 import { fetchThread, GraphError } from "./graph";
 import { draftReady, newDraft, ParticipantForm, type Draft } from "./ParticipantForm";
-import { bodyReadable, currentUser, onItemChanged, readItem, supportsNaa, type MailContext } from "./office";
+import {
+  bodyReadable,
+  currentUser,
+  inMailbox,
+  onItemChanged,
+  readItem,
+  supportsNaa,
+  type MailContext,
+} from "./office";
 import { externals, fold, type Participant } from "./participants";
 
 // The panel, about 320 px wide, one column, no horizontal scrolling.
@@ -110,7 +118,10 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
   const drafting = useRef(false);
 
   const load = useCallback(async () => {
-    if (!inOutlook) return setStage({ name: "outside" });
+    // Order matters. office.js loads in any browser tab, so "no mailbox" has
+    // to be ruled out before "mailbox too old" — otherwise opening the page to
+    // look at the layout reports that Outlook needs updating.
+    if (!inOutlook || !inMailbox()) return setStage({ name: "outside" });
     if (!supportsNaa()) return setStage({ name: "incompatible" });
     if (!configured()) return setStage({ name: "unconfigured" });
 
@@ -279,8 +290,8 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
   if (stage.name === "outside") {
     return (
       <Said title="Vers Notion">
-        Ce panneau s'ouvre depuis Outlook, sur un mail en lecture. Ouvert dans un navigateur, il n'a aucun mail à
-        lire.
+        Ce panneau s'ouvre depuis Outlook, sur un mail en lecture. Ouvert directement dans un navigateur, il n'a
+        aucune boîte mail à lire — c'est normal, et ce n'est pas une erreur.
       </Said>
     );
   }
