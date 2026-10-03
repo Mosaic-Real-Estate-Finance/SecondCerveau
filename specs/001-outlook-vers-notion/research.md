@@ -258,6 +258,33 @@ bloquerait : d'où E-2 et la suppression d'en-tête de E-1.
 
 ---
 
+## G. Manifeste du complément
+
+### G-1. `SupportsPinning` impose deux `VersionOverrides` imbriquées — **vérifié**
+
+Le premier sideload sur Outlook sur le web a échoué sur « The installation is taking longer
+than expected », sans autre indice. `npx office-addin-manifest validate` donne la cause en une
+ligne :
+
+> The element 'Action' in namespace '…/mailappversionoverrides' has invalid child element
+> 'SupportsPinning'.
+
+`SupportsPinning` n'existe que dans le schéma `mailappversionoverrides/1.1`, et ce bloc doit
+être **imbriqué dans** celui de la version 1.0, qui reste requis pour les hôtes qui ne
+comprennent que lui. Les deux blocs décrivent donc le même bouton, celui de 1.1 ajoutant
+l'épinglage.
+
+- **Décision** : structure imbriquée, et `office-addin-manifest validate` exécuté après toute
+  modification du gabarit. Un manifeste bien formé en XML n'est pas un manifeste valide, et
+  Outlook ne dit pas lequel des deux manque.
+- **Conséquence** : `FunctionFile` est requis par `DesktopFormFactor`. Il pointe désormais sur
+  `public/outlook/commands.html`, une page vide. Le faire pointer sur le taskpane ferait
+  tourner tout le panneau — MSAL compris — dans la frame cachée qu'Outlook charge pour
+  résoudre les actions, soit une demande de jeton que personne n'a demandée.
+- **Conséquence** : `SupportUrl` pointait sur `/outlook/`, qui ne répond que grâce au repli du
+  serveur de développement ; en production il aurait servi l'application de dictée. Il pointe
+  sur le taskpane.
+
 ## F. Inconnues restantes
 
 Les deux dépendances bloquantes sont levées. La seule question ouverte ne bloque que la convergence.
