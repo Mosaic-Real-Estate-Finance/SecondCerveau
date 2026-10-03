@@ -3,7 +3,7 @@ import { decodeForWhisper } from "./audio";
 import { guardEnd } from "./engine-guard";
 import { collectLive, onPartial } from "./live-transcript";
 import { getNote, listNotes, ready, removeNote, updateNote } from "./notes";
-import { transcribe } from "./transcriber";
+import { EngineError, stepOf, transcribe } from "./transcriber";
 
 // ---- Screen wake lock ---------------------------------------------------
 // iOS suspends a tab as soon as the screen locks, which stops both the
@@ -44,13 +44,23 @@ export const wake = { acquire, release };
 // ---- Transcription --------------------------------------------------------
 
 // Engine errors arrive in English and technical; the user needs to know
-// whether the network or the phone is the cause.
-function describe(error: unknown) {
-  const message = String((error as Error)?.message ?? error);
-  if (/^fetch: /.test(message)) return message.replace(/^fetch: /, "");
+// whether the network or the phone is the cause — and, before that, at which
+// of the three steps it stopped. "Erreur inattendue" told them nothing and
+// told us nothing either, which is how a failure can be reported for days
+// without anyone knowing where to look.
+function cause(message: string) {
   if (/memory|allocation|RangeError/i.test(message)) return "mémoire de l'appareil insuffisante";
   if (/decod/i.test(message)) return "fichier audio illisible";
+  if (/network|fetch|load failed|réponse \d/i.test(message)) return `réseau — ${message}`;
   return message;
+}
+
+function describe(error: unknown) {
+  if (error instanceof EngineError) return `${stepOf(error.stage)} : ${cause(error.message)}`;
+  const message = String((error as Error)?.message ?? error);
+  // Older shape, still produced by the audio decoder on its own path.
+  if (/^fetch: /.test(message)) return `${stepOf("download")} : ${cause(message.replace(/^fetch: /, ""))}`;
+  return cause(message);
 }
 
 const running = new Set<string>();

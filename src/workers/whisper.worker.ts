@@ -14,10 +14,18 @@ export type WorkerRequest =
   | { type: "warm"; engine: Engine }
   | { type: "transcribe"; id: string; engine: Engine; audio: Float32Array };
 
+/**
+ * Where it broke. The caller turns this into a sentence naming the step, so a
+ * failure says which of three very different things went wrong instead of
+ * "erreur inattendue": the weights not arriving, the session not coming up, or
+ * the pass itself.
+ */
+export type Stage = "model" | "inference";
+
 export type WorkerResponse =
   | { type: "ready" }
   | { type: "result"; id: string; text: string; seconds: number }
-  | { type: "error"; id: string; message: string; loading: boolean };
+  | { type: "error"; id: string; message: string; stage: Stage };
 
 env.allowLocalModels = false;
 
@@ -43,6 +51,12 @@ function load(engine: Engine) {
   loading ??= pipeline("automatic-speech-recognition", engine.model, {
     // q8 forced: Transformers.js would otherwise pick its own default per device.
     dtype: "q8",
+    // WASM, always, on every browser. Left to itself Transformers.js picks per
+    // device and would take WebGPU on a desktop Chrome — a second code path,
+    // with its own driver-dependent failures, for a model that is already fast
+    // enough on four WASM threads. One backend everywhere is the whole reason
+    // the iPhone behaviour and the desktop behaviour can be reasoned about at
+    // all. Nothing here ever falls back to WebGPU.
     device: "wasm",
     session_options: engine.webkit
       ? {
@@ -81,7 +95,7 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
     asr = await load(request.engine);
     self.postMessage({ type: "ready" } satisfies WorkerResponse);
   } catch (error) {
-    self.postMessage({ type: "error", id, message: describe(error), loading: true } satisfies WorkerResponse);
+    self.postMessage({ type: "error", id, message: describe(error), stage: "model" } satisfies WorkerResponse);
     return;
   }
   if (request.type === "warm") return;
@@ -107,6 +121,6 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
       seconds: (performance.now() - started) / 1000,
     } satisfies WorkerResponse);
   } catch (error) {
-    self.postMessage({ type: "error", id: request.id, message: describe(error), loading: false } satisfies WorkerResponse);
+    self.postMessage({ type: "error", id: request.id, message: describe(error), stage: "inference" } satisfies WorkerResponse);
   }
 });

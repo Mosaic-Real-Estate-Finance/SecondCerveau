@@ -117,6 +117,53 @@ réservation en tuant l'onglet dès qu'un enregistrement commence. Le WebKit de
 Playwright l'exécute sans broncher — sur un bureau, avec de la mémoire de
 bureau — ce qui est précisément pourquoi cette mesure-là ne valait rien.
 
+### Un seul moteur, et trois étapes qui se nomment
+
+**Le backend est épinglé sur WASM partout**, `device: "wasm"` dans
+`whisper.worker.ts`. Laissé à lui-même, Transformers.js choisit selon
+l'appareil et prendrait WebGPU sur un Chrome de bureau : un second chemin, avec
+ses pannes propres au pilote, pour un modèle déjà assez rapide sur quatre
+threads WASM. Rien ne bascule jamais sur WebGPU, et c'est ce qui permet de
+raisonner sur le comportement de l'iPhone et celui du bureau en même temps.
+
+**Trois choses peuvent échouer, et ce ne sont pas le même problème.** Le
+message le dit maintenant, parce qu'« erreur inattendue » n'apprenait rien à
+personne — ni à celui qui dicte, ni à celui qui débogue :
+
+| Étape | Message | Où regarder |
+| --- | --- | --- |
+| `download` | « téléchargement du modèle : … » | le réseau, Hugging Face, la place disque |
+| `model` | « chargement du modèle : … » | la mémoire de l'appareil, le runtime ONNX, un cache corrompu |
+| `inference` | « transcription : … » | la passe elle-même |
+
+`EngineError` porte l'étape depuis le worker jusqu'à `describe()` dans
+`pipeline.ts`, qui la rend en français devant la cause.
+
+**Le worker est relancé s'il s'arrête.** Chaque travail garde une copie de son
+audio — environ 2 Mo pour une fenêtre de 30 s, contre les 406 Mo de poids déjà
+résidents — précisément pour pouvoir être renvoyé à un worker reconstruit. Une
+seule reprise : un second échec est un vrai échec. Un échec de passe garde la
+session en place, un échec de session la reconstruit, parce qu'une
+reconstruction relit les 406 Mo.
+
+**Et s'il s'arrête sans rien dire**, aucun événement ne part et la dictée ne
+revient jamais. Deux chiens de garde l'évitent, parce que les deux phases
+n'ont rien de comparable : `LOAD_MS` 180 s tant que la session n'est pas
+montée, `PASS_MS` 60 s ensuite — le worker annonce `ready` entre les deux, il
+n'y a donc rien à deviner. Un budget unique devrait valoir le plus grand des
+deux, et un moteur coincé resterait muet trois minutes avant de dire quoi que
+ce soit. Mesuré : un chargement à froid à qui on n'accordait que 6 s a échoué
+sur une session qui était seulement lente, ce qui est la pire des deux pannes.
+
+**Vérifié sous Chrome de bureau**, profil neuf, aucune extension, contre la
+production puis contre la version locale : téléchargement des 406 Mo,
+enregistrement, transcription — « Je vous confirme que le dossier de
+financement est signé depuis vendredi dernier. » Puis, panne par panne : worker
+tué en pleine passe → la transcription arrive quand même ; worker arrêté sans
+événement → relancé par le chien de garde, transcription arrivée ; poids en
+cache corrompu → « chargement du modèle : … » ; Hugging Face injoignable →
+« téléchargement du modèle : réseau — … ».
+
 ### Trois façons de faire planter un onglet iOS, et le filet dessous
 
 Les trois ont été trouvées en une fois, sur le même symptôme : l'onglet meurt

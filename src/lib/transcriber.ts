@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { Engine, WorkerRequest, WorkerResponse } from "@/workers/whisper.worker";
+import type { Engine, Stage, WorkerRequest, WorkerResponse } from "@/workers/whisper.worker";
 
 const MODEL = import.meta.env.VITE_WHISPER_MODEL || "onnx-community/whisper-small-cv11-french-ONNX";
 
@@ -151,6 +151,33 @@ function downloadWeights() {
   return downloading;
 }
 
+// ---- Naming the step that failed -------------------------------------------
+// Three things can go wrong and they are not the same problem at all: the
+// weights never arrive, the session never comes up, or the pass itself fails.
+// "Erreur inattendue" sent the reader nowhere; the step at least says whether
+// to look at the network, the machine or the recording.
+
+export type EngineStage = "download" | Stage;
+
+const STEP: Record<EngineStage, string> = {
+  download: "téléchargement du modèle",
+  model: "chargement du modèle",
+  inference: "transcription",
+};
+
+export class EngineError extends Error {
+  constructor(
+    readonly stage: EngineStage,
+    message: string,
+  ) {
+    super(message);
+    this.name = "EngineError";
+  }
+}
+
+/** "chargement du modèle : plus de mémoire" — the step, then the cause. */
+export const stepOf = (stage: EngineStage) => STEP[stage];
+
 // ---- State ------------------------------------------------------------------
 
 export type ModelState = {
@@ -180,7 +207,43 @@ export function useModelState() {
 
 // ---- Worker -----------------------------------------------------------------
 
-type Job = { resolve: (value: { text: string; seconds: number }) => void; reject: (error: Error) => void };
+// A worker that stops takes the utterance with it, and the user did not ask
+// twice. Each job therefore keeps its own copy of the audio so it can be sent
+// again to a rebuilt worker — about 2 MB for a full 30 s window, against the
+// 406 MB of weights already resident, and the alternative is a dictation lost
+// to a worker that died for a reason the next one will not hit.
+type Job = {
+  resolve: (value: { text: string; seconds: number }) => void;
+  reject: (error: Error) => void;
+  audio: Float32Array;
+  attempts: number;
+  watchdog: number;
+};
+
+/** One replay. A second failure is a real failure, not a hiccup. */
+const MAX_ATTEMPTS = 2;
+
+// A worker can also stop without saying anything — killed by the system, or
+// wedged inside the runtime. No event fires then, and the dictation simply
+// never comes back. These turn that silence into a restart, and eventually
+// into a message.
+//
+// Two budgets, because the two phases are not remotely alike. Reading 406 MB
+// back and building both ONNX graphs is slow on a cold machine; a pass on a
+// session already up is seconds. A single budget would have to be the larger
+// one, and a wedged engine would then sit silent for three minutes before
+// saying anything — and three more for the retry. The worker announces
+// `ready` between the two, so there is no need to guess.
+//
+// Measured: a cold load that was given 6 s failed on a session that was
+// merely slow, which is the worse bug of the two. Both numbers are several
+// times the observed worst case.
+const LOAD_MS = 180_000;
+const PASS_MS = 60_000;
+
+/** True once this worker has a session up. Reset whenever it is replaced. */
+let sessionReady = false;
+
 const jobs = new Map<string, Job>();
 let worker: Worker | null = null;
 
@@ -188,6 +251,58 @@ let worker: Worker | null = null;
 function stopWorker() {
   worker?.terminate();
   worker = null;
+  sessionReady = false;
+}
+
+function settle(id: string) {
+  const job = jobs.get(id);
+  if (job) clearTimeout(job.watchdog);
+  jobs.delete(id);
+  return job;
+}
+
+/** Sends a job to the worker, building one if there is none. */
+function arm(id: string, job: Job) {
+  clearTimeout(job.watchdog);
+  job.watchdog = window.setTimeout(() => expired(id), sessionReady ? PASS_MS : LOAD_MS);
+}
+
+function dispatch(id: string, job: Job) {
+  arm(id, job);
+  // The copy travels, the original stays: a transferred buffer is detached on
+  // this side, and a replay would have nothing left to send.
+  const audio = job.audio.slice();
+  getWorker().postMessage({ type: "transcribe", id, engine: ENGINE, audio } satisfies WorkerRequest, [audio.buffer]);
+}
+
+/**
+ * Sends the job again, on a fresh worker when the session is the suspect.
+ * Returns false when the job has already had its retry, which is the caller's
+ * signal to give up out loud.
+ *
+ * `rebuild` is not free: a new worker re-reads 406 MB of weights and rebuilds
+ * both ONNX graphs. Worth it when the session died or never came up, wasteful
+ * after a single failed pass on a session that is demonstrably alive.
+ */
+function retry(id: string, rebuild: boolean): boolean {
+  const job = jobs.get(id);
+  if (!job || job.attempts >= MAX_ATTEMPTS) return false;
+  job.attempts++;
+  if (rebuild) {
+    stopWorker();
+    setState({ status: "loading", error: undefined });
+  }
+  dispatch(id, job);
+  return true;
+}
+
+function expired(id: string) {
+  const job = jobs.get(id);
+  if (!job) return;
+  if (retry(id, true)) return;
+  settle(id)?.reject(new EngineError("model", "le moteur n'a pas répondu"));
+  stopWorker();
+  setState({ status: "cached", error: `${stepOf("model")} : le moteur n'a pas répondu` });
 }
 
 function getWorker() {
@@ -197,32 +312,52 @@ function getWorker() {
   current.addEventListener("message", (event: MessageEvent<WorkerResponse>) => {
     const message = event.data;
     if (message.type === "ready") {
+      // The slow half is over: anything still waiting is now waiting on a
+      // pass, and gets the shorter budget.
+      sessionReady = true;
+      for (const [id, job] of jobs) arm(id, job);
       setState({ status: "ready", error: undefined });
       return;
     }
-    const job = jobs.get(message.id);
-    jobs.delete(message.id);
-    if (message.type === "result") return job?.resolve({ text: message.text, seconds: message.seconds });
-    if (message.loading) {
+    if (message.type === "result") {
+      settle(message.id)?.resolve({ text: message.text, seconds: message.seconds });
+      return;
+    }
+
+    if (message.stage === "model") {
       stopWorker();
       // A session that will not come up is, far more often than not, the
       // thread pool: no SharedArrayBuffer, or not enough room for it. The
       // budget drops and the next attempt rebuilds the worker on fewer.
-      const retrying = fewerThreads();
+      const fewer = fewerThreads();
+      // Fewer threads, or simply once more on a fresh worker: either way the
+      // utterance is sent again rather than lost.
+      if (retry(message.id, true)) return;
+      settle(message.id)?.reject(new EngineError("model", message.message));
       setState({
         status: "cached",
-        error: retrying ? undefined : `chargement du modèle : ${message.message}`,
+        error: fewer ? undefined : `${stepOf("model")} : ${message.message}`,
       });
+      return;
     }
-    job?.reject(new Error(message.message));
+
+    // The pass itself failed. The session is up, so it is kept — one more
+    // pass costs seconds, a rebuild costs the whole model again.
+    if (retry(message.id, false)) return;
+    settle(message.id)?.reject(new EngineError("inference", message.message));
+    setState({ status: "ready", error: `${stepOf("inference")} : ${message.message}` });
   });
-  // The worker died (out of memory) without the tab.
+
+  // The worker died — out of memory, or taken by the system — without the tab
+  // noticing. Everything still in flight is sent to a fresh one.
   current.addEventListener("error", () => {
     stopWorker();
     fewerThreads();
-    jobs.forEach((job) => job.reject(new Error("Le moteur de transcription s'est arrêté")));
-    jobs.clear();
-    setState({ status: "cached" });
+    for (const id of [...jobs.keys()]) {
+      if (retry(id, true)) continue;
+      settle(id)?.reject(new EngineError("model", "le moteur de transcription s'est arrêté"));
+      setState({ status: "cached", error: `${stepOf("model")} : le moteur s'est arrêté` });
+    }
   });
   return current;
 }
@@ -250,7 +385,12 @@ export function preloadModel() {
       if (!(await weightsCached())) await downloadWeights();
       setState({ status: "cached", error: undefined });
     } catch (error) {
-      setState({ status: "absent", loaded: 0, total: 0, error: `téléchargement : ${(error as Error).message}` });
+      setState({
+        status: "absent",
+        loaded: 0,
+        total: 0,
+        error: `${stepOf("download")} : ${(error as Error).message}`,
+      });
     }
   })().finally(() => {
     preparing = null;
@@ -279,12 +419,15 @@ export async function warmEngine() {
 export async function transcribe(id: string, audio: Float32Array) {
   if (!(await weightsCached())) {
     await preloadModel();
-    if (state.status !== "cached") throw new Error(`fetch: ${state.error ?? "modèle non téléchargé"}`);
+    if (state.status !== "cached") {
+      throw new EngineError("download", state.error?.replace(/^[^:]+ : /, "") ?? "modèle non téléchargé");
+    }
   }
   return new Promise<{ text: string; seconds: number }>((resolve, reject) => {
-    jobs.set(id, { resolve, reject });
+    // The audio stays here; dispatch sends a copy. See the note on Job.
+    const job: Job = { resolve, reject, audio, attempts: 1, watchdog: 0 };
+    jobs.set(id, job);
     if (state.status !== "ready") setState({ status: "loading" });
-    const request: WorkerRequest = { type: "transcribe", id, engine: ENGINE, audio };
-    getWorker().postMessage(request, [audio.buffer]);
+    dispatch(id, job);
   });
 }
