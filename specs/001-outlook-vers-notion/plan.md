@@ -120,7 +120,7 @@ vite.config.ts                      + build.rollupOptions.input (deux entrées)
                                     + denylist /outlook du service worker
                                     + middleware dev qui retire COOP/COEP sur /outlook
 public/_headers                     + bloc /outlook* qui supprime COOP et COEP
-public/outlook/manifest.xml         nouveau — manifeste add-in only
+scripts/outlook-manifest.template.xml  nouveau — gabarit du manifeste, hors public/
 public/outlook/icon-{16,32,64,80,128}.png   nouveau
 
 src/outlook/                        nouveau — le panneau

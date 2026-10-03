@@ -7,8 +7,16 @@
   be declared in an Outlook add-in manifest and is tested at runtime instead,
   in src/outlook/office.ts. See specs/001-outlook-vers-notion/research.md B-2.
 
-  Replace HOST with the deployment domain before sideloading. Every URL must be
-  https, and AppDomains must list every origin the taskpane navigates to.
+  This file is the template, not the served manifest: the deployment domain is
+  a placeholder here, and it lives outside public/ so it is never published
+  as-is. scripts/outlook-manifest.mjs writes the real one.
+
+  Any change here must raise <Version>. Outlook only redistributes an already
+  installed add-in when the version is higher, so a manifest change that keeps
+  the number reaches nobody. The generator refuses to run otherwise.
+
+  Every URL must be https, and AppDomains must list every origin the taskpane
+  navigates to.
 -->
 <OfficeApp
   xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
@@ -18,19 +26,19 @@
   xsi:type="MailApp">
 
   <Id>3cb13804-89bb-40d2-90a9-259435f827e4</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.2.0.0</Version>
   <ProviderName>Mosaic Real Estate Finance</ProviderName>
   <DefaultLocale>fr-FR</DefaultLocale>
   <DisplayName DefaultValue="Save to Notion" />
   <Description DefaultValue="Classe un échange Outlook dans la base de notes Notion de Mosaic, rattaché aux bons contacts." />
-  <IconUrl DefaultValue="https://HOST/outlook/icon-64.png" />
-  <HighResolutionIconUrl DefaultValue="https://HOST/outlook/icon-128.png" />
+  <IconUrl DefaultValue="https://{{HOST}}/outlook/icon-64.png" />
+  <HighResolutionIconUrl DefaultValue="https://{{HOST}}/outlook/icon-128.png" />
   <!-- Must resolve: the taskpane itself, rather than a /outlook/ index that
        only exists because the dev server falls back to one. -->
-  <SupportUrl DefaultValue="https://HOST/outlook.html" />
+  <SupportUrl DefaultValue="https://{{HOST}}/outlook.html" />
 
   <AppDomains>
-    <AppDomain>https://HOST</AppDomain>
+    <AppDomain>https://{{HOST}}</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -47,7 +55,7 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://HOST/outlook.html" />
+        <SourceLocation DefaultValue="https://{{HOST}}/outlook.html" />
         <RequestedHeight>400</RequestedHeight>
       </DesktopSettings>
     </Form>
@@ -110,13 +118,13 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="icon16" DefaultValue="https://HOST/outlook/icon-16.png" />
-        <bt:Image id="icon32" DefaultValue="https://HOST/outlook/icon-32.png" />
-        <bt:Image id="icon80" DefaultValue="https://HOST/outlook/icon-80.png" />
+        <bt:Image id="icon16" DefaultValue="https://{{HOST}}/outlook/icon-16.png" />
+        <bt:Image id="icon32" DefaultValue="https://{{HOST}}/outlook/icon-32.png" />
+        <bt:Image id="icon80" DefaultValue="https://{{HOST}}/outlook/icon-80.png" />
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="taskpaneUrl" DefaultValue="https://HOST/outlook.html" />
-        <bt:Url id="commandsUrl" DefaultValue="https://HOST/outlook/commands.html" />
+        <bt:Url id="taskpaneUrl" DefaultValue="https://{{HOST}}/outlook.html" />
+        <bt:Url id="commandsUrl" DefaultValue="https://{{HOST}}/outlook/commands.html" />
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="groupLabel" DefaultValue="Mosaic" />
@@ -172,13 +180,13 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="icon16" DefaultValue="https://HOST/outlook/icon-16.png" />
-        <bt:Image id="icon32" DefaultValue="https://HOST/outlook/icon-32.png" />
-        <bt:Image id="icon80" DefaultValue="https://HOST/outlook/icon-80.png" />
+        <bt:Image id="icon16" DefaultValue="https://{{HOST}}/outlook/icon-16.png" />
+        <bt:Image id="icon32" DefaultValue="https://{{HOST}}/outlook/icon-32.png" />
+        <bt:Image id="icon80" DefaultValue="https://{{HOST}}/outlook/icon-80.png" />
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="taskpaneUrl" DefaultValue="https://HOST/outlook.html" />
-        <bt:Url id="commandsUrl" DefaultValue="https://HOST/outlook/commands.html" />
+        <bt:Url id="taskpaneUrl" DefaultValue="https://{{HOST}}/outlook.html" />
+        <bt:Url id="commandsUrl" DefaultValue="https://{{HOST}}/outlook/commands.html" />
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="groupLabel" DefaultValue="Mosaic" />

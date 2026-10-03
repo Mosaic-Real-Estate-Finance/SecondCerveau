@@ -291,14 +291,82 @@ curl -sD- -o/dev/null https://mosaicref.vercel.app/outlook.html | grep -i cross-
 
 ### Manifeste de production
 
+Le build l'écrit lui-même : `postbuild` lance
+`node scripts/outlook-manifest.mjs --out dist/outlook/manifest.xml`, donc chaque
+déploiement publie le manifeste à jour à
+
+**`https://mosaicref.vercel.app/outlook/manifest.xml`**
+
+C'est l'adresse à donner à l'administrateur Mosaic : dans le centre
+d'administration Microsoft 365, *Paramètres → Applications intégrées → Charger
+une application personnalisée → Fournir le lien vers le fichier manifeste*. Plus
+de fichier à transmettre, et l'URL sert toujours la version déployée.
+
+Le gabarit vit dans `scripts/outlook-manifest.template.xml`, **hors de
+`public/`** : servi tel quel, il remettrait à l'administrateur un manifeste qui
+pointe vers `https://HOST/`. C'était le cas jusqu'au 2026-10-03.
+
+Pour en produire un à la main :
+
 ```sh
-npm run outlook:manifest:prod     # écrit .outlook/manifest.xml
+npm run outlook:manifest:prod                 # .outlook/manifest.xml
 npx office-addin-manifest validate .outlook/manifest.xml
 ```
 
 Son identifiant (`3cb13804-…`) diffère de celui du manifeste de développement
 (`9f2e4c71-…`), et son bouton s'appelle « Save to Notion » et non « Save to Notion (dev) » : les deux
 peuvent cohabiter dans le même Outlook sans se remplacer l'un l'autre.
+
+### La règle de version
+
+**Tout changement du manifeste monte son `<Version>.`** Outlook ne redistribue
+un complément déjà installé que sur une version supérieure : un changement qui
+garde le numéro ne parvient à personne, et le ruban conserve l'ancien libellé,
+les anciennes icônes et l'ancienne URL de taskpane sans que rien ne dise
+pourquoi.
+
+La règle n'est pas confiée à la mémoire. `scripts/outlook-manifest.lock.json`
+retient la version et une empreinte du reste du gabarit ; si le gabarit change
+sans que la version bouge, le générateur refuse d'écrire — donc
+`npm run build` échoue, en local comme sur Vercel.
+
+```
+Le manifeste a changé mais sa Version n'a pas bougé (1.1.0.0).
+→ Monte <Version> dans scripts/outlook-manifest.template.xml, puis relance.
+```
+
+Le verrou est committé. Une version montée est acceptée et le verrou se met à
+jour tout seul.
+
+### Cache : un redéploiement doit être visible à la réouverture
+
+Trois caches se superposent — celui de Vercel, celui du navigateur, et celui
+d'Office, qui garde ses propres copies dans le dossier `Wef`. Le contrat :
+
+| Chemin | `Cache-Control` | Pourquoi |
+| --- | --- | --- |
+| `/assets/*` | `public, max-age=31536000, immutable` | Noms hachés par contenu : le fichier à une URL donnée ne peut pas changer. Vérifié — tout ce que Vite émet là porte une empreinte, y compris le bundle et la feuille de style du taskpane. |
+| `/outlook.html` | `private, no-cache, no-store, must-revalidate` + `Pragma` + `Expires` | Le point d'entrée, nommé en dur dans le manifeste. C'est lui qui doit être frais ; il fait 1 Ko, donc `no-store` ne coûte rien et ne laisse aucune prise aux webviews d'Office, qui ont la réputation d'ignorer `no-cache`. |
+| `/outlook/*` | `no-cache, must-revalidate` | Manifeste, icônes, `commands.html` : nommés en dur eux aussi, donc revalidés à chaque fois, avec un 304 quand rien n'a bougé. |
+
+Ce que les en-têtes **ne** règlent pas : les icônes et les libellés du ruban,
+qu'Office garde dans son propre cache. Là, le levier est la version du
+manifeste — d'où la règle ci-dessus — et, au besoin,
+[vider le cache Office](https://learn.microsoft.com/fr-fr/office/dev/add-ins/testing/clear-cache).
+Pour un simple changement de HTML ou de JavaScript, `Ctrl+F5` dans le panneau
+suffit.
+
+À vérifier après le déploiement, les règles d'en-têtes de Vercel se cumulant
+par clé :
+
+```sh
+curl -sI https://mosaicref.vercel.app/outlook.html        | grep -i 'cache-control\|pragma'
+curl -sI https://mosaicref.vercel.app/outlook/manifest.xml | grep -i 'cache-control'
+curl -sI https://mosaicref.vercel.app/assets/$(curl -s https://mosaicref.vercel.app/outlook.html \
+  | grep -oE 'outlook-[A-Za-z0-9_-]+\.js') | grep -i 'cache-control'
+# et que le manifeste servi ne contient plus HOST
+curl -s https://mosaicref.vercel.app/outlook/manifest.xml | grep -c 'https://HOST'   # doit rendre 0
+```
 
 ---
 

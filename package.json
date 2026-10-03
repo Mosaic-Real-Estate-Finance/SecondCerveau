@@ -10,6 +10,7 @@
     "dev:mobile": "vite --host --mode mobile",
     "prebuild": "node scripts/copy-ort.mjs",
     "build": "tsc -b && vite build",
+    "postbuild": "node scripts/outlook-manifest.mjs --out dist/outlook/manifest.xml",
     "preview": "vite preview",
     "icons": "node scripts/generate-icons.mjs",
     "splash": "node scripts/generate-ios-splash.mjs",
@@ -21,7 +22,7 @@
     "outlook:icons": "node scripts/generate-outlook-icons.mjs",
     "outlook:certs": "office-addin-dev-certs install --days 365 --domains 127.0.0.1,localhost,192.168.1.86",
     "dev:vercel": "vercel dev --listen 5173",
-    "outlook:manifest:prod": "node scripts/outlook-manifest.mjs mosaicref.vercel.app prod"
+    "outlook:manifest:prod": "node scripts/outlook-manifest.mjs"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.24.0",
