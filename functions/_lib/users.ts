@@ -12,6 +12,10 @@ export const USERS: User[] = [
   { email: "pb@mosaicfin.com", firstName: "Philippe", notionUserId: "96b0616b-21fa-47e3-9b20-38784525a617" },
   { email: "xn@mosaicfin.com", firstName: "Xavier", notionUserId: "0f80cf39-fb27-42dc-8943-110b2426aa83" },
   { email: "theo@gouman.fr", firstName: "Théo", notionUserId: "c9b01750-8bda-47cf-b4b8-56b12eaf5333" },
+  // Compte Microsoft de test du complément Outlook. Même utilisateur Notion
+  // que l'adresse ci-dessus : les notes créées en test sont signées au même
+  // nom, et il n'y a qu'une personne derrière les deux.
+  { email: "theo@g0uman.onmicrosoft.com", firstName: "Théo", notionUserId: "c9b01750-8bda-47cf-b4b8-56b12eaf5333" },
 ];
 
 export const findUser = (email: string | null | undefined): User | null => {

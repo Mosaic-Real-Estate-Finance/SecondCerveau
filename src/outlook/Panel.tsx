@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PrimaryButton } from "@/components/screen";
 import { dialOf } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import {
@@ -63,7 +64,7 @@ type Stage =
   | { name: "failed"; message: string; retry: boolean }
   | { name: "ready"; data: Loaded }
   | { name: "sending"; data: Loaded; step: string }
-  | { name: "sent"; url: string; added: number; partial: boolean };
+  | { name: "sent"; url: string; added: number; partial: boolean; created: boolean };
 
 const Frame = ({ children }: { children: React.ReactNode }) => (
   <div className="min-h-screen bg-white px-4 py-5 text-navy" style={{ colorScheme: "light" }}>
@@ -247,7 +248,13 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
             messages: data.messages,
           });
 
-      setStage({ name: "sent", url: written.url, added: written.messagesAdded, partial: Boolean(written.templateTimedOut) });
+      setStage({
+        name: "sent",
+        url: written.url,
+        added: written.messagesAdded,
+        partial: Boolean(written.templateTimedOut),
+        created: !data.note,
+      });
     } catch (error) {
       const api = error as ApiError;
       // 409: someone enriched the note in between. Reloading is the only safe
@@ -322,18 +329,17 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
       <Frame>
         <Title>Ça n'a pas marché</Title>
         <Muted>{stage.message}</Muted>
-        {stage.retry && (
-          <button type="button" className="send-button rounded-[18px] px-4 py-3 text-sm" onClick={() => void load()}>
-            Réessayer
-          </button>
-        )}
+        {stage.retry && <PrimaryButton onClick={() => void load()}>Réessayer</PrimaryButton>}
       </Frame>
     );
   }
   if (stage.name === "sent") {
     return (
       <Frame>
-        <Title>{stage.added ? "Note à jour" : "Rien à ajouter"}</Title>
+        {/* Three different things to say, and the difference matters: a note
+            that was just created is not "up to date", which reads as nothing
+            having happened. */}
+        <Title>{stage.created ? "Note créée" : stage.added ? "Note enrichie" : "Rien à ajouter"}</Title>
         <Muted>
           {stage.added
             ? `${stage.added} message${stage.added > 1 ? "s" : ""} enregistré${stage.added > 1 ? "s" : ""}. La réécriture par Notion AI prend quelques secondes.`
@@ -438,14 +444,9 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
         <Muted>Aucun message nouveau depuis le dernier envoi.</Muted>
       ) : (
         <>
-          <button
-            type="button"
-            className="send-button rounded-[18px] px-4 py-3 text-sm disabled:opacity-50"
-            disabled={sending || nobody || incomplete}
-            onClick={() => void send(data)}
-          >
+          <PrimaryButton disabled={sending || nobody || incomplete} onClick={() => void send(data)}>
             {sending ? stage.step : data.note ? "Enrichir la note" : "Créer la note"}
-          </button>
+          </PrimaryButton>
           {nobody && <Muted>Cochez au moins un interlocuteur.</Muted>}
           {!nobody && incomplete && <Muted>Complétez les fiches cochées avant d'envoyer.</Muted>}
         </>

@@ -1,0 +1,26 @@
+/* What the taskpane has to undo from the dictation's stylesheet.
+ *
+ * The dictation is a fixed-viewport application: `body` never scrolls, and
+ * each screen scrolls inside itself. That is the right shape for a phone app
+ * in standalone mode, and the wrong one here — a taskpane is a narrow document
+ * inside a host-sized iframe, and the host expects the document itself to
+ * scroll.
+ *
+ * Without these three rules, `body { overflow: hidden }` clips a participant
+ * list as soon as one fiche is unfolded, and the send button becomes
+ * unreachable with nothing on screen to suggest why.
+ *
+ * Loaded only by outlook.html, which is its own Vite entry, so none of this
+ * can reach the dictation. */
+
+html,
+body,
+#root {
+  height: auto;
+  min-height: 100%;
+}
+
+body {
+  overflow: visible;
+  overscroll-behavior: auto;
+}

@@ -1,5 +1,7 @@
 import { createRoot } from "react-dom/client";
 import "@/styles/index.css";
+// After the dictation's sheet, because it undoes part of it. See the file.
+import "./outlook.css";
 import { Panel } from "./Panel";
 import { ready } from "./office";
 

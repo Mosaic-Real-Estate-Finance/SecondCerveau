@@ -8,4 +8,12 @@
 
 export const INTERNAL_DOMAINS = ["mosaicfin.com"];
 
-export const USERS_EMAILS = ["ob@mosaicfin.com", "pb@mosaicfin.com", "xn@mosaicfin.com", "theo@gouman.fr"];
+export const USERS_EMAILS = [
+  "ob@mosaicfin.com",
+  "pb@mosaicfin.com",
+  "xn@mosaicfin.com",
+  "theo@gouman.fr",
+  // Le compte de test. Sans lui, les propres adresses du testeur
+  // apparaîtraient comme des interlocuteurs externes de ses propres essais.
+  "theo@g0uman.onmicrosoft.com",
+];

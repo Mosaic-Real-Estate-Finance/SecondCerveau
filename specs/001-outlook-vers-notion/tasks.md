@@ -43,13 +43,36 @@ panneau branché sur les quatre routes, routes éprouvées contre la vraie base.
 encore été constaté, c'est le comportement **dans** Outlook — personne n'a encore ouvert le
 panneau sur un vrai mail.
 
-### Un point ouvert
+### Le compte de test
 
-**L'adresse du compte de test n'a pas été fournie** : le message qui transmettait les valeurs
-Entra portait encore `[ADRESSE_TEST]`. `users.ts` est donc inchangé, et une adresse absente de
-cette liste est rejetée en 401 même avec un jeton Microsoft valide — l'identité est prouvée,
-l'autorisation ne l'est pas. `theo@gouman.fr` y figure déjà avec l'identifiant Notion
-`c9b01750-…`, donc si le compte Entra de test utilise cette adresse, il n'y a rien à faire.
+`theo@g0uman.onmicrosoft.com` est dans `users.ts`, rattaché au même utilisateur Notion que
+`theo@gouman.fr` : une seule personne derrière les deux adresses, les notes de test sont
+signées au même nom. Il est aussi dans `src/outlook/config.ts`, sans quoi les propres adresses
+du testeur apparaîtraient comme des interlocuteurs externes de ses propres essais. Vérifié :
+`/api/contacts` rend 200 pour cette adresse.
+
+### Le panneau a été rendu pour de vrai
+
+Un harnais Playwright ouvre `outlook.html` avec Office.js simulé et le module MSAL remplacé au
+niveau du réseau — Vite le sert comme un module ESM ordinaire, donc **aucun crochet de test
+n'existe dans `src/`**. Le parcours complet passe : fil lu, Claire reconnue avec sa société,
+Marc marqué « Nouveau contact » avec nom et adresse préremplis, les deux participants internes
+absents de la liste, le décochage qui laisse l'envoi possible, un nom vidé qui désactive le
+bouton, puis l'envoi qui crée le contact puis la note avec deux interlocuteurs et trois
+messages. Aucune erreur de console, aucun défilement horizontal.
+
+Trois défauts ont été trouvés et corrigés **avant** le sideload, par ce rendu :
+
+1. **`body { overflow: hidden }`** de la feuille de la dictée. Elle est taillée pour une app à
+   viewport fixe où chaque écran défile en lui-même ; un taskpane est un document étroit dans
+   une iframe dimensionnée par l'hôte, et c'est le document qui doit défiler. Sans correction,
+   une liste de participants avec une fiche dépliée était **coupée, le bouton hors d'atteinte,
+   sans rien à l'écran pour le laisser deviner**. D'où `src/outlook/outlook.css`, chargé par la
+   seule entrée du taskpane.
+2. **`.send-button`** n'a d'effet que combinée à `.t-input` : le bouton « Créer la note » se
+   serait affiché sans fond ni couleur. Remplacé par `PrimaryButton`.
+3. **Une note créée annonçait « Note à jour »**, ce qui se lit comme « rien ne s'est passé ».
+   Trois formulations distinctes désormais : créée, enrichie, rien à ajouter.
 
 ### Ce qui a été vérifié
 
