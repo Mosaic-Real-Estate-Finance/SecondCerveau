@@ -1,0 +1,185 @@
+# Quickstart — valider le complément Outlook
+
+**Feature** : Complément Outlook vers Notion · **Date** : 2026-10-03
+
+Comment faire tourner le complément et prouver qu'il marche. Les contrats sont dans
+[contracts/](./contracts/), le modèle dans [data-model.md](./data-model.md).
+
+---
+
+## 0. Prérequis, dans l'ordre
+
+Sans le premier point, rien d'autre ne sert : il décide si la feature est réalisable telle que
+spécifiée.
+
+1. **Constater la limite de `Interlocuteur`.** Notion → base Notes → en-tête de la colonne
+   `Interlocuteur` → *Modifier la propriété*. « Limiter à 1 page » doit être **désactivé**.
+   L'API ne peut pas le lire (research A-2). Si c'est limité et non modifiable, s'arrêter et
+   re-spécifier.
+2. **Créer quatre propriétés dans Notes** : `ID client` (texte), `Source` (sélection :
+   `Dictée`, `Email`), `Dernier message` (texte), `Statut IA` (sélection : `À traiter`,
+   `Traité`).
+3. **Renseigner `.env.local`** :
+
+   ```sh
+   NOTES_PROP_CLIENT_ID=ID client
+   NOTES_PROP_SOURCE=Source
+   NOTES_PROP_AI_STATUS=Statut IA
+   NOTES_PROP_LAST_MESSAGE=Dernier message
+   CONTACTS_PROP_EMAIL=Email
+   INTERNAL_DOMAINS=mosaicfin.com
+   ```
+
+   Les deux variables Entra (`ENTRA_API_CLIENT_ID`, `ENTRA_TENANT_IDS`) ne sont nécessaires
+   qu'à partir de la phase 4 : sans elles, le repli `x-user-email` suffit pour développer.
+4. **App Entra** (phase 4) : SPA, redirection NAA
+   `brk-multihub://<domaine>`, API exposée avec un scope pour le backend, permission déléguée
+   `Mail.Read`, consentement administrateur.
+
+Vérifier que les propriétés sont bien là, sans ouvrir Notion :
+
+```sh
+NOTION_TOKEN=$(grep '^NOTION_TOKEN=' .env.local | cut -d= -f2-) \
+NOTES=$(grep '^NOTION_NOTES_DB=' .env.local | cut -d= -f2-) \
+sh -c 'curl -s "https://api.notion.com/v1/databases/$NOTES" \
+  -H "Authorization: Bearer $NOTION_TOKEN" -H "Notion-Version: 2026-03-11" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin)[\"properties\"]; print(sorted(d))"'
+```
+
+Attendu : `ID client`, `Source`, `Dernier message`, `Statut IA` présents.
+
+---
+
+## 1. Lancer
+
+```sh
+npm install
+npm run dev:mobile    # HTTPS avec certificat auto-signé : Outlook exige une origine sûre
+```
+
+Le taskpane est sur `https://<ip-locale>:5173/outlook.html`, la PWA reste sur `/`.
+
+**Deux vérifications d'hygiène avant tout le reste :**
+
+```sh
+# Le taskpane ne doit PAS porter les en-têtes d'isolation, sinon office.js est bloqué
+curl -ks -D- -o/dev/null https://localhost:5173/outlook.html | grep -i cross-origin
+# attendu : rien
+
+# La PWA doit les porter, sinon le microphone et Whisper cassent sur iPhone
+curl -ks -D- -o/dev/null https://localhost:5173/ | grep -i cross-origin
+# attendu : les deux en-têtes
+```
+
+---
+
+## 2. Sideload dans Outlook
+
+| Client | Chemin |
+| --- | --- |
+| Outlook sur le web | Paramètres → Compléments → *Mes compléments* → *Ajouter un complément personnalisé* → *À partir d'un fichier* → `public/outlook/manifest.xml` |
+| Nouvel Outlook Windows | idem, depuis le panneau Compléments |
+| Outlook classique Windows | Partage réseau comme catalogue de confiance, ou `npx office-addin-debugging start public/outlook/manifest.xml` |
+| Outlook Mac | copier le manifeste dans `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef` |
+
+Un certificat auto-signé doit être accepté par le navigateur **et** par le système avant que
+le client lourd charge le taskpane.
+
+---
+
+## 3. Les quatre parcours de la spécification
+
+Chacun est le test indépendant de son user story. À faire dans Outlook sur le web d'abord,
+puis dans les trois autres clients pour la convergence.
+
+### US1 — classer en deux clics
+
+Ouvrir un mail d'un contact présent dans Contacts → bouton *Vers Notion* → le contact est
+coché, avec nom et société → *Créer la note* → ouvrir le lien.
+
+Attendu : une page dans Notes, `Interlocuteur` = ce contact, `Source` = `Email`,
+`Statut IA` = `À traiter`, le fil entier dans le corps, un callout par message, du plus ancien
+au plus récent.
+
+### US2 — interlocuteur inconnu
+
+Ouvrir un mail d'une adresse absente de Contacts → la ligne est marquée *Nouveau contact*,
+dépliable, email prérempli → décocher d'abord, vérifier que l'envoi reste possible → recocher,
+laisser le nom vide, vérifier que le bouton est désactivé → remplir, envoyer.
+
+Attendu : le contact existe dans Contacts **avec son email**, et la note lui est liée.
+
+### US3 — reprendre une conversation
+
+Classer un fil, répondre au mail (ou se l'envoyer), rouvrir le panneau sur le même fil.
+
+Attendu : *« Note existante, 1 nouveau message »* et un lien. Après *Enrichir* : la note
+contient l'ancien et le nouveau, **une seule fois chacun** ; `Statut IA` est repassé à
+`À traiter` ; l'auteur du premier envoi est toujours là, le second s'est ajouté.
+
+Rouvrir sans nouveau message → *« Note à jour »*, aucun bouton d'envoi.
+
+### US4 — ne rien perdre
+
+Remplir un formulaire de nouveau contact, couper le réseau, envoyer.
+
+Attendu : message en français disant que c'est le réseau, formulaire intact, *Réessayer*
+aboutit une fois le réseau revenu, et **aucun doublon** — ni de contact, ni de note.
+
+---
+
+## 4. Vérifications sans interface
+
+```sh
+# 401 sans identité, sur chacune des quatre routes
+for r in "GET /api/outlook/notes?conversationId=x" "POST /api/outlook/notes" \
+         "POST /api/outlook/contacts" "POST /api/outlook/contacts/match"; do
+  set -- $r
+  echo -n "$1 $2 → "
+  curl -ks -o/dev/null -w '%{http_code}\n' -X "$1" "https://localhost:5173$2" \
+       -H 'Content-Type: application/json' -d '{}'
+done
+# attendu : 401 partout
+```
+
+```sh
+# Idempotence : vingt créations de la même conversation
+for i in $(seq 20); do
+  curl -ks -X POST https://localhost:5173/api/outlook/notes \
+    -H 'Content-Type: application/json' -H 'x-user-email: theo@gouman.fr' \
+    -d '{"conversationId":"QS-TEST-001","contactIds":["<id>"],
+         "messages":[{"id":"m1","receivedAt":"2026-10-03T10:00:00Z",
+                      "from":{"name":"T","address":"t@x.fr"},"text":"essai","attachmentNames":[]}]}' \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("id"), d.get("duplicate"))'
+done
+# attendu : le même id vingt fois, duplicate=true à partir du second
+```
+
+```sh
+# Aucun secret dans le bundle livré (SC-003)
+npm run build
+grep -rIlE 'ntn_|secret|NOTION_TOKEN' dist/ || echo "aucun secret — OK"
+```
+
+```sh
+# Aucune journalisation du contenu des mails (principe VIII)
+grep -rn 'console\.' functions/ | grep -iE 'text|body|message|transcript' || echo "aucune trace — OK"
+```
+
+---
+
+## 5. Non-régression de la dictée
+
+À faire après **chaque** phase qui touche `functions/_lib/` ou `vite.config.ts`, et sans
+exception après la migration vers Vercel.
+
+1. Sur l'iPhone, ouvrir la PWA installée — pas Safari, l'app installée : c'est là que le
+   service worker est le plus ancien.
+2. Dicter 15 secondes, choisir un contact, passer l'écran des fichiers, laisser partir.
+3. Vérifier dans Notion : la note existe, `Source` = `Dictée`, `Interlocuteur` renseigné,
+   `Transcription brute` remplie.
+4. Vérifier que `/` porte toujours COOP `same-origin` et COEP `require-corp` — sans eux,
+   Whisper ne démarre pas.
+5. Vérifier que `/outlook.html` ne les porte pas.
+
+Un échec ici arrête la phase, quoi qu'il en coûte au calendrier : la dictée est en service.

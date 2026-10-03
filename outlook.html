@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vers Notion</title>
+    <!--
+      office.js comes from the Microsoft CDN and is never bundled: Microsoft
+      does not support a local copy, and the host injects its own bridge into
+      this page. It is also why the isolation headers of the dictation must not
+      reach /outlook — COEP require-corp would block this very script.
+    -->
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/outlook/main.tsx"></script>
+  </body>
+</html>
