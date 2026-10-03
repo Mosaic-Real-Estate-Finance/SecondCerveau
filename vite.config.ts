@@ -191,6 +191,30 @@ async function trustedHttps(mode: string) {
   }
 }
 
+/**
+ * Keeps the dictation's web app manifest off the taskpane page.
+ *
+ * vite-plugin-pwa injects `<link rel="manifest">` into every HTML entry, and
+ * outlook.html is one. The taskpane would then declare the dictation's name
+ * and the dictation's icons as its own identity — in a page whose whole point
+ * is to be the add-in, and which is not installable in the first place.
+ *
+ * `enforce: "post"` so this runs after the injection it undoes.
+ */
+function taskpaneIsNotTheApp(): Plugin {
+  return {
+    name: "mosaic-taskpane-identity",
+    enforce: "post",
+    transformIndexHtml: {
+      order: "post",
+      handler(html, context) {
+        if (!context.path.includes("outlook")) return html;
+        return html.replace(/\s*<link rel="manifest"[^>]*>/g, "");
+      },
+    },
+  };
+}
+
 export default defineConfig(async ({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const https = await trustedHttps(mode);
@@ -300,6 +324,9 @@ export default defineConfig(async ({ mode }) => {
           ],
         },
       }),
+      // After VitePWA on purpose: it undoes an injection that plugin makes,
+      // and two "post" plugins run in the order of this array.
+      taskpaneIsNotTheApp(),
     ],
   };
 });
