@@ -38,83 +38,68 @@ Dépôt à deux fronts et un socle serveur, conformément à **Structure Decisio
 
 ## État d'avancement au 2026-10-03
 
-**32 tâches sur 79.** Les quatre routes serveur sont écrites et éprouvées contre la vraie base
-Notion. Il ne reste de prérequis externe que T003, l'application Entra, qui ne bloque que la
-phase 7.
+**47 tâches sur 79.** Le complément est fonctionnel de bout en bout en théorie : NAA en place,
+panneau branché sur les quatre routes, routes éprouvées contre la vraie base. Ce qui n'a pas
+encore été constaté, c'est le comportement **dans** Outlook — personne n'a encore ouvert le
+panneau sur un vrai mail.
 
-### Ce qui a été vérifié, pas supposé
+### Un point ouvert
 
-Toutes les sondes ci-dessous ont écrit dans la base de production puis ont été archivées dans
-la même exécution.
+**L'adresse du compte de test n'a pas été fournie** : le message qui transmettait les valeurs
+Entra portait encore `[ADRESSE_TEST]`. `users.ts` est donc inchangé, et une adresse absente de
+cette liste est rejetée en 401 même avec un jeton Microsoft valide — l'identité est prouvée,
+l'autorisation ne l'est pas. `theo@gouman.fr` y figure déjà avec l'identifiant Notion
+`c9b01750-…`, donc si le compte Entra de test utilise cette adresse, il n'y a rien à faire.
 
-**Reconnaissance des contacts** — un contact dont `Email` vaut `a@…, b@…` est trouvé sur la
-seconde adresse, en majuscules comme en minuscules. Et surtout : chercher `sonde.beta@…` ne
-trouve **pas** un contact dont l'adresse est `zz.sonde.beta@…`. C'est la revérification
-d'égalité exacte qui tient, après le filtre `contains` qui n'est qu'un dégrossissage.
+### Ce qui a été vérifié
 
-**Cycle de vie d'une note** — `GET` sans note → `POST` → `POST` rejoué qui rend la même page
-avec `duplicate: true` → `GET` qui retrouve la note et sa borne → `PATCH` avec une borne
-périmée qui rend 409 → `PATCH` qui n'ajoute que le message nouveau → `PATCH` rejoué qui rend
-`messagesAdded: 0`. Dans la page : `Source = Email`, `Statut IA = À traiter`, `ID client`,
-`Dernier message`, `Date` du dernier message, `Interlocuteur`, `Auteur`, et
-`Transcription brute` laissée vide.
+**Authentification** — les trois refus donnent trois conseils différents, et c'est volontaire :
+un jeton bien formé du bon locataire mais mal signé dit « session invalide, reconnectez-vous » ;
+un jeton d'un locataire inconnu dit « ce compte n'appartient pas à une organisation
+autorisée » ; un jeton expiré le dit. Un seul message aurait envoyé la moitié des cas chez
+l'administrateur pour rien. Le payload est décodé **sans vérification** pour choisir la phrase,
+et jamais pour accorder quoi que ce soit — c'est écrit dans le commentaire du fichier.
 
-**Fil long** — 60 messages donnent 60 callouts, sur plusieurs requêtes d'ajout, sans perte ni
-doublon, et la borne finale est juste. Un message de 2 509 caractères arrive entier : envoyé en
-deux éléments de rich text, Notion les recolle en un seul.
+Un Bearer forgé accompagné d'un `x-user-email` valide est refusé en 401 : le repli ne rattrape
+jamais un jeton présent mais mauvais. 401 sans identité sur les cinq points d'entrée.
 
-**Non-régression de la dictée** — `contacts.ts` a été refactoré sur la bibliothèque partagée,
-donc ses deux chemins ont été repassés : la liste rend 236 contacts avec leurs sociétés
-résolues, et une création écrit titre, Fonction, Type, `Téléphone FR`, `Téléphone CH` et le
-lien Société, en laissant `Email` vide — la dictée n'en demande pas, et c'est inchangé.
+**Audience** — les deux formes sont acceptées, le GUID nu et `api://<guid>`. Un jeton v2.0 porte
+la première, un v1.0 la seconde, et laquelle est émise dépend de `accessTokenAcceptedVersion`,
+un champ que personne ne regarde avant que les jetons commencent à être rejetés.
 
-**Authentification** — 401 sans identité sur les cinq points d'entrée, et 401 pour un Bearer
-forgé accompagné d'un `x-user-email` valide.
+**Bundle** — aucun secret dans `dist/` ; le client ID et l'autorité y sont, publics par
+conception, et seulement dans le bundle du taskpane, pas dans celui de la dictée.
 
-**Certificat** — `curl` **sans `-k`** rend 200 sur `https://localhost:5173/outlook.html` et sur
-l'IP du réseau : l'autorité est réellement approuvée par le système.
+**Serveur** — `/outlook.html` répond 200 sans `-k` et sans en-tête d'isolation, `/` garde les
+deux, la dictée répond toujours, aucune erreur au log.
 
-### Faites
+### Deux décisions prises en cours de route
 
-T001, T002, T004, T005, T006, T007, T008, T009, T010, T010b, T011, T012, T013, T014, T015,
-T016, T017, T018, T019, T020, T021, T022, T023, T024, T025, T026, T027, T028, T036, T040,
-T041, T060 — plus, hors plan : `functions/_lib/contact.ts`, `scripts/outlook-manifest.mjs`,
-`src/outlook/config.ts`, `.env.example`, et le mode `dev:outlook`.
+**T035, écart au plan** : `src/components/contact-form.tsx` n'est pas touché. Le plan prévoyait
+d'y ajouter un champ email et de le réutiliser dans le panneau ; à l'ouvrir, c'est un écran
+pleine hauteur avec son propre envoi, lié à `/api/contacts` qui n'écrit pas l'email, alors que
+le panneau a besoin de plusieurs brouillons simultanés dans 320 px, envoyés avec la note. Le
+paramétrer sur sa mise en page, sa route et sa multiplicité aurait été une réécriture déguisée
+en réutilisation, avec le formulaire en service mis en jeu pour rien. D'où
+`src/outlook/ParticipantForm.tsx`, qui réutilise ce qui voyage bien : `PhoneNumberInput`,
+`CountryPicker`, `dialOf`. FR-013 s'en trouve tenu plus strictement qu'au plan.
 
-### Décisions prises en cours de route
+**Les deux jetons sont acquis en série avant les lectures.** Trois requêtes parallèles voulant
+chacune un jeton auraient demandé le consentement plus d'une fois, ce qui se lit comme un bug
+et se fait rejeter.
 
-- **`functions/_lib/contact.ts`** : la création d'un contact est devenue une fonction partagée
-  plutôt qu'une copie dans la route Outlook. Dupliquer la logique des colonnes téléphone, du
-  lien société et du titre sans nom aurait voulu dire qu'un correctif d'un côté n'atteindrait
-  pas l'autre — et l'endroit où cela dériverait est le CRM du client. `contacts.ts` passe de
-  260 à 104 lignes et son comportement est inchangé, vérifié.
-- **La route Outlook exige l'adresse** à la création d'un contact, là où celle de la dictée ne
-  la demande pas. Un contact créé sans adresse serait invisible à toute reconnaissance
-  ultérieure : le mail suivant de la même personne proposerait de la créer une seconde fois.
-- **Le modèle par défaut est attendu, pas exigé** : cinq essais espacés de 400 ms, puis les
-  blocs sont ajoutés quoi qu'il arrive et `templateTimedOut` le dit. Perdre l'ordre de quelques
-  blocs est cosmétique ; perdre le mail ne l'est pas.
-- **`dev:outlook` est un mode séparé de `dev:mobile`**, et pas un remplacement. Outlook sur le
-  web charge le taskpane dans une iframe, où aucun avertissement de certificat n'est
-  contournable ; le téléphone, lui, a déjà accepté le certificat auto-signé, et un certificat
-  non approuvé dans une PWA autonome échoue en écran blanc plutôt qu'en question.
-
-### Pièges rencontrés
-
-1. Le service worker de la dictée **précachait `outlook.html`** et les icônes du complément :
-   `navigateFallbackDenylist` ne couvre que le repli de navigation, jamais un succès de
-   précache. D'où T010b.
-2. Retirer les en-têtes d'isolation du taskpane dans un middleware **postérieur** ne marche
-   pas : Vite applique `server.headers` avant les middlewares de plugin. Le middleware agit des
-   deux côtés et reste étroit.
-3. Le pont de développement ne peut pas construire une requête **GET avec un corps** et rend
-   500 avant d'atteindre la route. C'est un artefact du harnais de test, pas de la route.
+**`/api/outlook/contacts/match` rend aussi `typeOptions`.** Le panneau en a besoin pour le
+formulaire de création, et lire les 236 contacts pour apprendre les options d'une colonne que
+la route a déjà sous les yeux aurait été absurde.
 
 ### Reste
 
-- **T003** : l'application Entra, puis `ENTRA_API_CLIENT_ID` et `ENTRA_TENANT_IDS`.
-- **Phase 3** : brancher le panneau sur les routes (T029, T030, T035, T037, T038, T042, T043).
-- **Phases 6 à 11** : cas limites, authentification NAA, migration Vercel, production.
+- **T003** : l'adresse du compte de test dans `users.ts`.
+- **T056** à moitié, **T058** pas fait : la progression par lots à l'envoi, et l'annonce de la
+  fenêtre de consentement.
+- **T059, T039, T044, T045 à T048** : les vérifications des quatre parcours, qui demandent
+  Outlook ouvert sur de vrais mails.
+- **Phases 9 à 11** : migration Vercel vers `mosaicref.vercel.app`, production, finition.
 
 ---
 
@@ -183,8 +168,8 @@ contient tous les messages du fil du plus ancien au plus récent.
 - [X] T026 [US1] Implémenter `POST /api/outlook/notes` dans `functions/api/outlook/notes.ts` : déduplication sur `ID client` avant toute écriture (réponse `200` + `duplicate: true`, rien d'écrit), création de la page depuis le modèle par défaut avec `Interlocuteur`, `Date` (date du dernier message), `Auteur`, `Source` = `Email`, `ID client`, `Statut IA` = `À traiter`, sans toucher `Transcription brute`. `contactIds` vide → 400 « Aucun interlocuteur à rattacher » ; `messages` vide → 400 (dépend de T017, T021)
 - [X] T027 [US1] Ajouter dans `functions/api/outlook/notes.ts` l'attente du modèle par défaut : interroger les enfants de la page par essais espacés et plafonnés avant d'ajouter les blocs, parce que Notion applique le modèle après la création et interdit `children` à la création. Au dépassement du plafond, **ajouter quand même** et renvoyer `templateTimedOut: true` — perdre l'ordre est acceptable, perdre le mail ne l'est pas (research D-2, principe VI)
 - [X] T028 [US1] Ajouter dans `functions/api/outlook/notes.ts` l'ajout des blocs par lots de 100 via `PATCH /v1/blocks/{id}/children`, puis l'écriture de `Dernier message` **après** l'ajout, et jamais avant (data-model §4)
-- [ ] T029 [US1] Câbler dans `src/outlook/Panel.tsx` les états `chargement`, `nouvelle conversation`, `envoi` et `succès` : nombre de messages et période couverte, liste des participants externes cochés, bouton « Créer la note », puis confirmation avec lien « Ouvrir dans Notion » et la mention que la réécriture par l'IA prend quelques secondes (dépend de T023, T021)
-- [ ] T030 [US1] Câbler dans `src/outlook/Panel.tsx` la présélection : tout contact reconnu est coché avec son nom et sa société, et chaque ligne reste décochable ; le bouton d'envoi est désactivé si aucune ligne n'est cochée (dépend de T024, T019)
+- [X] T029 [US1] Câbler dans `src/outlook/Panel.tsx` les états `chargement`, `nouvelle conversation`, `envoi` et `succès` : nombre de messages et période couverte, liste des participants externes cochés, bouton « Créer la note », puis confirmation avec lien « Ouvrir dans Notion » et la mention que la réécriture par l'IA prend quelques secondes (dépend de T023, T021)
+- [X] T030 [US1] Câbler dans `src/outlook/Panel.tsx` la présélection : tout contact reconnu est coché avec son nom et sa société, et chaque ligne reste décochable ; le bouton d'envoi est désactivé si aucune ligne n'est cochée (dépend de T024, T019)
 - [ ] T031 [US1] Vérifier le test indépendant d'US1 dans Outlook sur le web selon `specs/001-outlook-vers-notion/quickstart.md` §3, et contrôler dans Notion : `Source` = `Email`, `Statut IA` = `À traiter`, un callout par message, ordre chronologique
 - [ ] T032 [P] [US1] Vérifier l'idempotence : vingt `POST` de la même conversation laissent une seule page (SC-002) — script dans `specs/001-outlook-vers-notion/quickstart.md` §4
 - [ ] T033 [P] [US1] Vérifier qu'un message de 10 000 caractères arrive entier dans Notion, découpé en paragraphes, et qu'un mail HTML chargé (signature, tableau) reste lisible
@@ -203,10 +188,10 @@ lié à la note.
 formulaire proposé, envoyer — le contact existe dans Contacts avec son email, et la note lui
 est liée.
 
-- [ ] T035 [P] [US2] Ajouter un champ `email` à `src/components/contact-form.tsx`, préremplissable et requis quand le formulaire est utilisé par le panneau, optionnel pour la PWA de dictée qui n'en passe pas — aucun changement de comportement pour l'écran de dictée
+- [X] T035 [P] [US2] **Écart assumé au plan** : `src/components/contact-form.tsx` n'est pas modifié du tout, et un formulaire compact propre au panneau est écrit dans `src/outlook/ParticipantForm.tsx`. Le formulaire de la dictée est un écran pleine hauteur avec son propre envoi, lié à `/api/contacts` qui n'écrit pas l'email ; le panneau a besoin de plusieurs brouillons simultanés, un par participant inconnu, dans 320 px, envoyés avec la note. Le paramétrer sur sa mise en page, sa route et sa multiplicité aurait été une réécriture déguisée en réutilisation, avec le formulaire en service mis en jeu pour rien. Ce qui est réutilisé est ce qui voyage bien : `PhoneNumberInput`, `CountryPicker`, `dialOf`. Bénéfice secondaire : FR-013 est tenu plus strictement qu'au plan
 - [X] T036 [US2] Implémenter `POST /api/outlook/contacts` dans `functions/api/outlook/contacts/index.ts` selon `specs/001-outlook-vers-notion/contracts/outlook-contacts.md` : reprend la logique de `functions/api/contacts.ts` **sans la modifier**, et ajoute l'écriture de `Email` (FR-014). Le titre est ciblé par son type `title`, jamais par son nom, qui est vide dans ce schéma (research A-5). `Email` absente du schéma → 500 nommant la colonne, jamais un abandon silencieux
-- [ ] T037 [US2] Câbler dans `src/outlook/Panel.tsx` l'état `participant inconnu` : ligne marquée « Nouveau contact », dépliable en formulaire, nom et email préremplis, décochable pour ignorer une newsletter ou un assistant automatique ; le bouton d'envoi est désactivé tant qu'un formulaire coché est incomplet (dépend de T035)
-- [ ] T038 [US2] Enchaîner dans `src/outlook/Panel.tsx` la création des contacts **avant** la note, en série, en conservant chaque identifiant obtenu dans l'état du panneau : la route de création n'est pas idempotente et un « Réessayer » ne doit jamais recréer un contact déjà créé (data-model §4)
+- [X] T037 [US2] Câbler dans `src/outlook/Panel.tsx` l'état `participant inconnu` : ligne marquée « Nouveau contact », dépliable en formulaire, nom et email préremplis, décochable pour ignorer une newsletter ou un assistant automatique ; le bouton d'envoi est désactivé tant qu'un formulaire coché est incomplet (dépend de T035)
+- [X] T038 [US2] Enchaîner dans `src/outlook/Panel.tsx` la création des contacts **avant** la note, en série, en conservant chaque identifiant obtenu dans l'état du panneau : la route de création n'est pas idempotente et un « Réessayer » ne doit jamais recréer un contact déjà créé (data-model §4)
 - [ ] T039 [US2] Vérifier le test indépendant d'US2 selon `specs/001-outlook-vers-notion/quickstart.md` §3, y compris les deux cas négatifs : décocher l'inconnu laisse l'envoi possible, et un formulaire coché au nom vide désactive le bouton
 
 **Checkpoint** : US1 et US2 fonctionnent indépendamment.
@@ -223,8 +208,8 @@ et le nouveau, une seule fois chacun.
 
 - [X] T040 [US3] Implémenter `PATCH /api/outlook/notes` dans `functions/api/outlook/notes.ts` selon `specs/001-outlook-vers-notion/contracts/outlook-notes.md` : revérifier `sinceMessageId` contre `Dernier message` de la page et répondre `409` avec la vraie valeur s'ils diffèrent, puis ne garder que les messages postérieurs à la borne (FR-008)
 - [X] T041 [US3] Compléter dans `functions/api/outlook/notes.ts` les propriétés à l'enrichissement : `Interlocuteur` par **union** des contacts existants et nouveaux, jamais par remplacement ; `Auteur` par **ajout** de l'utilisateur courant à la liste existante s'il n'y est pas (FR-005, clarification de session) ; `Date` à la date du dernier message ; `Statut IA` remis à `À traiter` ; `Dernier message` mis à jour après l'ajout des blocs (dépend de T040)
-- [ ] T042 [US3] Câbler dans `src/outlook/Panel.tsx` les états `note existante` — « Note existante, N nouveaux messages », lien vers la note, bouton « Enrichir la note » — et `note à jour` — lien vers la note, **aucun** bouton d'envoi (dépend de T025)
-- [ ] T043 [US3] Traiter le `409` dans `src/outlook/Panel.tsx` en rechargeant l'état du fil plutôt qu'en écrivant par-dessus, avec un message disant que la note a été enrichie entre-temps
+- [X] T042 [US3] Câbler dans `src/outlook/Panel.tsx` les états `note existante` — « Note existante, N nouveaux messages », lien vers la note, bouton « Enrichir la note » — et `note à jour` — lien vers la note, **aucun** bouton d'envoi (dépend de T025)
+- [X] T043 [US3] Traiter le `409` dans `src/outlook/Panel.tsx` en rechargeant l'état du fil plutôt qu'en écrivant par-dessus, avec un message disant que la note a été enrichie entre-temps
 - [ ] T044 [US3] Vérifier le test indépendant d'US3 selon `specs/001-outlook-vers-notion/quickstart.md` §3, et qu'un `PATCH` rejoué rend `messagesAdded: 0` sans aucun bloc en double
 
 **Checkpoint** : US1, US2 et US3 fonctionnent indépendamment.
@@ -255,10 +240,10 @@ réseau revenu.
 parce qu'elle dépend de T003, un prérequis externe, et que les phases 3 à 6 se développent
 sans elle grâce au repli `x-user-email`.
 
-- [ ] T049 Créer `src/outlook/auth.ts` : `createNestablePublicClientApplication` de `@azure/msal-browser`, un jeton d'accès pour le scope de l'API exposée et un second pour Graph `Mail.Read`. Demander toujours **au moins un scope de ressource**, sans quoi MSAL ne rend aucun jeton d'accès. Ne jamais faire voyager l'ID token : le backend valide un jeton d'accès (research B-3). **Aucun repli sur `Office.auth.getAccessToken`** : les jetons Exchange hérités sont éteints depuis octobre 2025 (research B-1) (dépend de T003)
-- [ ] T050 Brancher le `Authorization: Bearer` dans `src/outlook/api.ts` et le jeton Graph dans `src/outlook/graph.ts` (dépend de T049)
-- [ ] T051 Câbler l'état `incompatible` dans `src/outlook/Panel.tsx` : si `supportsNaa()` est faux, afficher un message en français nommant la version d'Outlook requise et ne rien tenter — Outlook Windows abonnement 2409 build 18025.20000, perpétuel retail 2501 build 18429.20132, volume/LTSC 2408 build 17932.20222 (research B-2) (dépend de T018)
-- [ ] T052 Vérifier la grille d'authentification de `specs/001-outlook-vers-notion/quickstart.md` §4 : 401 sans en-tête sur chacune des quatre routes, 401 avec un Bearer forgé, 401 avec un Bearer valide d'un autre tenant, et la dictée toujours fonctionnelle avec son seul `x-user-email`
+- [X] T049 Créer `src/outlook/auth.ts` : `createNestablePublicClientApplication` de `@azure/msal-browser`, un jeton d'accès pour le scope de l'API exposée et un second pour Graph `Mail.Read`. Demander toujours **au moins un scope de ressource**, sans quoi MSAL ne rend aucun jeton d'accès. Ne jamais faire voyager l'ID token : le backend valide un jeton d'accès (research B-3). **Aucun repli sur `Office.auth.getAccessToken`** : les jetons Exchange hérités sont éteints depuis octobre 2025 (research B-1) (dépend de T003)
+- [X] T050 Brancher le `Authorization: Bearer` dans `src/outlook/api.ts` et le jeton Graph dans `src/outlook/graph.ts` (dépend de T049)
+- [X] T051 Câbler l'état `incompatible` dans `src/outlook/Panel.tsx` : si `supportsNaa()` est faux, afficher un message en français nommant la version d'Outlook requise et ne rien tenter — Outlook Windows abonnement 2409 build 18025.20000, perpétuel retail 2501 build 18429.20132, volume/LTSC 2408 build 17932.20222 (research B-2) (dépend de T018)
+- [X] T052 Vérifier la grille d'authentification de `specs/001-outlook-vers-notion/quickstart.md` §4 : 401 sans en-tête sur chacune des quatre routes, 401 avec un Bearer forgé, 401 avec un Bearer valide d'un autre tenant, et la dictée toujours fonctionnelle avec son seul `x-user-email`
 
 **Checkpoint** : aucune route n'est accessible sans identité prouvée ou sans l'adresse de la
 liste, et la dictée est intacte.
@@ -270,12 +255,12 @@ liste, et la dictée est intacte.
 **Purpose** : les huit cas limites de [spec.md](./spec.md) et les règles transverses du
 panneau.
 
-- [ ] T053 [P] Câbler l'état `protégé` dans `src/outlook/Panel.tsx` : corps illisible (mail chiffré ou protégé) → message disant que le contenu n'est pas lisible par le complément, et aucun envoi
-- [ ] T054 [P] Câbler l'état `aucun externe` dans `src/outlook/Panel.tsx` : tous les participants internes → **envoi refusé**, avec l'explication qu'il n'y a aucun interlocuteur externe à rattacher (clarification de session)
-- [ ] T055 Traiter le changement de mail panneau épinglé dans `src/outlook/Panel.tsx` : `onItemChanged` réinitialise l'état, et si un brouillon de contact est en cours, une confirmation est demandée avant de le perdre (dépend de T018, T037)
-- [ ] T056 Traiter les fils de plus de 50 messages dans `src/outlook/Panel.tsx` : traitement par lots avec progression affichée, sans perte de message
-- [ ] T057 [P] Lister les noms de pièces jointes sous le message concerné, sans jamais télécharger les fichiers (FR-010) — dans `functions/_lib/thread.ts` et `src/outlook/graph.ts`
-- [ ] T058 [P] Annoncer dans `src/outlook/Panel.tsx` la fenêtre de consentement Microsoft au premier usage, au lieu de laisser l'utilisateur face à une popup inexpliquée
+- [X] T053 [P] Câbler l'état `protégé` dans `src/outlook/Panel.tsx` : corps illisible (mail chiffré ou protégé) → message disant que le contenu n'est pas lisible par le complément, et aucun envoi
+- [X] T054 [P] Câbler l'état `aucun externe` dans `src/outlook/Panel.tsx` : tous les participants internes → **envoi refusé**, avec l'explication qu'il n'y a aucun interlocuteur externe à rattacher (clarification de session)
+- [X] T055 Traiter le changement de mail panneau épinglé dans `src/outlook/Panel.tsx` : `onItemChanged` réinitialise l'état, et si un brouillon de contact est en cours, une confirmation est demandée avant de le perdre (dépend de T018, T037)
+- [ ] T056 Traiter les fils de plus de 50 messages dans `src/outlook/Panel.tsx` : traitement par lots avec progression affichée, sans perte de message. **À moitié fait** : la lecture affiche sa progression (`fetchThread` rend le nombre de messages lus) et l'écriture est bien découpée en lots de 100 blocs côté serveur, vérifiée sur 60 messages — mais l'envoi n'affiche qu'un libellé fixe, sans compteur de lots
+- [X] T057 [P] Lister les noms de pièces jointes sous le message concerné, sans jamais télécharger les fichiers (FR-010) — dans `functions/_lib/thread.ts` et `src/outlook/graph.ts`
+- [ ] T058 [P] Annoncer dans `src/outlook/Panel.tsx` la fenêtre de consentement Microsoft au premier usage, au lieu de laisser l'utilisateur face à une popup inexpliquée. **Pas fait.** Les deux jetons sont acquis en série avant les lectures, donc la fenêtre n'apparaît qu'une fois au lieu de trois, et une annulation donne un message clair — mais rien ne la prévient encore
 - [ ] T059 Vérifier le panneau à 320 px dans les quatre clients : une colonne, aucun défilement horizontal, fond clair même en thème sombre Outlook (FR-011)
 
 ---

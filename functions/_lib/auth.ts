@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createRemoteJWKSet, decodeJwt, errors as joseErrors, jwtVerify } from "jose";
 import { findUser, type User } from "./users";
 import type { Env } from "./notion";
 
@@ -53,8 +53,17 @@ const tenantsOf = (env: Env) =>
 
 export const bearerPathEnabled = (env: Env) => Boolean(env.ENTRA_API_CLIENT_ID) && tenantsOf(env).length > 0;
 
+// Both spellings of the audience are accepted, and that is not laxity.
+//
+// A v2.0 token issued for a custom scope carries the resource's client id as
+// `aud`; a v1.0 token carries its Application ID URI, `api://<client-id>`.
+// Which one the app registration issues depends on its
+// `accessTokenAcceptedVersion`, a field nobody looks at until tokens start
+// being rejected. Both forms name the same registration, so both are checked.
+const audiencesOf = (env: Env) => [env.ENTRA_API_CLIENT_ID!, `api://${env.ENTRA_API_CLIENT_ID}`];
+
 /** Why a bearer was refused, so the caller can say something useful in French. */
-export type AuthFailure = "token" | "tenant" | "user";
+export type AuthFailure = "token" | "tenant" | "expired" | "user";
 
 export type Identity = { user: User } | { failure: AuthFailure };
 
@@ -65,14 +74,35 @@ type Claims = {
   email?: string;
 };
 
+// Why every attempt failed, used only to choose the sentence shown to the
+// user. A wrong signature and a wrong tenant are the same 401, but they are
+// not the same advice: one means reconnect, the other means ask an
+// administrator, and sending someone to the wrong one wastes their afternoon.
+//
+// The payload is decoded WITHOUT verification to tell them apart. That is safe
+// because nothing here grants anything — the only thing read is which message
+// to print. No claim from this decode ever reaches `findUser`.
+function refusal(token: string, tenants: string[], expired: boolean): AuthFailure {
+  if (expired) return "expired";
+  try {
+    const tid = (decodeJwt(token) as Claims).tid;
+    if (tid && !tenants.includes(tid)) return "tenant";
+  } catch {
+    // Not even a JWT.
+  }
+  return "token";
+}
+
 async function fromBearer(token: string, env: Env): Promise<Identity> {
   const tenants = tenantsOf(env);
+  let expired = false;
+
   for (const tenant of tenants) {
     for (const issuer of ISSUERS) {
       try {
         const { payload } = await jwtVerify(token, jwks(tenant), {
           issuer: issuer(tenant),
-          audience: env.ENTRA_API_CLIENT_ID,
+          audience: audiencesOf(env),
         });
         const claims = payload as Claims;
         // A token signed by one allowed tenant but issued for another is not
@@ -83,13 +113,14 @@ async function fromBearer(token: string, env: Env): Promise<Identity> {
         // Identity proved, authorisation not granted: the address still has to
         // be one of ours.
         return user ? { user } : { failure: "user" };
-      } catch {
+      } catch (error) {
+        if (error instanceof joseErrors.JWTExpired) expired = true;
         // Wrong tenant, wrong issuer variant, bad signature, expired: try the
         // next combination and decide once they are all exhausted.
       }
     }
   }
-  return { failure: tenants.length ? "tenant" : "token" };
+  return { failure: refusal(token, tenants, expired) };
 }
 
 /**
@@ -114,6 +145,7 @@ export async function identify(request: Request, env: Env): Promise<Identity> {
 
 export const AUTH_MESSAGES: Record<AuthFailure, string> = {
   token: "Session Microsoft invalide, reconnectez-vous.",
+  expired: "Session Microsoft expirée, reconnectez-vous.",
   tenant: "Ce compte n'appartient pas à une organisation autorisée.",
   user: "Adresse non autorisée",
 };

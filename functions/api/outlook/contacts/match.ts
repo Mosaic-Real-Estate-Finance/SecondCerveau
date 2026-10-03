@@ -113,6 +113,10 @@ export const onRequestPost: Handler = async ({ request, env }) => {
       matched,
       unknown: wanted.filter((address) => !matched[address]),
       ...(ambiguous.size ? { ambiguous: [...ambiguous] } : {}),
+      // The options of the Type column, for the creation form. They come from
+      // the schema already read above, so they cost nothing — reading the
+      // whole contacts list to learn them would cost a great deal.
+      typeOptions: schema[p.type]?.multi_select?.options?.map((option) => option.name) ?? [],
     });
   } catch (error) {
     return fail(error);

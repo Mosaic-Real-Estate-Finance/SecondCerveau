@@ -21,7 +21,11 @@ export type MatchResult = {
   unknown: string[];
   /** Addresses carried by more than one contact: a flaw of the base, shown not hidden. */
   ambiguous?: string[];
+  /** Options of the Type column, for the creation form. */
+  typeOptions: string[];
 };
+
+export type Company = { id: string; name: string; type: string };
 
 export type ExistingNote = { id: string; url: string; lastMessageId: string | null };
 
@@ -39,9 +43,10 @@ export type NewContact = {
   email: string;
   role?: string;
   types?: string[];
-  phones?: { country: string; number: string }[];
+  phones?: { country: string; dial?: string; number: string }[];
   companyId?: string;
-  companyName?: string;
+  /** Same shape the dictation's form sends, so the server path is identical. */
+  newCompany?: { name: string };
 };
 
 export class ApiError extends Error {
@@ -58,12 +63,14 @@ export class ApiError extends Error {
   }
 }
 
-let bearer: string | null = null;
+// A provider rather than a stored token: MSAL renews silently, and asking it
+// per call means a panel left open across a token expiry still works. Caching
+// the string here would make it stale exactly when nobody is watching.
+let provider: (() => Promise<string>) | null = null;
 let fallbackEmail = "";
 
-/** Called once MSAL has a token for this add-in's own API scope. */
-export const setBearer = (token: string | null) => {
-  bearer = token;
+export const setTokenProvider = (fn: (() => Promise<string>) | null) => {
+  provider = fn;
 };
 
 /** The address Outlook reports, used only while the bearer path is off. */
@@ -72,6 +79,7 @@ export const setFallbackEmail = (email: string) => {
 };
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const bearer = provider ? await provider() : null;
   let response: Response;
   try {
     response = await fetch(path, {
@@ -105,6 +113,9 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   return body as T;
 }
+
+export const listCompanies = () =>
+  call<{ companies: Company[]; typeOptions: string[] }>("/api/companies");
 
 export const matchContacts = (addresses: string[]) =>
   call<MatchResult>("/api/outlook/contacts/match", {
