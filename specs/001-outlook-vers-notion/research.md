@@ -342,6 +342,57 @@ Safari n'est pas une échappatoire : macOS a lui aussi une autorisation « rése
 un refus y est silencieux. La conclusion de G-2 tient pour les deux navigateurs — il faut une
 origine publique.
 
+### G-5. Le panneau ouvert depuis le ruban du haut : c'est Outlook qui le referme — **documenté chez Microsoft**
+
+**Constat (Théo, 2026-10-03).** Depuis le bouton d'applications de l'en-tête d'un message, le
+panneau s'ouvre. Depuis le bouton d'applications du ruban du haut, en vue conversation, il se
+referme aussitôt, « ouvert sans message sélectionné ».
+
+**Ce n'est pas le code.** `grep` sur `src/outlook/` : aucun appel à
+`Office.context.ui.closeContainer()`, à `window.close()` ni à quoi que ce soit qui ferme le
+panneau. Rien dans le complément ne peut le fermer.
+
+**C'est l'hôte, et c'est écrit.** Un complément de la surface `MessageReadCommandSurface` est lié
+à un élément. Microsoft l'énonce pour Outlook sur le web et le nouvel Outlook Windows :
+
+> « add-ins that implement no item context don't activate when the Reading Pane is hidden or when
+> a message isn't selected. This is because add-in commands in Outlook on the web don't appear on
+> the ribbon. To activate an add-in from the Message Read surface, you must first select a
+> message, then select the add-in command from the message action bar. »
+
+Le point d'entrée pris en charge est donc la barre d'actions du message — exactement celui qui
+marche. Le bouton du ruban du haut n'est pas la commande du complément : Outlook ouvre le conteneur
+sans contexte d'élément, puis le détruit.
+
+**`SupportsNoItemContext` ne corrigerait pas ce symptôme**, et coûte cher :
+
+| | |
+| --- | --- |
+| Effet réel | Active le multi-sélection et l'épinglage, **pas** l'activation sans message sur le web |
+| Schéma | Enfant de `<Action>`, dans les `VersionOverrides` 1.1 uniquement |
+| Jeu d'exigences | `DefaultMinVersion` à passer de 1.5 à **1.13**, ce qui écarte les hôtes en dessous |
+| Lecture de la sélection | `getSelectedItemsAsync` (Mailbox 1.13) ; `conversationId` n'arrive qu'en **1.14** |
+| Permission | **`ReadWriteMailbox`** au lieu de `ReadItem` — un nouveau consentement administrateur, pour un complément qui ne fait que lire |
+| Écueil connu | `getSelectedItemsAsync` échoue avec « Invalid operation (getSelectedItemsAsync) when `Office.context.mailbox.item` is null », soit précisément notre cas |
+
+**Décision.** On ne déclare pas `SupportsNoItemContext`. Récupérer le dernier message de la
+conversation affichée sans message sélectionné n'est pas faisable sur ce chemin, et l'échanger
+contre `ReadWriteMailbox` pour un complément en lecture seule est hors de proportion.
+
+**Corrigé quand même, parce que l'état était atteignable et muet.** Deux choses :
+
+1. `mailbox.item` peut être `null` pendant qu'Outlook charge encore les métadonnées du volet de
+   lecture. Lu une seule fois, un panneau ouvert sur un mail parfaitement ordinaire s'arrêtait sur
+   « aucun mail » et y restait. `awaitItem()` dans `src/outlook/office.ts` l'attend (12 × 150 ms).
+   Vérifié : un élément qui arrive après 400 ms est bien repris.
+2. L'état sans message dit maintenant « Sélectionnez un message pour l'envoyer vers Notion »,
+   nomme le bon point d'entrée et porte un bouton « Réessayer ». Il n'est plus un cul-de-sac.
+
+Sources : [Activate your Outlook add-in without the Reading Pane enabled or a message
+selected](https://learn.microsoft.com/en-us/office/dev/add-ins/outlook/contextless),
+[SelectedItemDetails](https://learn.microsoft.com/en-us/javascript/api/outlook/office.selecteditemdetails),
+[office-js#3680](https://github.com/OfficeDev/office-js/issues/3680).
+
 ## F. Inconnues restantes
 
 Les deux dépendances bloquantes sont levées. La seule question ouverte ne bloque que la convergence.

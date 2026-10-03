@@ -251,7 +251,7 @@ export default defineConfig(async ({ mode }) => {
           // served from the dictation's cache — the denylist below only governs
           // the navigation fallback, never an exact precache hit — and the
           // add-in would run on a stale build with no way to notice.
-          globIgnores: ["**/*.wasm", "splash/**", "outlook.html", "outlook/**", "assets/outlook-*.js"],
+          globIgnores: ["**/*.wasm", "splash/**", "outlook.html", "outlook/**", "assets/outlook-*.js", "assets/outlook-*.css"],
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
           navigateFallback: "index.html",
           // The dictation's service worker has scope "/", so without /outlook

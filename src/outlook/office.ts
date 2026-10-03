@@ -109,6 +109,24 @@ export function readItem(): MailContext | null {
   };
 }
 
+/**
+ * The mail currently open, waited for instead of asked once.
+ *
+ * A taskpane can already be running while Outlook is still loading the
+ * metadata of the item in the reading pane, and `mailbox.item` is null in that
+ * gap. Asked a single time, a panel opened on a perfectly ordinary mail settles
+ * on "no mail" and stays there, which is the one state the reader cannot tell
+ * apart from a broken add-in.
+ */
+export async function awaitItem(tries = 12, every = 150): Promise<MailContext | null> {
+  for (let attempt = 0; ; attempt++) {
+    const mail = readItem();
+    if (mail?.conversationId) return mail;
+    if (attempt >= tries) return mail;
+    await new Promise((resolve) => setTimeout(resolve, every));
+  }
+}
+
 /** The signed-in collaborator, as Outlook knows them. */
 export const currentUser = () => office()?.context.mailbox?.userProfile?.emailAddress ?? "";
 

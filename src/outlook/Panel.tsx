@@ -22,11 +22,11 @@ import { INTERNAL_DOMAINS, USERS_EMAILS } from "./config";
 import { fetchThread, GraphError } from "./graph";
 import { draftReady, newDraft, ParticipantForm, type Draft } from "./ParticipantForm";
 import {
+  awaitItem,
   bodyReadable,
   currentUser,
   inMailbox,
   onItemChanged,
-  readItem,
   supportsNaa,
   type MailContext,
 } from "./office";
@@ -128,7 +128,8 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
     setStage({ name: "loading", read: 0 });
     created.current.clear();
 
-    const mail = readItem();
+    // Waited for, not read once: see awaitItem in ./office.
+    const mail = await awaitItem();
     if (!mail?.conversationId) return setStage({ name: "no-mail" });
     if (!(await bodyReadable())) return setStage({ name: "protected" });
 
@@ -311,7 +312,20 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
     );
   }
   if (stage.name === "no-mail") {
-    return <Said title="Aucun mail ouvert">Sélectionnez un mail pour le rattacher à un contact.</Said>;
+    // Reachable, and worth more than one line. Outlook on the web gives a
+    // Message Read add-in no item context from the top ribbon, and tears the
+    // taskpane down itself — nothing here closes it. Saying where the add-in
+    // does open is the only thing that helps. See research.md G-5.
+    return (
+      <Frame>
+        <Title>Sélectionnez un message pour l'envoyer vers Notion</Title>
+        <Muted>
+          Sur Outlook sur le web, le complément s'ouvre depuis le bouton d'applications de l'en-tête d'un message.
+          Ouvert depuis le ruban du haut, il n'a aucun message à lire et Outlook referme le panneau.
+        </Muted>
+        <PrimaryButton onClick={() => void load()}>Réessayer</PrimaryButton>
+      </Frame>
+    );
   }
   if (stage.name === "protected") {
     return (

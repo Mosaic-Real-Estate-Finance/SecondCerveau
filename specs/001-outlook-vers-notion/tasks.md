@@ -117,12 +117,16 @@ la route a déjà sous les yeux aurait été absurde.
 
 ### Reste
 
-- **T003** : l'adresse du compte de test dans `users.ts`.
+- **T045 à T047** : l'état d'erreur est câblé et ne recrée jamais de doublon, mais trois choses
+  manquent encore. La saisie en cours **n'est pas conservée** à l'échec : `failed` abandonne les
+  brouillons et « Réessayer » repart de la lecture du fil. Et le cas « page créée, blocs en
+  échec » dit « Ouvrez-la pour vérifier » **sans donner le lien** — on envoie le lecteur chercher
+  une note dont on a l'URL sous la main.
 - **T056** à moitié, **T058** pas fait : la progression par lots à l'envoi, et l'annonce de la
   fenêtre de consentement.
-- **T059, T039, T044, T045 à T048** : les vérifications des quatre parcours, qui demandent
-  Outlook ouvert sur de vrais mails.
-- **Phases 9 à 11** : migration Vercel vers `mosaicref.vercel.app`, production, finition.
+- **T031 à T034, T039, T044, T048, T059** : les vérifications des quatre parcours, qui demandent
+  Outlook ouvert sur de vrais mails et un contrôle dans Notion.
+- **Phases 10 et 11** : mise en production, convergence dans les quatre clients, finition.
 
 ---
 
@@ -136,7 +140,7 @@ reste de prérequis humain que T003, l'application Entra, et seulement pour la p
 
 - [X] T001 Constater dans l'interface Notion que la relation `Interlocuteur` de la base Notes n'est pas limitée à une page — procédure dans `specs/001-outlook-vers-notion/quickstart.md` §0.1 (hors code, Théo) **BLOQUANTE**
 - [X] T002 Créer dans la base Notes les quatre propriétés manquantes : `ID client` (texte), `Source` (sélection, options exactement `Dictée` et `Email`), `Dernier message` (texte), `Statut IA` (sélection, options exactement `À traiter` et `Traité`) — tableau de référence dans `specs/001-outlook-vers-notion/data-model.md` §2 (hors code, Théo)
-- [ ] T003 [P] Enregistrer l'application Microsoft Entra : SPA, redirection NAA `brk-multihub://<domaine>`, API exposée avec un scope pour le backend, permission déléguée `Mail.Read`, consentement administrateur — `specs/001-outlook-vers-notion/quickstart.md` §0.4 (hors code, Théo ; requise seulement à partir de la phase 7)
+- [X] T003 [P] Enregistrer l'application Microsoft Entra : SPA, redirection NAA `brk-multihub://<domaine>`, API exposée avec un scope pour le backend, permission déléguée `Mail.Read`, consentement administrateur — `specs/001-outlook-vers-notion/quickstart.md` §0.4 (hors code, Théo ; requise seulement à partir de la phase 7). **Fait le 2026-10-03** : tenant de test, client `62caaa98-…`, URI `api://62caaa98-…`, scope `access_as_user`, cinq redirections SPA dont `brk-multihub://mosaicref.vercel.app`, et `openid profile offline_access User.Read Mail.Read` consenties par l'administrateur
 - [X] T004 Renseigner dans `.env.local` les sept variables nouvelles ou vides : `NOTES_PROP_CLIENT_ID=ID client`, `NOTES_PROP_SOURCE=Source`, `NOTES_PROP_AI_STATUS=Statut IA`, `NOTES_PROP_LAST_MESSAGE=Dernier message`, `CONTACTS_PROP_EMAIL=Email`, `INTERNAL_DOMAINS=mosaicfin.com`, et créer `.env.example` qui les liste toutes avec `NOTION_TOKEN` marqué comme secret (dépend de T002)
 - [X] T005 Installer les dépendances dans `package.json` : `jose` (fait). `@azure/msal-browser` arrive avec T049 ; `@types/office-js` n'est pas nécessaire — `src/outlook/office.ts` déclare la surface d'Office qu'il utilise, qui est petite
 - [X] T006 Créer `outlook.html` à la racine, entrée du taskpane, qui charge `https://appsforoffice.microsoft.com/lib/1/hosted/office.js` par balise `<script>` puis `src/outlook/main.tsx` — office.js n'est jamais bundlé (research E-3)
@@ -144,7 +148,7 @@ reste de prérequis humain que T003, l'application Entra, et seulement pour la p
 - [X] T008 Ajouter dans `public/_headers` un bloc `/outlook*` qui supprime les deux en-têtes d'isolation par le préfixe `! ` : `! Cross-Origin-Embedder-Policy` et `! Cross-Origin-Opener-Policy` — COEP bloquerait office.js, COOP casserait la fenêtre d'authentification (research E-1)
 - [X] T009 Ajouter dans `vite.config.ts` un middleware qui retire ces deux mêmes en-têtes pour toute requête dont le chemin commence par `/outlook`, en développement **et** en prévisualisation. Les retirer dans un middleware postérieur ne marche pas : `server.headers` est appliqué avant les middlewares de plugin. Le middleware fait donc les deux — `removeHeader` pour ce qui est déjà posé, et un `setHeader` neutralisé pour ce qui le serait ensuite — et ne touche jamais qu'une requête `/outlook`
 - [X] T010 Ajouter `/^\/outlook/` à `workbox.navigateFallbackDenylist` dans `vite.config.ts` — sans cela le service worker de la dictée, de portée `/`, répond l'application de dictée sur `/outlook` (research E-2)
-- [X] T010b Sortir le taskpane du précache du service worker : `globIgnores` gagne `outlook.html`, `outlook/**` et `assets/outlook-*.js`, et une règle `NetworkOnly` sur `/outlook` passe avant la règle de navigation. **Découvert en inspectant le build, pas prévu au plan** : la denylist ne gouverne que le repli de navigation, jamais un succès de précache, donc `outlook.html` était servi depuis le cache de la dictée — le complément aurait tourné sur une version périmée sans moyen de s'en apercevoir. Précache passé de 55 à 48 entrées
+- [X] T010b Sortir le taskpane du précache du service worker : `globIgnores` gagne `outlook.html`, `outlook/**` et `assets/outlook-*.js`, et une règle `NetworkOnly` sur `/outlook` passe avant la règle de navigation. **Découvert en inspectant le build, pas prévu au plan** : la denylist ne gouverne que le repli de navigation, jamais un succès de précache, donc `outlook.html` était servi depuis le cache de la dictée — le complément aurait tourné sur une version périmée sans moyen de s'en apercevoir. Précache passé de 55 à 48 entrées. **Amendé le 2026-10-03** : `assets/outlook-*.js` ne suffisait pas — `src/outlook/outlook.css`, ajouté plus tard, émet un `assets/outlook-*.css` qui revenait dans le précache de la dictée. La règle `NetworkOnly` sur `/outlook` ne le couvre pas, cet actif vivant sous `/assets`. Les deux extensions sont désormais exclues
 - [X] T011 [P] Créer `public/outlook/manifest.xml`, manifeste « add-in only » : surface `MessageReadCommandSurface`, un bouton ouvrant le taskpane libellé « Vers Notion », `SupportsPinning` activé, `AppDomains` limité au domaine de déploiement. Ne pas y déclarer `NestedAppAuth` : ce jeu d'exigences n'est pas déclarable dans un manifeste et se teste à l'exécution (research B-2). **`SupportsPinning` impose deux `VersionOverrides` imbriquées** : l'élément n'existe que dans le schéma 1.1, qui doit être contenu dans le 1.0 (research G-1). Validé par `office-addin-manifest validate`, qui doit être exécuté après toute modification du gabarit
 - [X] T012 [P] Produire `public/outlook/icon-16.png`, `icon-32.png`, `icon-64.png`, `icon-80.png`, `icon-128.png` depuis `src/assets/mosaic-symbole.svg`
 
