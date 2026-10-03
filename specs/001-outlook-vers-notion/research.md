@@ -201,6 +201,11 @@ Trois causes se cumulent, et aucune n'est un bug de notre code :
 - Les brouillons (`isDraft`) sont exclus : un brouillon est un mail que personne n'a reçu.
 - Garde-fou : si tout le fil se révélait être de la citation, la liste d'origine est rendue
   telle quelle. Un panneau vide n'explique rien.
+- Les identifiants Graph des copies effacées voyagent dans `copyIds`, et ce n'est pas de la
+  comptabilité : la marque « Dernier message » d'une note déjà enrichie peut nommer une
+  copie que le repli fait disparaître. Sans les alias, le serveur ne retrouverait plus le
+  repère et réécrirait le fil entier. Vérifié au banc : un repère portant l'identifiant de
+  la copie supprimée rend exactement le même décompte que celui du mail conservé.
 - **Filtré côté client**, dans `graph.ts`, parce que c'est là que vit la connaissance de
   Graph — et parce que le compteur « n messages identifiés », la marque « Dernier message »
   et le décompte des nouveaux retombent alors tous sur la même liste.

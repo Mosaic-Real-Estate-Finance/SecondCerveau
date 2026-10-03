@@ -312,7 +312,9 @@ export const onRequestPatch: Handler = async ({ request, env }) => {
     // Everything after the mark. No mark at all — a note from before this
     // feature — and the whole thread is new: a visible duplicate in the body
     // beats a message that is never written.
-    const at = mark ? messages.findIndex((message) => message.id === mark) : -1;
+    const at = mark
+      ? messages.findIndex((message) => message.id === mark || message.copyIds?.includes(mark))
+      : -1;
     const fresh = messages.slice(at + 1);
     if (!fresh.length) {
       return json({ id: noteId, url: page.url, messagesAdded: 0 });

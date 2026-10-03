@@ -20,6 +20,12 @@ export type ThreadMessage = {
   /** uniqueBody as text: the message without the quotes of the previous ones. */
   text: string;
   attachmentNames: string[];
+  /**
+   * Ids of the other Graph copies of this mail. A mailbox holds a sent reply
+   * twice, and a mark written before the panel started folding them may name
+   * the copy rather than this one. See src/outlook/unique.ts.
+   */
+  copyIds?: string[];
 };
 
 type RichText = { type: "text"; text: { content: string } };

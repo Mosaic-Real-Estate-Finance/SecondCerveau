@@ -34,6 +34,8 @@ export type Strippable = {
   from: { name: string; address: string };
   text: string;
   attachmentNames: string[];
+  /** Graph ids of the other copies folded onto this one. See `unique`. */
+  copyIds?: string[];
   /** The RFC 5322 Message-ID. Two copies of one mail share it. */
   internetMessageId?: string;
 };
@@ -142,35 +144,59 @@ const SAME_TEXT = 40;
  *
  * A message left with no text and no attachment after stripping is dropped,
  * unless it arrived empty: an empty mail is a fact, a quote is not.
+ *
+ * The ids of the copies that disappear are kept in `copyIds`, and they are not
+ * bookkeeping. "Dernier message" on an existing note may hold the id of a copy
+ * that this function now folds away; without the aliases the server would fail
+ * to find the mark and append the whole thread a second time.
  */
 export function unique<T extends Strippable>(messages: T[]): T[] {
   const kept: T[] = [];
   const byMail = new Map<string, number>();
   const byContent = new Map<string, number>();
 
+  // A message dropped as pure quote is still a copy of something, and its id
+  // may be the mark on an existing note. Which mail it belonged to is known
+  // only by Message-ID, so that is the only case worth recording.
+  const orphans = new Map<string, string[]>();
+  const alias = (position: number, id: string) => {
+    kept[position] = { ...kept[position], copyIds: [...(kept[position].copyIds ?? []), id] };
+  };
+
   for (const message of messages) {
     const { text, quoteOnly } = strip(message.text);
-    if (quoteOnly && !message.attachmentNames.length) continue;
+    const mailId = message.internetMessageId?.trim().toLowerCase() || null;
 
-    const candidate = { ...message, text } as T;
-    const mailKey = message.internetMessageId?.trim().toLowerCase() || null;
+    if (quoteOnly && !message.attachmentNames.length) {
+      if (mailId) orphans.set(mailId, [...(orphans.get(mailId) ?? []), message.id]);
+      continue;
+    }
+
     const contentKey =
       text.length >= SAME_TEXT ? `${message.from.address.trim().toLowerCase()}\n${normalise(text)}` : null;
 
-    const at = (mailKey ? byMail.get(mailKey) : undefined) ?? (contentKey ? byContent.get(contentKey) : undefined);
+    const at = (mailId ? byMail.get(mailId) : undefined) ?? (contentKey ? byContent.get(contentKey) : undefined);
     if (at !== undefined) {
       // Same mail, second copy. Keep the richer of the two bodies in place.
       if (text.length > kept[at].text.length) kept[at] = { ...kept[at], text };
       if (message.attachmentNames.length > kept[at].attachmentNames.length) {
         kept[at] = { ...kept[at], attachmentNames: message.attachmentNames };
       }
+      alias(at, message.id);
       continue;
     }
 
-    kept.push(candidate);
+    kept.push({ ...message, text } as T);
     const position = kept.length - 1;
-    if (mailKey) byMail.set(mailKey, position);
+    if (mailId) byMail.set(mailId, position);
     if (contentKey) byContent.set(contentKey, position);
+  }
+
+  // The quote-only copies, now that their mail is known to have been kept.
+  for (const [mailId, ids] of orphans) {
+    const at = byMail.get(mailId);
+    if (at === undefined) continue;
+    for (const id of ids) alias(at, id);
   }
 
   // Everything looked like a quote. That cannot be right, and an empty panel

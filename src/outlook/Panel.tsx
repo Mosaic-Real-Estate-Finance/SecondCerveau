@@ -212,7 +212,9 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
       // before this feature — and the whole thread counts as new: a visible
       // duplicate in the body beats a message that is never written.
       const at = note?.lastMessageId
-        ? messages.findIndex((message) => message.id === note.lastMessageId)
+        ? messages.findIndex(
+            (message) => message.id === note.lastMessageId || message.copyIds?.includes(note.lastMessageId!),
+          )
         : -1;
       const fresh = note ? messages.length - (at + 1) : messages.length;
 

@@ -12,6 +12,12 @@ export type ThreadMessage = {
   from: { name: string; address: string };
   text: string;
   attachmentNames: string[];
+  /**
+   * The Graph ids of the other copies of this same mail, folded away by
+   * `unique()`. Sent so the server can still recognise a « Dernier message »
+   * mark that names one of them — see src/outlook/unique.ts.
+   */
+  copyIds?: string[];
 };
 
 export type MatchedContact = { id: string; name: string; company: string };
