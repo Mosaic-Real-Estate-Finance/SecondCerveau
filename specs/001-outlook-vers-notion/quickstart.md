@@ -226,6 +226,65 @@ grep -rn 'console\.' functions/ | grep -iE 'text|body|message|transcript' || ech
 
 ---
 
+## 4 bis. Déploiement sur Vercel
+
+Le complément ne peut pas être servi depuis `localhost` vers Outlook sur le web : Chrome le
+bloque par Local Network Access depuis la version 141, et Safari a sa propre restriction
+réseau local (research G-2). Une origine publique est la seule voie fiable.
+
+### Variables à poser sur Vercel
+
+**Indispensables, sans valeur par défaut utilisable :**
+
+| Variable | Valeur | Pourquoi |
+| --- | --- | --- |
+| `NOTION_TOKEN` | le jeton d'intégration | **Secret.** Sans lui, toute route rend 500. |
+| `NOTION_CONTACTS_DB` | `d0311be1…` | — |
+| `NOTION_NOTES_DB` | `dacdfdfe…` | — |
+| `NOTES_PROP_CLIENT_ID` | `ID client` | Sa valeur par défaut est **vide**, et une colonne vide désactive silencieusement la déduplication : les doublons reviennent sans le moindre message. C'est la seule de la liste dont l'oubli ne se voit pas. |
+
+**Indispensables au moment du *build*,** parce que Vite les inscrit dans le bundle. Absentes,
+le panneau affiche « Complément non configuré » :
+
+| Variable | Valeur |
+| --- | --- |
+| `VITE_ENTRA_CLIENT_ID` | `62caaa98-3734-4094-b9b4-bbe925fc1c7d` |
+| `VITE_ENTRA_AUTHORITY` | `https://login.microsoftonline.com/common` |
+| `VITE_ENTRA_API_SCOPE` | `api://62caaa98-3734-4094-b9b4-bbe925fc1c7d/access_as_user` |
+
+**Déjà posées** : `ENTRA_API_CLIENT_ID`, `ENTRA_TENANT_IDS`.
+
+**Facultatives** : toutes les autres `*_PROP_*`, `INTERNAL_DOMAINS` et `VITE_WHISPER_MODEL` ont
+dans le code une valeur par défaut qui correspond au schéma réel. `CONTACTS_PROP_COMPANY_ROLLUP`
+est à laisser **non posée** : sa valeur par défaut désigne une colonne qui n'existe pas, et la
+poser ne ferait que figer l'erreur (research A-3).
+
+### Le contrôle à ne pas sauter au premier déploiement
+
+`vercel.json` applique les en-têtes d'isolation partout **sauf** sur `/outlook`, par une
+expression à négation. Les deux façons de se tromper sont silencieuses : trop large et
+office.js est bloqué dans le taskpane, trop étroite et Whisper ne démarre plus sur l'iPhone.
+
+```sh
+# Doit montrer les deux en-têtes
+curl -sD- -o/dev/null https://mosaicref.vercel.app/ | grep -i cross-origin
+# Ne doit en montrer aucun
+curl -sD- -o/dev/null https://mosaicref.vercel.app/outlook.html | grep -i cross-origin
+```
+
+### Manifeste de production
+
+```sh
+npm run outlook:manifest:prod     # écrit .outlook/manifest.xml
+npx office-addin-manifest validate .outlook/manifest.xml
+```
+
+Son identifiant (`3cb13804-…`) diffère de celui du manifeste de développement
+(`9f2e4c71-…`), et son bouton s'appelle « Vers Notion » et non « Vers Notion (dev) » : les deux
+peuvent cohabiter dans le même Outlook sans se remplacer l'un l'autre.
+
+---
+
 ## 5. Non-régression de la dictée
 
 À faire après **chaque** phase qui touche `functions/_lib/` ou `vite.config.ts`, et sans

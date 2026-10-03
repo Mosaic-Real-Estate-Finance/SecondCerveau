@@ -324,6 +324,24 @@ Ce qui distingue un hôte n'est pas la bibliothèque mais la boîte mail. `inMai
 désormais distincts, vérifiés au navigateur : pas d'office.js, office.js sans boîte mail, et
 un Outlook réel trop ancien — qui lui mérite bien son message.
 
+### G-4. Le manifeste n'est pas en cause pour le clic sans effet — **audité**
+
+Les trois points soupçonnés sont corrects :
+
+- **Règle d'activation** : `<Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />` dans
+  une collection `Mode="Or"`, ce qui couvre tout mail reçu ordinaire en lecture.
+- **Surface** : `MessageReadCommandSurface`, déclarée dans le bloc 1.0 **et** dans le 1.1.
+- **SourceLocation** : `https://<hôte>/outlook.html`, dans `FormSettings` comme dans les
+  `Resources` des deux blocs.
+
+Et le bouton apparaît bien dans le ruban, ce qui prouve que l'activation fonctionne : un hôte
+qui n'aurait pas retenu la règle n'afficherait rien. Un clic qui ne déclenche aucune requête
+signifie que l'hôte n'a jamais tenté l'URL, donc que la cause est en amont du manifeste.
+
+Safari n'est pas une échappatoire : macOS a lui aussi une autorisation « réseau local », et
+un refus y est silencieux. La conclusion de G-2 tient pour les deux navigateurs — il faut une
+origine publique.
+
 ## F. Inconnues restantes
 
 Les deux dépendances bloquantes sont levées. La seule question ouverte ne bloque que la convergence.

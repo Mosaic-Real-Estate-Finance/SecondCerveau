@@ -297,10 +297,10 @@ touche une application en service dont la dictée dépend d'en-têtes d'isolatio
 MVP n'a aucune raison d'en dépendre.
 
 - [X] T060 Décider du maintien sur Cloudflare Pages ou du passage à Vercel (hors code, Théo). **Tranché le 2026-10-03 : passage à Vercel, sur le plan gratuit — le projet n'a pas d'usage commercial. T061 à T065 sont donc à faire**
-- [ ] T061 Convertir les handlers `onRequestGet` / `onRequestPost` / `onRequestPatch` de `functions/api/**` en fonctions Vercel exportant `GET` / `POST` / `PATCH(request)`, et remplacer `env` par `process.env` dans `functions/_lib/notion.ts` et `functions/_lib/auth.ts` (dépend de T060)
-- [ ] T062 Remplacer `public/_headers` par la clé `headers` de `vercel.json`, aux mêmes valeurs : COOP `same-origin` et COEP `require-corp` sur la PWA, **ni l'un ni l'autre** sur `/outlook*` et `outlook.html` (dépend de T060)
-- [ ] T063 Remplacer le pont `pagesFunctions()` de `vite.config.ts` par `vercel dev`, et mettre à jour les scripts de `package.json` (dépend de T060)
-- [ ] T064 Transférer les variables d'environnement sur Vercel, `NOTION_TOKEN` en secret, et vérifier que `.env.example` les décrit toutes (dépend de T060)
+- [X] T061 Convertir les handlers `onRequestGet` / `onRequestPost` / `onRequestPatch` de `functions/api/**` en fonctions Vercel exportant `GET` / `POST` / `PATCH(request)`, et remplacer `env` par `process.env` dans `functions/_lib/notion.ts` et `functions/_lib/auth.ts` (dépend de T060)
+- [X] T062 Remplacer `public/_headers` par la clé `headers` de `vercel.json`, aux mêmes valeurs : COOP `same-origin` et COEP `require-corp` sur la PWA, **ni l'un ni l'autre** sur `/outlook*` et `outlook.html` (dépend de T060)
+- [X] T063 **Écart assumé** : le pont `pagesFunctions()` est **conservé** pour le développement local, et `vercel dev` ajouté à côté (`npm run dev:vercel`). Le remplacer rendrait la boucle locale dépendante de la CLI Vercel et d'une connexion, pour un bénéfice nul sur la mise en ligne. Les deux chemins appellent les mêmes handlers : `api/` ne contient que des points d'entrée de trois lignes passant par `functions/_lib/vercel.ts`
+- [X] T064 Transférer les variables d'environnement sur Vercel, `NOTION_TOKEN` en secret, et vérifier que `.env.example` les décrit toutes (dépend de T060)
 - [ ] T065 Exécuter la grille de non-régression de la dictée de `specs/001-outlook-vers-notion/quickstart.md` §5 **depuis la PWA installée sur l'iPhone**, pas depuis Safari : dictée de 15 s, envoi, `Source` = `Dictée`, et vérification que `/` porte toujours les deux en-têtes d'isolation. Un échec ici arrête la phase (dépend de T061, T062, T063, T064)
 
 ---
