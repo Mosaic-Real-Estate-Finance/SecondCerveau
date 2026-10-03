@@ -49,6 +49,9 @@ export type NewContact = {
   newCompany?: { name: string };
 };
 
+/** Why a 401 came back. The panel words these itself; see AUTH_COPY. */
+export type AuthCode = "token" | "expired" | "tenant" | "user";
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -58,10 +61,27 @@ export class ApiError extends Error {
     public noteUrl?: string,
     /** Set on 409: the mark the note actually carries now. */
     public lastMessageId?: string | null,
+    /** Set on 401. */
+    public code?: AuthCode,
   ) {
     super(message);
   }
 }
+
+/**
+ * The panel's own wording for the refusals.
+ *
+ * The server sends a sentence too, but it is the dictation's — same routes,
+ * and the dictation addresses its reader as "vous". Rather than have one of
+ * the two apps speak in the other's register, the 401 carries a code and each
+ * writes its own.
+ */
+export const AUTH_COPY: Record<AuthCode, string> = {
+  token: "Ta session Microsoft n'est plus valide. Reconnecte-toi.",
+  expired: "Ta session Microsoft a expiré. Reconnecte-toi.",
+  tenant: "Ce compte n'appartient pas à une organisation autorisée.",
+  user: "Ton adresse n'est pas autorisée. Écris à Théo pour qu'il t'ajoute.",
+};
 
 // A provider rather than a stored token: MSAL renews silently, and asking it
 // per call means a panel left open across a token expiry still works. Caching
@@ -101,14 +121,17 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
     retry?: boolean;
     noteUrl?: string;
     lastMessageId?: string | null;
+    code?: AuthCode;
   };
   if (!response.ok) {
+    const code = body.code;
     throw new ApiError(
-      body.error ?? "Erreur inattendue",
+      (code && AUTH_COPY[code]) || body.error || "Erreur inattendue",
       response.status,
       body.retry ?? response.status >= 500,
       body.noteUrl,
       body.lastMessageId,
+      code,
     );
   }
   return body as T;

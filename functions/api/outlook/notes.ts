@@ -237,15 +237,27 @@ export const onRequestPost: Handler = async ({ request, env }) => {
     try {
       await appendThread(env, page.id, messages);
     } catch (error) {
-      // The page exists. Saying nothing would leave the user believing the
-      // whole send failed, and a blind retry would then duplicate the blocks.
+      // A page without its messages is worse than no page at all: it looks
+      // classed, it is found by the deduplication, and the next attempt
+      // therefore refuses to write the thread it is missing. So it goes to the
+      // trash before anyone is told, and the retry starts clean.
+      //
+      // Verified against the real base on 2026-10-03: a page sent to the trash
+      // with `in_trash` is no longer returned by the query behind
+      // findByConversation, so the deduplication does not resurrect it.
+      const archived = await notion(env, `/pages/${page.id}`, { method: "PATCH", body: { in_trash: true } })
+        .then(() => true)
+        .catch(() => false);
+      // If even that fails there is an orphan, and saying so is the only
+      // honest move: a retry would then find it and skip the messages.
       return json(
-        {
-          error: "La note a été créée mais les messages n'ont pas pu y être ajoutés.",
-          retry: true,
-          noteUrl: page.url,
-          noteId: page.id,
-        },
+        archived
+          ? { error: "Les messages n'ont pas pu être écrits dans Notion. Rien n'a été laissé derrière.", retry: true }
+          : {
+              error: "Les messages n'ont pas pu être écrits, et la note vide n'a pas pu être supprimée. Supprime-la dans Notion avant de réessayer.",
+              retry: true,
+              noteUrl: page.url,
+            },
         502,
       );
     }

@@ -78,7 +78,7 @@ export function ParticipantForm({
 
   return (
     <div className="mt-2 flex flex-col gap-3 rounded-xl bg-white-smoke/70 p-3">
-      <Field label="Nom complet">
+      <Field label="Quel est le nom complet ?">
         <input
           className={input}
           value={draft.name}

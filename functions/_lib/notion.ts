@@ -222,7 +222,12 @@ export async function guard(request: Request, env: Env): Promise<{ user: User } 
     return json({ error: "Configuration serveur incomplète" }, 500);
   }
   const identity = await identify(request, env);
-  if ("failure" in identity) return json({ error: AUTH_MESSAGES[identity.failure] }, 401);
+  // The message is the dictation's, which addresses its reader as "vous"; the
+  // code lets the Outlook panel, which does not, write its own sentence
+  // instead of matching on this one.
+  if ("failure" in identity) {
+    return json({ error: AUTH_MESSAGES[identity.failure], code: identity.failure }, 401);
+  }
   return { user: identity.user };
 }
 

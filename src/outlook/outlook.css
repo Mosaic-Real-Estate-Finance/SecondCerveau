@@ -24,3 +24,39 @@ body {
   overflow: visible;
   overscroll-behavior: auto;
 }
+
+/* The loader leaving, and the content arriving behind it.
+ *
+ * Reading a thread takes a second or two, and the panel used to swap one
+ * screen for the other in a single frame — which reads as a flicker rather
+ * than as an answer. Two short fades, and nothing else moves.
+ *
+ * Both are off under prefers-reduced-motion, where the content simply appears
+ * in place. */
+
+.t-fade-out {
+  animation: t-outlook-fade-out 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.t-fade-in {
+  animation: t-outlook-fade-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes t-outlook-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes t-outlook-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-fade-out,
+  .t-fade-in {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+}

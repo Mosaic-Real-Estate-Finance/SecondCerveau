@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PrimaryButton } from "@/components/screen";
+import { PrimaryButton, TextButton } from "@/components/screen";
+import { Shimmer } from "@/components/shimmer";
+import { SuccessCheck } from "@/components/success-check";
 import { dialOf } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import {
@@ -18,12 +20,16 @@ import {
   type ThreadMessage,
 } from "./api";
 import { apiToken, AuthError, configured, graphToken } from "./auth";
+import { NotionButton } from "./NotionButton";
+import { openNotes } from "./notion-link";
 import { INTERNAL_DOMAINS, USERS_EMAILS } from "./config";
 import { fetchThread, GraphError } from "./graph";
 import { draftReady, newDraft, ParticipantForm, type Draft } from "./ParticipantForm";
 import {
   awaitItem,
   bodyReadable,
+  canClose,
+  closePanel,
   currentUser,
   inMailbox,
   onItemChanged,
@@ -72,7 +78,7 @@ type Stage =
   | { name: "failed"; message: string; retry: boolean }
   | { name: "ready"; data: Loaded }
   | { name: "sending"; data: Loaded; step: string }
-  | { name: "sent"; url: string; added: number; partial: boolean; created: boolean };
+  | { name: "sent"; url: string; added: number; created: boolean };
 
 const Frame = ({ children }: { children: React.ReactNode }) => (
   <div className="min-h-screen bg-white px-4 py-5 text-navy" style={{ colorScheme: "light" }}>
@@ -88,6 +94,62 @@ const Muted = ({ children }: { children: React.ReactNode }) => (
   <p className="text-xs text-[color:var(--muted)]">{children}</p>
 );
 
+/**
+ * Some failures carry a sentence the reader can act on; these three carry the
+ * fact that something failed, which they already know from the title. Saying
+ * "Erreur inattendue" twice over is not more information.
+ */
+const EMPTY = ["Erreur inattendue", "Chargement impossible.", "Envoi impossible."];
+const readable = (message: string) => (EMPTY.includes(message.trim()) ? "Réessaye dans quelques instants." : message);
+
+/** Plural mark, for the many counts this panel reports. */
+const s_ = (count: number) => (count > 1 ? "s" : "");
+
+/**
+ * A screen that closes the panel once it has nothing left to say.
+ *
+ * Only where the host allows it: `closeContainer` does not exist everywhere,
+ * and a button that does nothing is worse than no button.
+ */
+const CloseButton = () =>
+  canClose() ? (
+    <TextButton className="w-full text-center" onClick={closePanel}>
+      Fermer
+    </TextButton>
+  ) : null;
+
+/**
+ * Nothing to do, and nothing else worth showing.
+ *
+ * The subject, the counter, the contacts all describe work that is already
+ * done; leaving them up invites a second press on a button that would change
+ * nothing. One sentence and one way in.
+ */
+const AlreadyThere = ({ url }: { url: string }) => (
+  <Frame>
+    <div className="flex justify-center pt-2">
+      <SuccessCheck show />
+    </div>
+    <Title>Cette note est déjà enregistrée dans Notion</Title>
+    <NotionButton label="Ouvrir la note" url={url} />
+  </Frame>
+);
+
+/** The end of a successful send: the check, a word, the way into Notion. */
+function Done({ title, url, children }: { title: string; url: string; children?: React.ReactNode }) {
+  return (
+    <Frame>
+      <div className="flex justify-center pt-2">
+        <SuccessCheck show />
+      </div>
+      <Title>{title}</Title>
+      {children}
+      <NotionButton label="Ouvrir dans Notion" url={url} />
+      <CloseButton />
+    </Frame>
+  );
+}
+
 function Said({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
     <Frame>
@@ -95,19 +157,6 @@ function Said({ title, children }: { title: string; children?: React.ReactNode }
       {children && <Muted>{children}</Muted>}
     </Frame>
   );
-}
-
-const MONTHS = "janvier février mars avril mai juin juillet août septembre octobre novembre décembre".split(" ");
-const day = (iso: string) => {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "" : `${date.getDate()} ${MONTHS[date.getMonth()]}`;
-};
-
-/** "du 3 au 17 septembre", or a single date when the thread is one day old. */
-function span(messages: ThreadMessage[]) {
-  const first = day(messages[0].receivedAt);
-  const last = day(messages[messages.length - 1].receivedAt);
-  return first === last ? `le ${first}` : `du ${first} au ${last}`;
 }
 
 export function Panel({ inOutlook }: { inOutlook: boolean }) {
@@ -260,29 +309,20 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
             messages: data.messages,
           });
 
-      setStage({
-        name: "sent",
-        url: written.url,
-        added: written.messagesAdded,
-        partial: Boolean(written.templateTimedOut),
-        created: !data.note,
-      });
+      // `templateTimedOut` is deliberately not shown. It only ever meant the
+      // Notion template was slow and the blocks landed above it — a cosmetic
+      // ordering the reader cannot act on, reported as if it were a defect.
+      setStage({ name: "sent", url: written.url, added: written.messagesAdded, created: !data.note });
     } catch (error) {
       const api = error as ApiError;
       // 409: someone enriched the note in between. Reloading is the only safe
       // move; writing over their mark would make the next enrichment skip
       // their messages.
       if (api.status === 409) {
-        setStage({ name: "failed", message: "La note a été enrichie entre-temps. Rechargez.", retry: true });
+        setStage({ name: "failed", message: "La note a été enrichie entre-temps. Recharge.", retry: true });
         return;
       }
-      setStage({
-        name: "failed",
-        message: api.noteUrl
-          ? "La note a été créée mais les messages n'ont pas pu y être ajoutés. Ouvrez-la pour vérifier."
-          : (api.message ?? "Envoi impossible."),
-        retry: api.retry ?? true,
-      });
+      setStage({ name: "failed", message: api.message ?? "Envoi impossible.", retry: api.retry ?? true });
     }
   }
 
@@ -299,15 +339,16 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
   if (stage.name === "incompatible") {
     return (
       <Said title="Cette version d'Outlook est trop ancienne">
-        La connexion sécurisée au compte Microsoft demande Outlook 2409 (build 18025.20000) ou plus récent pour un
-        abonnement Microsoft 365. Mettez Outlook à jour, ou utilisez Outlook sur le web.
+        La connexion sécurisée au compte Microsoft demande Outlook 2409 ou plus récent pour un abonnement
+        Microsoft 365. Mets Outlook à jour, ou utilise Outlook sur le web.
       </Said>
     );
   }
   if (stage.name === "unconfigured") {
     return (
-      <Said title="Complément non configuré">
-        L'application Microsoft n'est pas renseignée côté serveur. Le fil ne peut pas être lu sans elle.
+      <Said title="Théo n'a pas encore fini le travail.">
+        L'application n'est pas correctement configurée côté serveur. Si tu penses qu'il s'agit d'une erreur, écris
+        à Théo.
       </Said>
     );
   }
@@ -318,7 +359,7 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
     // does open is the only thing that helps. See research.md G-5.
     return (
       <Frame>
-        <Title>Sélectionnez un message pour l'envoyer vers Notion</Title>
+        <Title>Sélectionne un message pour l'envoyer vers Notion</Title>
         <Muted>
           Sur Outlook sur le web, le complément s'ouvre depuis le bouton d'applications de l'en-tête d'un message.
           Ouvert depuis le ruban du haut, il n'a aucun message à lire et Outlook referme le panneau.
@@ -329,52 +370,57 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
   }
   if (stage.name === "protected") {
     return (
-      <Said title="Contenu non lisible">
-        Ce mail est protégé ou chiffré : le complément ne peut pas en lire le contenu, et n'envoie rien.
-      </Said>
+      <Frame>
+        <Title>Nous ne pouvons pas extraire ce mail</Title>
+        <Muted>Microsoft protège ce mail et restreint son extraction, nous ne pouvons pas le récupérer.</Muted>
+        <Muted>La solution ? Créer cette note à la main en copiant / collant le contenu.</Muted>
+        {/* The one screen with nothing to write: the least it can do is open
+            the place where the work has to happen instead. */}
+        <NotionButton label="Ouvrir Notion" onClick={openNotes} />
+      </Frame>
     );
   }
   if (stage.name === "no-external") {
     return (
-      <Said title="Aucun interlocuteur à rattacher">
-        Tous les participants de cet échange sont internes à Mosaic. La base de notes retrace les échanges avec les
-        clients ; il n'y a rien à y classer ici.
+      <Said title="Les échanges internes ne sont pas pris en charge">
+        L'outil capture uniquement les mails avec des interlocuteurs externes. Écris à Théo si tu souhaites aussi
+        enregistrer tes échanges avec les collaborateurs de Mosaic.
       </Said>
     );
   }
   if (stage.name === "loading") {
     return (
       <Frame>
-        <Muted>{stage.read ? `Lecture de l'échange… ${stage.read} messages` : "Lecture de l'échange…"}</Muted>
+        <Title>
+          <Shimmer>On récupère l'échange…</Shimmer>
+        </Title>
+        {stage.read > 0 && (
+          <Muted>{`${stage.read} message${s_(stage.read)} identifié${s_(stage.read)}`}</Muted>
+        )}
       </Frame>
     );
   }
   if (stage.name === "failed") {
     return (
       <Frame>
-        <Title>Ça n'a pas marché</Title>
-        <Muted>{stage.message}</Muted>
+        <Title>On a eu un petit problème</Title>
+        <Muted>{readable(stage.message)}</Muted>
         {stage.retry && <PrimaryButton onClick={() => void load()}>Réessayer</PrimaryButton>}
       </Frame>
     );
   }
   if (stage.name === "sent") {
-    return (
-      <Frame>
-        {/* Three different things to say, and the difference matters: a note
-            that was just created is not "up to date", which reads as nothing
-            having happened. */}
-        <Title>{stage.created ? "Note créée" : stage.added ? "Note enrichie" : "Rien à ajouter"}</Title>
-        <Muted>
-          {stage.added
-            ? `${stage.added} message${stage.added > 1 ? "s" : ""} enregistré${stage.added > 1 ? "s" : ""}. La réécriture par Notion AI prend quelques secondes.`
-            : "La note contenait déjà tout le fil."}
-        </Muted>
-        {stage.partial && <Muted>L'ordre des blocs peut être inhabituel : le modèle Notion tardait.</Muted>}
-        <a href={stage.url} target="_blank" rel="noreferrer" className="text-sm underline">
-          Ouvrir dans Notion
-        </a>
-      </Frame>
+    // Nothing was added: whatever the user pressed, the state of the world is
+    // "already in Notion", and that is the one thing worth saying. There is no
+    // separate "nothing to add" screen any more — it only ever reported on the
+    // request rather than on the note.
+    if (!stage.added) return <AlreadyThere url={stage.url} />;
+    return stage.created ? (
+      <Done title="Enregistré dans Notion !" url={stage.url}>
+        <Muted>{`${stage.added} message${s_(stage.added)} ${stage.added > 1 ? "ont" : "a"} été centralisé${s_(stage.added)}, Notion AI s'occupe du résumé.`}</Muted>
+      </Done>
+    ) : (
+      <Done title="La note a été enrichie" url={stage.url} />
     );
   }
 
@@ -383,99 +429,119 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
   const data = stage.data;
   const sending = stage.name === "sending";
 
-  const upToDate = Boolean(data.note) && data.fresh === 0;
+  const total = data.messages.length;
+  const already = total - data.fresh;
+  const enriching = Boolean(data.note);
+
+  // C2 from the ready screen too: a note with nothing new to add is finished
+  // business, whether that is discovered before or after a send.
+  if (enriching && data.fresh === 0) return <AlreadyThere url={data.note!.url} />;
+
   const incomplete = data.rows.some((row) => row.selected && !row.match && !draftReady(row.draft ?? newDraft("", "")));
   const nobody = !data.rows.some((row) => row.selected);
 
+  // Written out rather than assembled: "nouveau" does not take the plural
+  // mark the others do, and `nouveau${s}` quietly produced "nouveaus".
+  const heading = !enriching
+    ? "On l'ajoute dans Notion ?"
+    : data.fresh > 1
+      ? `${data.fresh} nouveaux messages seront ajoutés`
+      : "1 nouveau message sera ajouté";
+
+  // The subject used to be the title. It is already at the top of the mail the
+  // reader is looking at, and it said nothing about what the button would do.
+  const standfirst = !enriching
+    ? `${total} mail${s_(total)} ${total > 1 ? "seront centralisés" : "sera centralisé"} dans la note`
+    : already === 0
+      ? `Aucun message n'avait encore été enregistré, les ${data.fresh} seront ajoutés.`
+      : `${already > 1 ? `Les ${already} premiers mails ont déjà été enregistrés` : "Le premier mail a déjà été enregistré"}, ${
+          data.fresh > 1 ? `les ${data.fresh} nouveaux seront ajoutés en complément` : "le nouveau sera ajouté en complément"
+        }.`;
+
   return (
     <Frame>
-      <Title>{data.mail.subject || "Sans objet"}</Title>
-      <Muted>
-        {data.messages.length} message{data.messages.length > 1 ? "s" : ""}, {span(data.messages)}
-      </Muted>
+      <div className="t-fade-in flex flex-col gap-4">
+        <Title>{heading}</Title>
+        <Muted>{standfirst}</Muted>
 
-      {data.note && (
-        <div className="rounded-xl bg-white-smoke px-3 py-2.5">
-          <p className="text-sm font-medium">
-            {upToDate
-              ? "Note à jour"
-              : `Note existante, ${data.fresh} nouveau${data.fresh > 1 ? "x" : ""} message${data.fresh > 1 ? "s" : ""}`}
+        {data.ambiguous.length > 0 && (
+          <Muted>
+            Plusieurs contacts portent {data.ambiguous.join(", ")} : le premier a été retenu, à corriger dans Notion.
+          </Muted>
+        )}
+
+        {/* The outer box names what the cards inside are for. Without it the
+            list reads as a selection of people with no stated consequence. */}
+        <div className="rounded-2xl border border-[color:var(--color-white-smoke)] bg-white p-3">
+          <p className="mb-2.5 flex items-center gap-2 text-xs text-[color:var(--muted)]">
+            <img src="/outlook/contact.svg" alt="" width="16" height="16" className="shrink-0" />
+            Cette note sera liée à…
           </p>
-          <a href={data.note.url} target="_blank" rel="noreferrer" className="text-2xs underline text-[color:var(--muted)]">
-            Ouvrir dans Notion
-          </a>
-        </div>
-      )}
-
-      {data.ambiguous.length > 0 && (
-        <Muted>
-          Plusieurs contacts portent {data.ambiguous.join(", ")} : le premier a été retenu, à corriger dans Notion.
-        </Muted>
-      )}
-
-      <ul className="flex flex-col gap-2">
-        {data.rows.map((row, index) => {
-          const toggle = () =>
-            patch(
-              data,
-              data.rows.map((other, at) => (at === index ? { ...other, selected: !other.selected } : other)),
-            );
-          const onDraft = (draft: Draft) =>
-            patch(
-              data,
-              data.rows.map((other, at) => (at === index ? { ...other, draft } : other)),
-            );
-          return (
-            <li key={row.participant.address} className="rounded-xl bg-white-smoke px-3 py-2.5">
-              <div className="flex items-start gap-2.5">
-                <input
-                  type="checkbox"
-                  checked={row.selected}
-                  onChange={toggle}
-                  disabled={sending}
-                  className="mt-1 h-4 w-4 shrink-0 accent-[color:var(--color-navy)]"
-                  aria-label={`Rattacher ${row.participant.name || row.participant.address}`}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">
-                    {row.match?.name || row.participant.name || row.participant.address}
-                  </span>
-                  <span className="block truncate text-2xs text-[color:var(--muted)]">
-                    {row.match
-                      ? [row.match.company, row.participant.address].filter(Boolean).join(" · ")
-                      : row.participant.address}
-                  </span>
-                  {!row.match && (
-                    <span className={cn("mt-1 inline-block text-2xs", row.selected ? "text-navy" : "text-[color:var(--muted)]")}>
-                      Nouveau contact
+          <ul className="flex flex-col gap-2">
+            {data.rows.map((row, index) => {
+              const toggle = () =>
+                patch(
+                  data,
+                  data.rows.map((other, at) => (at === index ? { ...other, selected: !other.selected } : other)),
+                );
+              const onDraft = (draft: Draft) =>
+                patch(
+                  data,
+                  data.rows.map((other, at) => (at === index ? { ...other, draft } : other)),
+                );
+              return (
+                <li key={row.participant.address} className="rounded-xl bg-white-smoke px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={row.selected}
+                      onChange={toggle}
+                      disabled={sending}
+                      className="mt-1 h-4 w-4 shrink-0 accent-[color:var(--color-navy)]"
+                      aria-label={`Rattacher ${row.participant.name || row.participant.address}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {row.match?.name || row.participant.name || row.participant.address}
+                      </span>
+                      <span className="block truncate text-2xs text-[color:var(--muted)]">
+                        {row.match
+                          ? [row.match.company, row.participant.address].filter(Boolean).join(" · ")
+                          : row.participant.address}
+                      </span>
+                      {!row.match && (
+                        <span
+                          className={cn(
+                            "mt-1 inline-block text-2xs",
+                            row.selected ? "text-navy" : "text-[color:var(--muted)]",
+                          )}
+                        >
+                          Nouveau contact
+                        </span>
+                      )}
                     </span>
+                  </div>
+                  {!row.match && row.selected && !sending && row.draft && (
+                    <ParticipantForm
+                      draft={row.draft}
+                      onChange={onDraft}
+                      companies={data.companies}
+                      typeOptions={data.typeOptions}
+                    />
                   )}
-                </span>
-              </div>
-              {!row.match && row.selected && !sending && row.draft && (
-                <ParticipantForm
-                  draft={row.draft}
-                  onChange={onDraft}
-                  companies={data.companies}
-                  typeOptions={data.typeOptions}
-                />
-              )}
-            </li>
-          );
-        })}
-      </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
 
-      {upToDate ? (
-        <Muted>Aucun message nouveau depuis le dernier envoi.</Muted>
-      ) : (
-        <>
-          <PrimaryButton disabled={sending || nobody || incomplete} onClick={() => void send(data)}>
-            {sending ? stage.step : data.note ? "Enrichir la note" : "Créer la note"}
-          </PrimaryButton>
-          {nobody && <Muted>Cochez au moins un interlocuteur.</Muted>}
-          {!nobody && incomplete && <Muted>Complétez les fiches cochées avant d'envoyer.</Muted>}
-        </>
-      )}
+        <PrimaryButton disabled={sending || nobody || incomplete} onClick={() => void send(data)}>
+          {sending ? stage.step : enriching ? "Enrichir la note" : "Créer la note"}
+        </PrimaryButton>
+        {enriching && <NotionButton label="Ouvrir dans Notion" url={data.note!.url} />}
+        {nobody && <Muted>Coche au moins un interlocuteur.</Muted>}
+        {!nobody && incomplete && <Muted>Complète les fiches cochées avant d'envoyer.</Muted>}
+      </div>
     </Frame>
   );
 }

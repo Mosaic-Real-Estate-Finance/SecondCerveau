@@ -251,6 +251,7 @@ le panneau affiche « Complément non configuré » :
 | `VITE_ENTRA_CLIENT_ID` | `62caaa98-3734-4094-b9b4-bbe925fc1c7d` |
 | `VITE_ENTRA_AUTHORITY` | `https://login.microsoftonline.com/common` |
 | `VITE_ENTRA_API_SCOPE` | `api://62caaa98-3734-4094-b9b4-bbe925fc1c7d/access_as_user` |
+| `VITE_NOTION_NOTES_DB` | l'identifiant de la base de notes — le bouton « Ouvrir Notion » de l'écran « mail protégé » en a besoin. Absente, il ouvre `notion.so` au lieu de la base. |
 
 **Déjà posées** : `ENTRA_API_CLIENT_ID`, `ENTRA_TENANT_IDS`.
 

@@ -25,6 +25,10 @@ type OfficeGlobal = {
   onReady(cb?: () => void): Promise<unknown>;
   context: {
     requirements: { isSetSupported(name: string, version?: string): boolean };
+    ui?: {
+      closeContainer?(): void;
+      openBrowserWindow?(url: string): void;
+    };
     mailbox?: {
       item?: Item | null;
       userProfile?: { emailAddress?: string; displayName?: string };
@@ -149,6 +153,55 @@ export function bodyReadable(): Promise<boolean> {
       resolve(false);
     }
   });
+}
+
+// ---- What the host lets us do ----------------------------------------------
+// Both of these exist on some hosts and not others, and calling one that is
+// missing throws inside Office's own code. They are therefore asked for, never
+// assumed: the panel hides the button rather than offering one that fails.
+
+/** Whether this host can close the taskpane from inside it. */
+export function canClose(): boolean {
+  try {
+    return typeof office()?.context?.ui?.closeContainer === "function";
+  } catch {
+    return false;
+  }
+}
+
+export function closePanel(): void {
+  try {
+    office()?.context?.ui?.closeContainer?.();
+  } catch {
+    // Nothing to do: the user closes it the way they opened it.
+  }
+}
+
+/**
+ * Opens a link outside the taskpane.
+ *
+ * `openBrowserWindow` is the host's own way out and the only one that reliably
+ * leaves the iframe; plain `window.open` is the fallback for hosts without it,
+ * and for the page opened in an ordinary tab. Only http(s) goes through the
+ * host: it refuses anything else, and a custom scheme has to be navigated to
+ * directly.
+ */
+export function openExternal(url: string): void {
+  const http = /^https?:/i.test(url);
+  const host = office()?.context?.ui?.openBrowserWindow;
+  if (http && typeof host === "function") {
+    try {
+      host(url);
+      return;
+    } catch {
+      // Fall through to the window the browser gives us.
+    }
+  }
+  try {
+    window.open(url, "_blank", "noopener,noreferrer");
+  } catch {
+    // Nothing left to try.
+  }
 }
 
 /** Fires when the user selects another mail while the panel is pinned. */

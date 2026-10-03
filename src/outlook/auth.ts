@@ -81,7 +81,7 @@ async function tokenFor(scope: string): Promise<string> {
     // which is impossible from here; saying that it was asked is not.
     throw new AuthError(
       /user_cancelled|popup_window_error|interaction_required|consent/i.test(message)
-        ? "Connexion Microsoft annulée. Réessayez pour autoriser l'accès."
+        ? "Connexion Microsoft annulée. Réessaye pour autoriser l'accès."
         : "Connexion Microsoft impossible.",
       true,
     );

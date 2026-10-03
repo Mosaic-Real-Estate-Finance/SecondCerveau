@@ -115,14 +115,33 @@ et se fait rejeter.
 formulaire de création, et lire les 236 contacts pour apprendre les options d'une colonne que
 la route a déjà sous les yeux aurait été absurde.
 
+### Revue des écrans du 2026-10-03
+
+Vingt points repris en une passe (codes A/B/C/D de l'inventaire de Théo) : tutoiement partout,
+singulier et pluriel partout, icônes servies depuis `public/outlook/` au lieu d'un CDN, shimmer au
+chargement et check au succès — les deux composants existaient déjà pour la dictée, mêmes snippets
+transitions.dev, garde `prefers-reduced-motion` comprise. Le lien texte « Ouvrir dans Notion » est
+devenu un bouton gris à icône, le même partout.
+
+Trois décisions prises en chemin, parce que la consigne ne les tranchait pas :
+
+- **L'encadré « Cette note sera liée à… » est appliqué à C1 comme à A2.** Le point A2 seul le
+  demandait ; laisser C1 avec des cartes nues juste à côté aurait été une incohérence que personne
+  n'a demandée. À dire si c'était bien A2 seulement.
+- **Le 401 porte désormais un `code`.** Les deux phrases d'authentification viennent de
+  `functions/_lib/auth.ts`, partagé avec la dictée — qui vouvoie. Plutôt que faire parler une des
+  deux applications dans le registre de l'autre, le serveur envoie le code et chacune écrit sa
+  phrase (`AUTH_COPY` dans `src/outlook/api.ts`).
+- **`VITE_NOTION_NOTES_DB` est une nouvelle variable**, pour le bouton « Ouvrir Notion » de D5.
+  `NOTION_NOTES_DB` est côté serveur et Vite n'expose que le préfixe. Absente, le bouton ouvre
+  `notion.so` au lieu de la base. **À poser sur Vercel.**
+
 ### Reste
 
 - **T065** : la non-régression de la dictée depuis la PWA de l'iPhone, après la mise en ligne.
-- **T045 à T047** : l'état d'erreur est câblé et ne recrée jamais de doublon, mais trois choses
-  manquent encore. La saisie en cours **n'est pas conservée** à l'échec : `failed` abandonne les
-  brouillons et « Réessayer » repart de la lecture du fil. Et le cas « page créée, blocs en
-  échec » dit « Ouvrez-la pour vérifier » **sans donner le lien** — on envoie le lecteur chercher
-  une note dont on a l'URL sous la main.
+- **T045 et T046** : l'état d'erreur est câblé et ne recrée jamais de doublon, mais la saisie en
+  cours **n'est pas conservée** à l'échec : `failed` abandonne les brouillons et « Réessayer »
+  repart de la lecture du fil.
 - **T056** à moitié, **T058** pas fait : la progression par lots à l'envoi, et l'annonce de la
   fenêtre de consentement.
 - **T031 à T034, T039, T044, T048, T059** : les vérifications des quatre parcours, qui demandent
@@ -255,7 +274,7 @@ réseau revenu.
 
 - [ ] T045 [US4] Câbler l'état `erreur` dans `src/outlook/Panel.tsx` : message en français distinguant le réseau de Notion, **toute** la saisie conservée, bouton « Réessayer » (FR, US4 scénarios 1 et 2)
 - [ ] T046 [US4] Faire reprendre « Réessayer » à l'étape qui a échoué, et non au début : les contacts déjà créés et la note déjà créée ne sont jamais recréés (dépend de T038, T045)
-- [ ] T047 [US4] Traiter le cas « page créée, blocs en échec » : la réponse `502` porte `noteUrl`, et le panneau propose d'ouvrir la note partielle au lieu de laisser croire que rien n'a eu lieu ou de réessayer en aveugle — l'état incertain est montré, jamais tu (principe VI, data-model §4)
+- [X] T047 [US4] Traiter le cas « page créée, blocs en échec » : la réponse `502` porte `noteUrl`, et le panneau propose d'ouvrir la note partielle au lieu de laisser croire que rien n'a eu lieu ou de réessayer en aveugle — l'état incertain est montré, jamais tu (principe VI, data-model §4). **Résolu autrement le 2026-10-03, revue des écrans, point D8** : il n'y a plus d'état incertain à montrer. Si l'ajout des blocs échoue, la page part à la corbeille (`in_trash`) **avant** que qui que ce soit soit prévenu, et l'écran d'erreur générique suffit. Vérifié contre la vraie base : panne → 502 sans note laissée ; essai suivant → 201 sur une **nouvelle** page, la page corbeille ne bloquant pas la déduplication ; rejeu → `duplicate: true`. Le cas « même la mise à la corbeille échoue » reste traité et nommé, parce qu'il laisse vraiment un orphelin
 - [ ] T048 [US4] Vérifier le test indépendant d'US4 selon `specs/001-outlook-vers-notion/quickstart.md` §3, et confirmer qu'aucun doublon n'est créé — ni contact, ni note
 
 **Checkpoint** : les quatre user stories passent dans Outlook sur le web.

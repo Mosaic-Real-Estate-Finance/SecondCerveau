@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_ENTRA_CLIENT_ID?: string;
   readonly VITE_ENTRA_AUTHORITY?: string;
   readonly VITE_ENTRA_API_SCOPE?: string;
+  /** The Notion notes database, so the panel can offer a way into it. Public. */
+  readonly VITE_NOTION_NOTES_DB?: string;
 }
 
 interface ImportMeta {
