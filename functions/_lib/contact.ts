@@ -1,4 +1,4 @@
-import { createCompany } from "../api/companies";
+import { createCompany } from "../api/companies.js";
 import {
   dataSourceId,
   notion,
@@ -8,7 +8,7 @@ import {
   schemaOf,
   type Env,
   type Schema,
-} from "./notion";
+} from "./notion.js";
 
 // Reading and writing a contact, shared by the dictation and the Outlook
 // add-in.

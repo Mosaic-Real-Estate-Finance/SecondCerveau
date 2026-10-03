@@ -6,8 +6,8 @@ import {
   titleOf,
   type Contact,
   type NewContact,
-} from "../_lib/contact";
-import { dataSourceId, fail, guard, json, plain, props, queryAll, schemaOf, type Handler } from "../_lib/notion";
+} from "../_lib/contact.js";
+import { dataSourceId, fail, guard, json, plain, props, queryAll, schemaOf, type Handler } from "../_lib/notion.js";
 
 export type { Contact };
 

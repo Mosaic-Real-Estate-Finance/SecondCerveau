@@ -258,6 +258,42 @@ bloquerait : d'où E-2 et la suppression d'en-tête de E-1.
 
 ---
 
+### E-4. Vite et Node ne résolvent pas les imports pareil — **constaté en production**
+
+**Symptôme.** Déploiement du 2026-10-03 : les en-têtes d'isolation corrects, le panneau qui
+s'ouvre, et les **huit** routes qui répondent 500.
+
+```
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/var/task/functions/api/outlook/notes'
+  imported from /var/task/api/outlook/notes.js
+```
+
+**Cause.** `package.json` porte `"type": "module"`, et `tsconfig.node.json` portait
+`moduleResolution: "bundler"`. Le résolveur de Vite fait correspondre `"../functions/api/notes"`
+à un fichier `.ts` ; Node en ESM résout le chemin littéral et n'ajoute aucune extension. Vercel
+transpile sans empaqueter — les spécificateurs sortent intacts — donc le code qui marchait en dev
+ne pouvait pas démarrer en production. Les routes de la dictée tombaient avec celles du
+complément : même pont `api/`.
+
+**Ce qui rendait la panne invisible.** `bundler` est un contrat exact pour `src/`, que rolldown
+empaquette, et un mensonge pour `functions/` et `api/`, que Node exécute. Le typecheck validait
+donc du code que Node refuse. Le build passait, la dictée passait en local, et rien n'avertissait.
+
+**Correction.** Extension explicite sur les 36 imports relatifs de `api/` et `functions/`, et
+`moduleResolution: "nodenext"` dans `tsconfig.node.json` pour que l'erreur devienne une erreur de
+compilation (`TS2835`) au lieu d'un 500. `tsc -b` étant dans `npm run build`, le déploiement ne
+peut plus partir avec cette faute. Second filet : `npm run check:api`
+(`scripts/check-api.mjs`) reproduit la séquence de Vercel — transpilation seule, puis import par
+le résolveur de Node — et vérifie les handlers exportés.
+
+**Pourquoi pas l'empaquetage des fonctions**, l'autre option : il ajoutait une étape de build
+propre à Vercel pour contourner un problème dont la cause était une configuration inexacte. Rendre
+la configuration exacte corrige la cause et transforme la classe d'erreur en erreur de compilation.
+
+**Vérifié.** Avant correction, les 8 routes échouent sous Node avec le message de production, mot
+pour mot. Après, les 8 démarrent et exportent leurs handlers. En dev, `/api/contacts` rend
+toujours 237 contacts et `/api/companies` 160 sociétés.
+
 ## G. Manifeste du complément
 
 ### G-1. `SupportsPinning` impose deux `VersionOverrides` imbriquées — **vérifié**

@@ -1,4 +1,4 @@
-import { onRequestPost } from "../../../functions/api/outlook/contacts/match";
-import { vercel } from "../../../functions/_lib/vercel";
+import { onRequestPost } from "../../../functions/api/outlook/contacts/match.js";
+import { vercel } from "../../../functions/_lib/vercel.js";
 
 export const POST = vercel(onRequestPost);

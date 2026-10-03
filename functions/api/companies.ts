@@ -10,7 +10,7 @@ import {
   schemaOf,
   type Env,
   type Handler,
-} from "../_lib/notion";
+} from "../_lib/notion.js";
 
 export type Company = { id: string; name: string; type: string };
 

@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, decodeJwt, errors as joseErrors, jwtVerify } from "jose";
-import { findUser, type User } from "./users";
-import type { Env } from "./notion";
+import { findUser, type User } from "./users.js";
+import type { Env } from "./notion.js";
 
 // Who is calling, for every route of both tools.
 //

@@ -1,4 +1,4 @@
-import { companyNames, rollupText, titleOf } from "../../../_lib/contact";
+import { companyNames, rollupText, titleOf } from "../../../_lib/contact.js";
 import {
   dataSourceId,
   fail,
@@ -8,7 +8,7 @@ import {
   queryAll,
   schemaOf,
   type Handler,
-} from "../../../_lib/notion";
+} from "../../../_lib/notion.js";
 
 // Which participants of a mail thread are already in the Contacts base.
 //

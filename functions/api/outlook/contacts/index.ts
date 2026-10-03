@@ -1,5 +1,5 @@
-import { ContactError, createContact, emailColumn, type NewContact } from "../../../_lib/contact";
-import { fail, guard, json, props, type Handler } from "../../../_lib/notion";
+import { ContactError, createContact, emailColumn, type NewContact } from "../../../_lib/contact.js";
+import { fail, guard, json, props, type Handler } from "../../../_lib/notion.js";
 
 // Creating a contact from the Outlook panel.
 //

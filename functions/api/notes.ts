@@ -9,8 +9,8 @@ import {
   SOURCE,
   type Env,
   type Handler,
-} from "../_lib/notion";
-import { richText } from "../_lib/thread";
+} from "../_lib/notion.js";
+import { richText } from "../_lib/thread.js";
 
 type Body = {
   clientId?: string;

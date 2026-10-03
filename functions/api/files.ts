@@ -1,4 +1,4 @@
-import { fail, guard, json, maxUploadBytes, notion, notionSend, type Handler } from "../_lib/notion";
+import { fail, guard, json, maxUploadBytes, notion, notionSend, type Handler } from "../_lib/notion.js";
 
 // A document or a photo attached to a dictation, uploaded to Notion and
 // handed back as a reference the note creation puts in its Fichier column.

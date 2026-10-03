@@ -259,6 +259,22 @@ dans le code une valeur par défaut qui correspond au schéma réel. `CONTACTS_P
 est à laisser **non posée** : sa valeur par défaut désigne une colonne qui n'existe pas, et la
 poser ne ferait que figer l'erreur (research A-3).
 
+### Avant de déployer : les routes démarrent-elles sous Node ?
+
+Vite et Vercel ne résolvent pas les imports de la même façon. Le résolveur de Vite fait
+correspondre un import relatif sans extension à un fichier `.ts` ; Node, exécutant le résultat
+compilé d'un paquet en `"type": "module"`, exige l'extension écrite. Une route peut donc servir
+parfaitement en `npm run dev` et répondre 500 en production avec `ERR_MODULE_NOT_FOUND`. C'est
+arrivé, sur les huit routes à la fois.
+
+```sh
+npm run typecheck    # moduleResolution nodenext : refuse un import relatif sans extension
+npm run check:api    # transpile puis importe les huit routes avec le vrai résolveur de Node
+```
+
+Le premier est la vraie garde : il refuse l'erreur à la compilation, et `npm run build`
+l'exécute. Le second la vérifie avec le résolveur de Node plutôt qu'avec celui de Vite.
+
 ### Le contrôle à ne pas sauter au premier déploiement
 
 `vercel.json` applique les en-têtes d'isolation partout **sauf** sur `/outlook`, par une

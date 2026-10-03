@@ -1,4 +1,4 @@
-import { batches, blocksFor, type ThreadMessage } from "../../_lib/thread";
+import { batches, blocksFor, type ThreadMessage } from "../../_lib/thread.js";
 import {
   dataSourceId,
   fail,
@@ -12,7 +12,7 @@ import {
   type Handler,
   type Schema,
   type User,
-} from "../../_lib/notion";
+} from "../../_lib/notion.js";
 
 // One note per mail conversation: find it, create it, or add what is new.
 //

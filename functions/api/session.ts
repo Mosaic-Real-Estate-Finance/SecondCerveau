@@ -1,4 +1,4 @@
-import { guard, json, type Handler } from "../_lib/notion";
+import { guard, json, type Handler } from "../_lib/notion.js";
 
 // Checks the address against the allowlist and hands back the first name the
 // home screen greets. No Notion call, so the access screen answers at once.

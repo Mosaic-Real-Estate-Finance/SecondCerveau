@@ -117,6 +117,7 @@ la route a déjà sous les yeux aurait été absurde.
 
 ### Reste
 
+- **T065** : la non-régression de la dictée depuis la PWA de l'iPhone, après la mise en ligne.
 - **T045 à T047** : l'état d'erreur est câblé et ne recrée jamais de doublon, mais trois choses
   manquent encore. La saisie en cours **n'est pas conservée** à l'échec : `failed` abandonne les
   brouillons et « Réessayer » repart de la lecture du fil. Et le cas « page créée, blocs en
@@ -301,7 +302,7 @@ touche une application en service dont la dictée dépend d'en-têtes d'isolatio
 MVP n'a aucune raison d'en dépendre.
 
 - [X] T060 Décider du maintien sur Cloudflare Pages ou du passage à Vercel (hors code, Théo). **Tranché le 2026-10-03 : passage à Vercel, sur le plan gratuit — le projet n'a pas d'usage commercial. T061 à T065 sont donc à faire**
-- [X] T061 Convertir les handlers `onRequestGet` / `onRequestPost` / `onRequestPatch` de `functions/api/**` en fonctions Vercel exportant `GET` / `POST` / `PATCH(request)`, et remplacer `env` par `process.env` dans `functions/_lib/notion.ts` et `functions/_lib/auth.ts` (dépend de T060)
+- [X] T061 Convertir les handlers `onRequestGet` / `onRequestPost` / `onRequestPatch` de `functions/api/**` en fonctions Vercel exportant `GET` / `POST` / `PATCH(request)`, et remplacer `env` par `process.env` dans `functions/_lib/notion.ts` et `functions/_lib/auth.ts` (dépend de T060) **Amendé le 2026-10-03, après un déploiement en production où les huit routes ont rendu 500** : `moduleResolution: "bundler"` laissait passer des imports relatifs sans extension, que Node en ESM refuse (`ERR_MODULE_NOT_FOUND`). Extension explicite sur les 36 imports de `api/` et `functions/`, `moduleResolution: "nodenext"` pour que ce soit désormais une erreur de compilation, et `npm run check:api` qui importe les huit routes avec le résolveur de Node (research E-4)
 - [X] T062 Remplacer `public/_headers` par la clé `headers` de `vercel.json`, aux mêmes valeurs : COOP `same-origin` et COEP `require-corp` sur la PWA, **ni l'un ni l'autre** sur `/outlook*` et `outlook.html` (dépend de T060)
 - [X] T063 **Écart assumé** : le pont `pagesFunctions()` est **conservé** pour le développement local, et `vercel dev` ajouté à côté (`npm run dev:vercel`). Le remplacer rendrait la boucle locale dépendante de la CLI Vercel et d'une connexion, pour un bénéfice nul sur la mise en ligne. Les deux chemins appellent les mêmes handlers : `api/` ne contient que des points d'entrée de trois lignes passant par `functions/_lib/vercel.ts`
 - [X] T064 Transférer les variables d'environnement sur Vercel, `NOTION_TOKEN` en secret, et vérifier que `.env.example` les décrit toutes (dépend de T060)

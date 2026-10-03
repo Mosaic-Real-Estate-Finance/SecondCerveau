@@ -1,4 +1,4 @@
-import type { Env, Handler } from "./notion";
+import type { Env, Handler } from "./notion.js";
 
 // The one difference between a Pages Function and a Vercel Function, as far as
 // this codebase is concerned.

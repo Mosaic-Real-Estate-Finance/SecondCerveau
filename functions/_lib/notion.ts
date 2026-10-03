@@ -1,5 +1,5 @@
-import { AUTH_MESSAGES, identify } from "./auth";
-import { type User } from "./users";
+import { AUTH_MESSAGES, identify } from "./auth.js";
+import { type User } from "./users.js";
 
 // Thin server side layer over the Notion API. It exists for two reasons:
 // the Notion API does not answer CORS preflights, so a browser cannot call it,
