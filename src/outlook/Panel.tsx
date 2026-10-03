@@ -330,7 +330,7 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
 
   if (stage.name === "outside") {
     return (
-      <Said title="Vers Notion">
+      <Said title="Save to Notion">
         Ce panneau s'ouvre depuis Outlook, sur un mail en lecture. Ouvert directement dans un navigateur, il n'a
         aucune boîte mail à lire — c'est normal, et ce n'est pas une erreur.
       </Said>

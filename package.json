@@ -18,6 +18,7 @@
     "avatars": "node scripts/generate-avatars.mjs",
     "dev:outlook": "node scripts/outlook-manifest.mjs localhost:5173 && vite --host --mode outlook --port 5173 --strictPort",
     "outlook:manifest": "node scripts/outlook-manifest.mjs",
+    "outlook:icons": "node scripts/generate-outlook-icons.mjs",
     "outlook:certs": "office-addin-dev-certs install --days 365 --domains 127.0.0.1,localhost,192.168.1.86",
     "dev:vercel": "vercel dev --listen 5173",
     "outlook:manifest:prod": "node scripts/outlook-manifest.mjs mosaicref.vercel.app prod"

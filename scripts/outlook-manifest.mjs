@@ -16,7 +16,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 const DEV_ID = "9f2e4c71-5a63-4d8e-b0c4-7e1a9d3f6b28";
-const DEV_NAME = "Vers Notion (dev)";
+const DEV_NAME = "Save to Notion (dev)";
 
 const [host, flavour = "dev"] = process.argv.slice(2);
 if (!host) {
@@ -38,7 +38,7 @@ if (flavour === "dev") {
     .replace(/<DisplayName DefaultValue="[^"]*"/, `<DisplayName DefaultValue="${DEV_NAME}"`)
     // The ribbon label too: it is what tells the two apart at a glance, which
     // matters the day both are installed side by side.
-    .replace(/<bt:String id="buttonLabel" DefaultValue="[^"]*"/, '<bt:String id="buttonLabel" DefaultValue="Vers Notion (dev)"');
+    .replace(/<bt:String id="buttonLabel" DefaultValue="[^"]*"/, '<bt:String id="buttonLabel" DefaultValue="Save to Notion (dev)"');
 }
 
 if (manifest.includes("HOST")) {

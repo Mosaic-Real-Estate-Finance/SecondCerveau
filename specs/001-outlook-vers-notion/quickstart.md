@@ -114,7 +114,7 @@ curl -s -D- -o/dev/null https://localhost:5173/ | grep -ic cross-origin         
 
 Le manifeste de développement est écrit par `dev:outlook` dans `.outlook/manifest.dev.xml`
 (ignoré par git : il porte un hôte propre à la machine). Il a **son propre identifiant et son
-propre libellé de ruban, « Vers Notion (dev) »** : Outlook indexe un complément sur son
+propre libellé de ruban, « Save to Notion (dev) »** : Outlook indexe un complément sur son
 identifiant, donc partager celui de la production ferait que la version de développement
 remplace la vraie dans le ruban, silencieusement.
 
@@ -127,7 +127,7 @@ Pour un autre hôte : `npm run outlook:manifest -- notes.mosaicfin.com prod`.
 | Outlook classique Windows | partage réseau comme catalogue de confiance, ou `npx office-addin-debugging start .outlook/manifest.dev.xml` |
 | Outlook Mac | copier le manifeste dans `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef` |
 
-Puis ouvrir un mail en lecture : le bouton **Vers Notion (dev)** apparaît dans le ruban.
+Puis ouvrir un mail en lecture : le bouton **Save to Notion (dev)** apparaît dans le ruban.
 
 À ce stade, sans application Entra configurée, le panneau n'a pas encore de jeton Microsoft et
 les appels partent avec le repli `x-user-email` de la PWA. C'est voulu : les phases 1 à 3 se
@@ -142,7 +142,7 @@ puis dans les trois autres clients pour la convergence.
 
 ### US1 — classer en deux clics
 
-Ouvrir un mail d'un contact présent dans Contacts → bouton *Vers Notion* → le contact est
+Ouvrir un mail d'un contact présent dans Contacts → bouton *Save to Notion* → le contact est
 coché, avec nom et société → *Créer la note* → ouvrir le lien.
 
 Attendu : une page dans Notes, `Interlocuteur` = ce contact, `Source` = `Email`,
@@ -297,7 +297,7 @@ npx office-addin-manifest validate .outlook/manifest.xml
 ```
 
 Son identifiant (`3cb13804-…`) diffère de celui du manifeste de développement
-(`9f2e4c71-…`), et son bouton s'appelle « Vers Notion » et non « Vers Notion (dev) » : les deux
+(`9f2e4c71-…`), et son bouton s'appelle « Save to Notion » et non « Save to Notion (dev) » : les deux
 peuvent cohabiter dans le même Outlook sans se remplacer l'un l'autre.
 
 ---

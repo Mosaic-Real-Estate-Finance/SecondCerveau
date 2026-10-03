@@ -21,7 +21,7 @@
   <Version>1.0.0.0</Version>
   <ProviderName>Mosaic Real Estate Finance</ProviderName>
   <DefaultLocale>fr-FR</DefaultLocale>
-  <DisplayName DefaultValue="Vers Notion" />
+  <DisplayName DefaultValue="Save to Notion" />
   <Description DefaultValue="Classe un échange Outlook dans la base de notes Notion de Mosaic, rattaché aux bons contacts." />
   <IconUrl DefaultValue="https://HOST/outlook/icon-64.png" />
   <HighResolutionIconUrl DefaultValue="https://HOST/outlook/icon-128.png" />
@@ -120,7 +120,7 @@
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="groupLabel" DefaultValue="Mosaic" />
-        <bt:String id="buttonLabel" DefaultValue="Vers Notion" />
+        <bt:String id="buttonLabel" DefaultValue="Save to Notion" />
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="buttonTip" DefaultValue="Rattache cet échange à un contact et l'enregistre dans la base de notes Notion." />
@@ -182,7 +182,7 @@
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="groupLabel" DefaultValue="Mosaic" />
-        <bt:String id="buttonLabel" DefaultValue="Vers Notion" />
+        <bt:String id="buttonLabel" DefaultValue="Save to Notion" />
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="buttonTip" DefaultValue="Rattache cet échange à un contact et l'enregistre dans la base de notes Notion." />
