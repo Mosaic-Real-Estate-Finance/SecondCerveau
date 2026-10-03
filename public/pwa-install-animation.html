@@ -1,0 +1,1067 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Déclare les deux schémas : sinon, dans une page en mode sombre, le navigateur peint un fond
+     opaque derrière l'iframe au lieu de la laisser transparente. -->
+<meta name="color-scheme" content="light dark">
+<title>Mosaic Dictée ⎜ installer l'app sur l'écran d'accueil</title>
+<style>
+/* =====================================================================
+   SCÈNE
+   ===================================================================== */
+/* ===== SF Pro Display — Regular (400) + Bold (700) =====
+   Police système uniquement (local) : sur appareils Apple, SF Pro est
+   rendue nativement ; ailleurs, fallback -apple-system / Roboto. */
+@font-face{
+  font-family:"SF Pro Display"; font-style:normal; font-weight:400; font-display:swap;
+  src:local("SF Pro Display"), local("SFProDisplay-Regular");
+}
+@font-face{
+  font-family:"SF Pro Display"; font-style:normal; font-weight:700; font-display:swap;
+  src:local("SF Pro Display Bold"), local("SFProDisplay-Bold");
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+:root{color-scheme:light dark}
+body{
+  min-height:100%;
+  /* Ancré EN HAUT (flex-start) : le téléphone « sort » du haut du modal hôte,
+     au lieu d'être centré. Rendu net, sans fondu. */
+  display:flex;align-items:flex-start;justify-content:center;
+  /* transparent : on laisse transparaître le fond clair de la zone d'animation
+     du modal hôte (le guide reste en light mode quel que soit le thème). */
+  background:transparent;
+  font-family:"SF Pro Display",-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+/* Mise à l'échelle ancrée en haut → le sommet du cadre reste collé au bord
+   supérieur du modal (effet « l'écran sort du haut »). */
+.scene{transform-origin:top center}
+
+/* ===== Recadrage : on montre une bonne partie du téléphone, y compris un peu
+   du fond de page AU-DESSUS des feuilles (partage / « Sur l'écran d'accueil »)
+   → on voit qu'elles glissent par-dessus la page, sommets entièrement visibles.
+   Marges transparentes pour l'ombre, SÉPARÉES :
+   --gap-x (côtés, modeste → le téléphone reste large) et --gap-bottom (bas,
+   généreux → l'ombre du bas, qui s'étend le plus, n'est jamais rognée net).
+   Le haut est volontairement coupé (crop doux). ===== */
+:root{ --view-h:600px; --gap-x:26px; --gap-bottom:64px; }
+.frame{ position:relative; width:calc(402px + var(--gap-x) * 2); height:calc(var(--view-h) + var(--gap-bottom)); overflow:hidden; }
+.frame .ncb-phone{ position:absolute; left:var(--gap-x); bottom:var(--gap-bottom); margin:0; }
+
+/* =====================================================================
+   ╔══════════════════════════════════════════════════════════════╗
+   ║  FICHIER 1 — PAGE SAFARI (copié verbatim, .ncb-*)             ║
+   ╚══════════════════════════════════════════════════════════════╝
+   ===================================================================== */
+.ncb-phone {
+  --browser-url: "dictee.mosaicfin.com";
+  --color-brand:          #000082;
+  --color-surface-page:   #f5f2f2;
+  --color-surface-card:   #ffffff;
+  --color-border-default: #e5e7eb;
+  --color-text-primary:   #1b1b1b;
+  --nc-radius-sm: 16px;
+  --nc-radius-md: 24px;
+  --glass-bg:        rgba(255, 255, 255, 0.5);
+  --glass-border:    rgba(255, 255, 255, 0.65);
+  --glass-highlight: inset 0 1.5px 1px rgba(255, 255, 255, 0.6);
+  position: relative;
+  width: 402px;
+  height: 874px;
+  margin: 0 auto;
+  border-radius: 56px;
+  overflow: hidden;
+  background: var(--color-surface-page);
+  /* Ombre adoucie et CONTENUE (s'étend moins que les marges --gap-* du cadre)
+     → elle se diffuse en entier, jamais rognée net. */
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.04),
+    0 18px 48px -22px rgba(40, 20, 20, 0.30),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  isolation: isolate;
+}
+.ncb-phone *,
+.ncb-phone *::before,
+.ncb-phone *::after { box-sizing: border-box; }
+
+.ncb-page { position: absolute; inset: 0; background: var(--color-surface-page); overflow: hidden; }
+.ncb-halo {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(circle at 0% 0%,   rgba(0, 0, 130, 0.28) 0%, transparent 35%),
+    radial-gradient(circle at 100% 0%, rgba(0, 0, 130, 0.24) 0%, transparent 34%),
+    radial-gradient(circle at 0% 100%, rgba(0, 0, 130, 0.22) 0%, transparent 34%),
+    radial-gradient(circle at 100% 100%,rgba(0, 0, 130, 0.26) 0%, transparent 35%),
+    radial-gradient(ellipse at 0% 50%,  rgba(0, 0, 130, 0.12) 0%, transparent 20%),
+    radial-gradient(ellipse at 100% 50%,rgba(0, 0, 130, 0.12) 0%, transparent 20%);
+}
+.ncb-app { position: relative; z-index: 1; padding: 70px 18px 0; }
+.ncb-sk,
+.ncb-sk2 { background: var(--color-border-default); border-radius: 8px; animation: ncb-pulse 1.4s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.ncb-sk2 { background: #eceaea; animation-name: ncb-pulse-soft; }
+@keyframes ncb-pulse      { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes ncb-pulse-soft { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+.ncb-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+.ncb-logo { width: 116px; height: 30px; border-radius: 9px; }
+.ncb-actions { display: flex; gap: 10px; }
+.ncb-circle { width: 38px; height: 38px; border-radius: 50%; }
+.ncb-hero { height: 168px; border-radius: var(--nc-radius-md); margin-bottom: 22px; padding: 22px; position: relative; }
+.ncb-hero-l1   { width: 58%; height: 16px; border-radius: 6px; margin-bottom: 12px; }
+.ncb-hero-l2   { width: 40%; height: 16px; border-radius: 6px; }
+.ncb-hero-pill { position: absolute; left: 22px; bottom: 22px; width: 120px; height: 34px; border-radius: 100px; }
+.ncb-segmented { display: flex; gap: 8px; margin-bottom: 24px; }
+.ncb-seg { flex: 1; height: 34px; border-radius: 100px; }
+.ncb-seg--active { background: rgba(0, 0, 130, 0.18); }
+.ncb-title { width: 140px; height: 18px; border-radius: 6px; margin-bottom: 16px; }
+.ncb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ncb-card { background: var(--color-surface-card); border: 1px solid var(--color-border-default); border-radius: var(--nc-radius-sm); padding: 12px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04); }
+.ncb-card-thumb { width: 100%; height: 78px; border-radius: 10px; margin-bottom: 12px; }
+.ncb-card-l1    { width: 85%; height: 12px; border-radius: 5px; margin-bottom: 8px; }
+.ncb-card-l2    { width: 55%; height: 12px; border-radius: 5px; }
+.ncb-bottom-fade {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 180px; z-index: 2; pointer-events: none;
+  background: linear-gradient(to top, var(--color-surface-page) 0, rgba(245, 242, 242, 0.55) 45%, transparent 100%);
+}
+.ncb-top-fade {
+  position: absolute; top: 0; left: 0; right: 0; height: 60px; z-index: 8; pointer-events: none;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  background: linear-gradient(to bottom, var(--color-surface-page) 0, rgba(245, 242, 242, 0.5) 45%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 30%, transparent 75%);
+  mask-image: linear-gradient(to bottom, #000 0, #000 30%, transparent 75%);
+}
+.ncb-statusbar { position: absolute; top: 0; left: 0; right: 0; height: 54px; z-index: 10; display: flex; align-items: center; }
+.ncb-time { position: absolute; left: 34px; top: 17px; font-size: 17px; font-weight: 700; letter-spacing: -0.4px; color: var(--color-text-primary); }
+.ncb-island { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); width: 125px; height: 37px; background: #000; border-radius: 19px; }
+.ncb-status-icons { position: absolute; right: 22px; top: 19px; display: flex; align-items: center; gap: 7px; }
+.ncb-safari {
+  position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 9;
+  width: 346px; display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; border-radius: 30px;
+  background: var(--glass-bg); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: 0 2px 40px rgba(0, 0, 0, 0.1), inset 0 0.5px 0 rgba(0, 0, 0, 0.06), var(--glass-highlight);
+}
+.ncb-searchbar { position: relative; height: 44px; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.04); border-radius: 22px; }
+.ncb-domain { font-size: 17px; font-weight: 500; letter-spacing: -0.45px; color: var(--color-text-primary); }
+.ncb-domain::after { content: var(--browser-url); }
+.ncb-menu { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); }
+.ncb-reload { position: absolute; right: 13px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: none; background: none; padding: 0; cursor: pointer; }
+.ncb-toolbar { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; }
+.ncb-tool { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: none; background: none; padding: 0; cursor: pointer; }
+.ncb-tool:disabled { cursor: default; }
+
+/* =====================================================================
+   ╔══════════════════════════════════════════════════════════════╗
+   ║  MORPH — transitions.dev « Plus to menu » (spec respecté)     ║
+   ╚══════════════════════════════════════════════════════════════╝
+   ===================================================================== */
+:root{
+  --morph-open-dur: 350ms;
+  --morph-close-dur: 250ms;
+  --morph-ease: cubic-bezier(0.34, 1.25, 0.64, 1);
+  --morph-close-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --morph-r-closed: 18px;
+  --morph-r-open: 38px;
+  --morph-fade-dur: 200ms;
+  --morph-slide: 40px;
+  --morph-rotate: 45deg;
+  --morph-scale: 0.97;
+  --morph-blur: 2px;
+}
+
+/* La surface qui morphe : épinglée bottom-centre, sort du bouton Partager.
+   Verre dépoli repris de .frame du fichier 2. */
+.t-morph{
+  position:absolute;
+  left:50%;
+  transform:translateX(-50%);
+  bottom:150px;                 /* recalculé en JS sur le bouton Partager */
+  width:36px;
+  height:36px;
+  border-radius:var(--morph-r-closed);
+  overflow:hidden;
+  z-index:20;
+  opacity:0;                    /* invisible au repos, « armé » au tap */
+  background:
+    linear-gradient(0deg, rgba(255,255,255,0.6), rgba(255,255,255,0.6)),
+    rgba(255,255,255,0.25);
+  background-blend-mode: color-dodge, plus-lighter;
+  -webkit-backdrop-filter: blur(50px);
+  backdrop-filter: blur(50px);
+  box-shadow: 0 12px 60px rgba(0,0,0,0.30), inset 0 0 0 0.5px rgba(255,255,255,0.5);
+  transition:
+    width var(--morph-close-dur) var(--morph-close-ease),
+    height var(--morph-close-dur) var(--morph-close-ease),
+    border-radius var(--morph-close-dur) var(--morph-close-ease),
+    opacity 160ms ease;
+}
+.t-morph.armed{ opacity:1; }
+.t-morph[data-open="true"]{
+  width:370px;
+  height:var(--open-h, 483px);
+  border-radius:var(--morph-r-open);
+  transition:
+    width var(--morph-open-dur) var(--morph-ease),
+    height var(--morph-open-dur) var(--morph-ease),
+    border-radius var(--morph-open-dur) var(--morph-ease),
+    opacity 160ms ease;
+}
+
+/* Glyphe « fermé » (icône Partager) : fade + slide + rotation en sortie. */
+.t-morph-plus{
+  position:absolute; inset:0;
+  display:grid; place-items:center;
+  border:0; background:transparent; cursor:pointer;
+  transition:
+    opacity var(--morph-fade-dur) var(--morph-close-ease),
+    transform var(--morph-open-dur) var(--morph-close-ease),
+    filter var(--morph-fade-dur) var(--morph-close-ease);
+}
+.t-morph-plus svg{ transition: transform var(--morph-open-dur) var(--morph-close-ease); }
+.t-morph[data-open="true"] .t-morph-plus{
+  opacity:0;
+  transform:translateX(calc(-1 * var(--morph-slide)));
+  filter:blur(var(--morph-blur));
+  pointer-events:none;
+}
+.t-morph[data-open="true"] .t-morph-plus svg{ transform:scale(var(--morph-scale)) rotate(var(--morph-rotate)); }
+
+/* Le menu (= la feuille de partage) : centré, ancré au bas, révélé en grandissant. */
+.t-morph-menu{
+  position:absolute;
+  left:50%; margin-left:-185px;   /* centre la boîte 370 sans toucher au transform */
+  bottom:8px;
+  width:370px;
+  opacity:0;
+  transform:translateX(var(--morph-slide)) scale(var(--morph-scale));
+  filter:blur(var(--morph-blur));
+  pointer-events:none;
+  transition:
+    opacity var(--morph-fade-dur) var(--morph-close-ease),
+    transform var(--morph-open-dur) var(--morph-close-ease),
+    filter var(--morph-fade-dur) var(--morph-close-ease);
+}
+.t-morph[data-open="true"] .t-morph-menu{
+  opacity:1; transform:translateX(0) scale(1); filter:blur(0); pointer-events:auto;
+}
+
+/* =====================================================================
+   ╔══════════════════════════════════════════════════════════════╗
+   ║  FICHIER 2 — CONTENU DU MODAL (copié verbatim, scopé .t-morph-menu)║
+   ╚══════════════════════════════════════════════════════════════╝
+   ===================================================================== */
+.t-morph-menu{
+  --label: #1A1A1A;
+  --label-secondary: #727272;
+  --separator: rgba(0,0,0,0.12);
+  --group-bg: rgba(120,120,128,0.16);
+}
+.t-morph-menu .activity{ width:100%; display:flex; flex-direction:column; align-items:flex-start; }
+.t-morph-menu .grabber{ position:absolute; width:36px; height:5px; left:calc(50% - 19px); top:5px; background:rgba(60,60,67,0.3); border-radius:2.5px; z-index:9; }
+.t-morph-menu .header{ display:flex; align-items:center; padding:16px; gap:16px; width:100%; height:110px; }
+.t-morph-menu .thumb-wrap{ display:flex; flex-direction:column; align-items:center; padding:0 0 0 12px; }
+.t-morph-menu .thumb{ width:64px; height:64px; border:0.5px solid rgba(0,0,0,0.15); box-shadow:0 2px 16px rgba(0,0,0,0.15); border-radius:16px; overflow:hidden; background:linear-gradient(135deg,#fdfbfb,#ebedee); display:flex; align-items:center; justify-content:center; font-size:26px; }
+.t-morph-menu .thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+.t-morph-menu .middle{ flex:1; display:flex; flex-direction:column; justify-content:center; align-self:stretch; min-width:0; }
+.t-morph-menu .title-block{ display:flex; flex-direction:column; gap:1px; }
+.t-morph-menu .title{ font-size:15px; font-weight:590; line-height:20px; letter-spacing:-0.23px; color:var(--label); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.t-morph-menu .subtitle{ font-size:13px; font-weight:400; line-height:18px; letter-spacing:-0.08px; color:var(--label-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.t-morph-menu .close{ width:30px; height:30px; align-self:flex-start; margin-top:0; border-radius:296px; background:linear-gradient(0deg,#F7F7F7,#F7F7F7),linear-gradient(0deg,#DDDDDD,#DDDDDD),rgba(255,255,255,0.65); background-blend-mode:darken, color-burn, normal; box-shadow:0 8px 40px rgba(0,0,0,0.12); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.t-morph-menu .close span{ font-size:15px; font-weight:600; color:#8a8a8e; line-height:1; }
+.t-morph-menu .sep{ height:1px; margin:0 24px; background:var(--separator); align-self:stretch; }
+.t-morph-menu .row{ display:flex; align-items:flex-start; gap:14px; padding:14px 24px 16px; width:100%; overflow-x:auto; scrollbar-width:none; }
+.t-morph-menu .row::-webkit-scrollbar{ display:none; }
+.t-morph-menu .contact{ width:78px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:8px; }
+.t-morph-menu .avatar{ position:relative; width:70px; height:70px; border-radius:100px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:24px; font-weight:500; }
+.t-morph-menu .avatar img{ width:100%; height:100%; object-fit:cover; border-radius:100px; display:block; }
+.t-morph-menu .badge{ position:absolute; width:20px; height:20px; right:2px; bottom:0; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:11px; overflow:hidden; background:#fff; box-shadow:0 0 0 1.5px rgba(255,255,255,0.9); }
+.t-morph-menu .badge img{ width:100%; height:100%; object-fit:contain; display:block; }
+.t-morph-menu .icon-messages{ background:linear-gradient(180deg,#5BF675,#1FAD3B); color:#fff; }
+.t-morph-menu .contact .names{ text-align:center; line-height:1.25; }
+.t-morph-menu .contact .fn,
+.t-morph-menu .contact .ln{ font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:78px; letter-spacing:0.06px; color:#000; display:block; }
+.t-morph-menu .app{ width:78px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:8px; }
+.t-morph-menu .app-icon{ width:70px; height:70px; border-radius:15px; display:flex; align-items:center; justify-content:center; font-size:30px; }
+.t-morph-menu .app-name{ font-size:11px; letter-spacing:0.06px; color:#000; text-align:center; }
+.t-morph-menu .app-icon img{ width:100%; height:100%; object-fit:cover; border-radius:15px; display:block; }
+.t-morph-menu .ic-reminders{ background:#fff; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.05); }
+.t-morph-menu .actions-btn{ display:flex; gap:14px; padding:14px 24px 20px; width:100%; overflow-x:auto; scrollbar-width:none; }
+.t-morph-menu .actions-btn::-webkit-scrollbar{ display:none; }
+.t-morph-menu .action-btn{ width:78px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:7px; }
+.t-morph-menu .action-symbol{ width:70px; height:70px; background:#EDEDED; border-radius:1000px; display:flex; align-items:center; justify-content:center; font-size:25px; color:var(--label); }
+.t-morph-menu .action-label{ font-size:13px; line-height:15px; letter-spacing:-0.1px; color:var(--label); text-align:center; }
+
+/* =====================================================================
+   ╔══════════════════════════════════════════════════════════════╗
+   ║  ÉTAPE 3 — « Ajouter sur l'écran d'accueil » · transitions.dev║
+   ║  Panel reveal : slide Y + fade + cross-blur                   ║
+   ╚══════════════════════════════════════════════════════════════╝
+   --panel-translate-y POSITIF → le panneau monte depuis le bas.
+   ===================================================================== */
+:root{
+  --panel-open-dur: 400ms;
+  --panel-close-dur: 350ms;
+  --panel-translate-y: 120px;            /* monte depuis le bas (comme le snippet) */
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.t-panel-slide{
+  transform: translateY(var(--panel-translate-y));
+  opacity: 0;
+  filter: blur(var(--panel-blur));
+  pointer-events: none;
+  transition:
+    transform var(--panel-close-dur) var(--panel-ease),
+    opacity   var(--panel-close-dur) var(--panel-ease),
+    filter    var(--panel-close-dur) var(--panel-ease);
+  will-change: transform, opacity, filter;
+}
+.t-panel-slide[data-open="true"]{
+  transform: translateY(0);
+  opacity: 1;
+  filter: blur(0);
+  pointer-events: auto;
+  transition:
+    transform var(--panel-open-dur) var(--panel-ease),
+    opacity   var(--panel-open-dur) var(--panel-ease),
+    filter    var(--panel-open-dur) var(--panel-ease);
+}
+
+/* --- plein écran, light --- */
+.ath{
+  position:absolute; left:0; right:0; bottom:0; top:auto; z-index:25;
+  display:flex; flex-direction:column;
+  background:#f5f2f2; color:#1b1b1b;
+  border-radius:14px 14px 0 0; overflow:hidden;
+  box-shadow:0 -8px 40px rgba(0,0,0,.14);
+  font-family:"SF Pro Display",-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+.ath *{ box-sizing:border-box; }
+.ath button{ font-family:inherit; }      /* SF Pro sur les boutons (clavier inclus) */
+
+/* status bar — reprise exacte de la page Safari (noire, sans %) */
+.ath-status{ display:none; }
+.ath-status .t{ position:absolute; left:34px; top:17px; font-size:17px; font-weight:700; letter-spacing:-0.4px; color:#1b1b1b; }
+.ath-status .isl{ position:absolute; left:50%; top:12px; transform:translateX(-50%); width:125px; height:37px; background:#000; border-radius:19px; }
+.ath-status .ic{ position:absolute; right:22px; top:19px; display:flex; align-items:center; gap:7px; }
+
+/* sheet haut (header + identité) */
+.ath-sheet{ background:#fff; border-radius:14px 14px 0 0; flex:0 0 auto; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+.ath-head{ position:relative; height:84px; display:flex; align-items:center; padding:0 16px; }
+.ath-x{ position:static; flex:0 0 auto; width:30px; height:30px; border-radius:50%; background:rgba(120,120,128,0.16); display:flex; align-items:center; justify-content:center; border:0; cursor:pointer; color:#8a8a8e; }
+.ath-title{ flex:1; text-align:center; padding:0 8px; font-size:17px; font-weight:600; color:#1b1b1b; letter-spacing:-0.3px; }
+.ath-add{ position:static; flex:0 0 auto; background:#007aff; color:#fff; font-weight:600; font-size:16px; border:0; border-radius:18px; padding:8px 18px; cursor:pointer; letter-spacing:-0.2px; }
+
+/* identité */
+.ath-id{ display:flex; align-items:center; gap:14px; padding:14px 16px; border-top:.5px solid rgba(0,0,0,.08); }
+.ath-icon{ width:58px; height:58px; border-radius:13px; overflow:hidden; flex:0 0 auto; background:#eee; box-shadow:0 1px 4px rgba(0,0,0,.12); }
+.ath-icon img{ width:100%; height:100%; object-fit:cover; display:block; }
+.ath-fields{ flex:1; min-width:0; }
+.ath-name-row{ display:flex; align-items:center; gap:10px; padding-bottom:9px; border-bottom:.5px solid rgba(0,0,0,.1); }
+.ath-name{ flex:1; font-size:17px; color:#1b1b1b; display:flex; align-items:center; }
+.ath-caret{ display:inline-block; width:2px; height:19px; background:#007aff; margin-left:1px; animation:ath-blink 1.05s steps(1) infinite; }
+@keyframes ath-blink{ 50%{ opacity:0; } }
+.ath-clear{ width:22px; height:22px; border-radius:50%; background:rgba(60,60,67,0.30); display:flex; align-items:center; justify-content:center; border:0; cursor:pointer; flex:0 0 auto; }
+.ath-url{ font-size:15px; color:#8a8a8e; margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* Open as Web App */
+.ath-webapp{ display:flex; align-items:center; justify-content:space-between; background:#fff; padding:14px 16px; margin-top:28px; border-top:.5px solid rgba(0,0,0,.08); border-bottom:.5px solid rgba(0,0,0,.08); flex:0 0 auto; }
+.ath-webapp span{ font-size:16px; color:#1b1b1b; }
+.ath-toggle{ width:51px; height:31px; border-radius:16px; background:#000082; position:relative; flex:0 0 auto; }
+.ath-toggle::after{ content:""; position:absolute; top:2px; right:2px; width:27px; height:27px; border-radius:50%; background:#fff; box-shadow:0 2px 4px rgba(0,0,0,.25); }
+.ath-hint{ font-size:13px; line-height:1.45; color:#8a8a8e; padding:10px 16px; flex:0 0 auto; }
+
+.ath-spacer{ display:none; }
+
+/* clavier AZERTY (light) */
+/* padding-bas généreux → les touches remontent au-dessus des coins arrondis du
+   téléphone (plus masquées par les bords). La barre de suggestions est retirée
+   et son espace sert à ce relèvement. */
+.ath-kb{ background:#d1d4db; padding:8px 3px 52px; flex:0 0 auto; }
+/* Barre de mots suggérés retirée (demande produit). */
+.ath-pred{ display:none; }
+.ath-pred span{ flex:1; text-align:center; color:#1b1b1b; font-size:16px; position:relative; }
+.ath-pred span+span::before{ content:""; position:absolute; left:0; top:10px; bottom:10px; width:.5px; background:rgba(0,0,0,.16); }
+.ath-kbrow{ display:flex; gap:6px; margin:5px 3px; }
+.ath-kbrow--2{ padding:0 18px; }
+.ath-key{ flex:1; height:46px; border-radius:6px; background:#fff; color:#1b1b1b; display:flex; align-items:center; justify-content:center; font-size:19px; border:0; box-shadow:0 1px 0 rgba(0,0,0,.28); cursor:pointer; position:relative; }
+.ath-key--sys{ background:#abb0ba; }
+.ath-key--wide{ flex:1.5; }
+.ath-key--w2{ flex:1.6; font-size:15px; }
+.ath-key--space{ flex:5; }
+.ath-key--return{ flex:1.7; background:#007aff; color:#fff; }
+.ath-space-a{ position:absolute; right:12px; bottom:6px; font-size:11px; color:rgba(0,0,0,.35); }
+/* Globe du clavier retiré (demande produit). */
+.ath-globe{ display:none; }
+
+
+/* =====================================================================
+   ╔══════════════════════════════════════════════════════════════╗
+   ║  ÉCRAN D'ACCUEIL (d'après le dump Figma, adapté 402x874)       ║
+   ╚══════════════════════════════════════════════════════════════╝
+   ===================================================================== */
+:root{ --app-ease: cubic-bezier(0.32, 0.72, 0, 1); }
+
+.hs{
+  position:absolute; inset:0; z-index:22;
+  opacity:0; pointer-events:none;
+  transition:opacity .5s ease;
+  display:flex; flex-direction:column;
+  background:
+    radial-gradient(circle at 0% 0%,   rgba(0, 0, 130, 0.28) 0%, transparent 35%),
+    radial-gradient(circle at 100% 0%, rgba(0, 0, 130, 0.24) 0%, transparent 34%),
+    radial-gradient(circle at 0% 100%, rgba(0, 0, 130, 0.22) 0%, transparent 34%),
+    radial-gradient(circle at 100% 100%,rgba(0, 0, 130, 0.26) 0%, transparent 35%),
+    radial-gradient(ellipse at 0% 50%,  rgba(0, 0, 130, 0.12) 0%, transparent 20%),
+    radial-gradient(ellipse at 100% 50%,rgba(0, 0, 130, 0.12) 0%, transparent 20%),
+    #f5f2f2;
+}
+.hs.show{ opacity:1; }
+.hs-status{ position:relative; height:54px; flex:0 0 auto; }
+.hs-time{ position:absolute; left:34px; top:16px; font-size:18px; font-weight:700; letter-spacing:-.4px; color:#000; }
+.hs-isl{ position:absolute; left:50%; top:12px; transform:translateX(-50%); width:125px; height:37px; background:#000; border-radius:19px; }
+.hs-ic{ position:absolute; right:22px; top:19px; display:flex; align-items:center; gap:7px; }
+
+.hs-apps{ flex:1; padding:0 24px 10px; display:flex; flex-direction:column; justify-content:flex-end; gap:28px; }
+.hs-row{ display:flex; justify-content:space-between; }
+.hs-app{ width:62px; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.hs-ico{ width:60px; height:60px; border-radius:14px; overflow:hidden; background:transparent; box-shadow:0 5px 14px rgba(0,0,0,.14); flex:0 0 auto; }
+.hs-ico.on-white{ background:#fff; }
+.hs-ico img{ width:100%; height:100%; object-fit:cover; display:block; transform:scale(1.04); }
+.hs-name{ font-size:12px; color:#000; text-shadow:0 1px 1px rgba(255,255,255,.55); max-width:68px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* Mosaic : pop-in à l'ajout */
+.hs-app.installed .hs-ico{ transform:scale(0); }
+.hs-app.installed.popped .hs-ico{ animation:hs-pop .55s cubic-bezier(.34,1.45,.6,1) forwards; }
+@keyframes hs-pop{ 0%{transform:scale(0)} 60%{transform:scale(1.15)} 100%{transform:scale(1)} }
+.hs-app.installed .hs-name{ opacity:0; transition:opacity .3s ease; }
+.hs-app.installed.popped .hs-name{ opacity:1; transition-delay:.28s; }
+
+/* dock & icônes recréées */
+.hs-searchwrap{ display:flex; justify-content:center; padding:4px 0 16px; flex:0 0 auto; }
+.hs-search{ display:flex; align-items:center; gap:7px; height:36px; padding:0 16px; border-radius:40px;
+  background:var(--glass-bg); -webkit-backdrop-filter:blur(20px) saturate(180%); backdrop-filter:blur(20px) saturate(180%);
+  color:#000; font-size:14px; font-weight:600;
+  border:.5px solid var(--glass-border);
+  box-shadow:0 2px 40px rgba(0,0,0,.1), inset 0 0.5px 0 rgba(0,0,0,.06), var(--glass-highlight); }
+.hs-dock-wrap{ padding:0 12px 14px; flex:0 0 auto; }
+.hs-dock{ height:96px; border-radius:40px; display:flex; align-items:center; justify-content:space-around; padding:0 18px;
+  background:var(--glass-bg); -webkit-backdrop-filter:blur(20px) saturate(180%); backdrop-filter:blur(20px) saturate(180%);
+  border:.5px solid var(--glass-border);
+  box-shadow:0 2px 40px rgba(0,0,0,.1), inset 0 0.5px 0 rgba(0,0,0,.06), var(--glass-highlight); }
+.hs-dock .hs-ico{ box-shadow:0 4px 12px rgba(0,0,0,.16); }
+.ico-safari{ background:radial-gradient(circle at 50% 40%, #19a7ff, #0a64ff); display:flex; align-items:center; justify-content:center; }
+.ico-music{ background:linear-gradient(165deg,#fc6076 0%, #fa2b4d 55%, #f3164a 100%); display:flex; align-items:center; justify-content:center; }
+
+/* ===== OUVERTURE D'APP — glass morphism ===== */
+.appopen{
+  position:absolute; top:0; left:0; width:402px; height:874px; z-index:30;
+  opacity:0; pointer-events:none; overflow:hidden;
+  border-radius:14px; background:#f5f2f2; transform-origin:0 0; will-change:transform;
+  box-shadow:0 26px 70px rgba(0,0,0,.34), 0 10px 26px rgba(0,0,0,.22),
+             inset 0 0 0 .5px rgba(255,255,255,.45);
+}
+.appopen.on{ opacity:1; }
+.appopen-snap{ position:absolute; inset:0; }
+
+/* =====================================================================
+   POINTEUR TACTILE
+   ===================================================================== */
+.ncb-tap{
+  position:absolute; z-index:30; width:50px; height:50px;
+  margin-left:-25px; margin-top:-25px; border-radius:50%;
+  background:rgba(0, 0, 130,.30); border:2.5px solid #000082;
+  box-shadow:0 0 0 4px rgba(0, 0, 130,.16), 0 4px 16px rgba(0, 0, 130,.55);
+  opacity:0; pointer-events:none;
+  transition:left .45s var(--morph-close-ease), top .45s var(--morph-close-ease), opacity .25s ease;
+}
+.ncb-tap.on{ opacity:1; }
+.ncb-tap .ring{ position:absolute; inset:-7px; border-radius:50%; border:2.5px solid rgba(0, 0, 130,.75); opacity:0; }
+.ncb-tap.press{ animation:ncb-press .45s ease; }
+.ncb-tap.press .ring{ animation:ncb-ripple .55s ease; }
+@keyframes ncb-press{ 0%{transform:scale(1)} 45%{transform:scale(.72)} 100%{transform:scale(1)} }
+@keyframes ncb-ripple{ 0%{transform:scale(.6);opacity:.7} 100%{transform:scale(1.9);opacity:0} }
+
+@media (prefers-reduced-motion: reduce){
+  .ncb-sk, .ncb-sk2 { animation: none !important; }
+  /* l'animation EST le contenu : on garde le morph, on coupe juste le ripple */
+  .ncb-tap.press .ring{ animation:none; }
+}
+</style>
+</head>
+<body>
+
+<div class="scene" id="scene">
+  <div class="frame" id="frame">
+  <div class="ncb-phone" id="phone">
+
+    <!-- ===== PAGE (fichier 1, verbatim) ===== -->
+    <div class="ncb-page">
+      <div class="ncb-halo"></div>
+      <div class="ncb-app">
+        <header class="ncb-topbar">
+          <div class="ncb-sk ncb-logo"></div>
+          <div class="ncb-actions">
+            <div class="ncb-sk ncb-circle"></div>
+            <div class="ncb-sk ncb-circle"></div>
+            <div class="ncb-sk ncb-circle"></div>
+          </div>
+        </header>
+        <div class="ncb-sk ncb-hero">
+          <div class="ncb-sk2 ncb-hero-l1"></div>
+          <div class="ncb-sk2 ncb-hero-l2"></div>
+          <div class="ncb-sk2 ncb-hero-pill"></div>
+        </div>
+        <div class="ncb-segmented">
+          <div class="ncb-sk ncb-seg ncb-seg--active"></div>
+          <div class="ncb-sk ncb-seg"></div>
+          <div class="ncb-sk ncb-seg"></div>
+        </div>
+        <div class="ncb-sk ncb-title"></div>
+        <div class="ncb-grid">
+          <div class="ncb-card"><div class="ncb-sk2 ncb-card-thumb"></div><div class="ncb-sk2 ncb-card-l1"></div><div class="ncb-sk2 ncb-card-l2"></div></div>
+          <div class="ncb-card"><div class="ncb-sk2 ncb-card-thumb"></div><div class="ncb-sk2 ncb-card-l1"></div><div class="ncb-sk2 ncb-card-l2"></div></div>
+          <div class="ncb-card"><div class="ncb-sk2 ncb-card-thumb"></div><div class="ncb-sk2 ncb-card-l1"></div><div class="ncb-sk2 ncb-card-l2"></div></div>
+          <div class="ncb-card"><div class="ncb-sk2 ncb-card-thumb"></div><div class="ncb-sk2 ncb-card-l1"></div><div class="ncb-sk2 ncb-card-l2"></div></div>
+        </div>
+      </div>
+      <div class="ncb-bottom-fade"></div>
+    </div>
+
+    <!-- ===== STATUS BAR ===== -->
+    <div class="ncb-top-fade"></div>
+    <div class="ncb-statusbar">
+      <span class="ncb-time">9:41</span>
+      <div class="ncb-island"></div>
+      <div class="ncb-status-icons">
+        <svg width="27" height="11" viewBox="0 0 621.094 256.348" fill="#1B1B1B" aria-hidden="true"><path d="M25.6348 256.348L84.4727 256.348C99.8535 256.348 110.107 245.605 110.107 229.736L110.107 158.691C110.107 142.578 99.8535 132.08 84.4727 132.08L25.6348 132.08C10.2539 132.08 0 142.578 0 158.691L0 229.736C0 245.605 10.2539 256.348 25.6348 256.348ZM196.045 256.348L254.883 256.348C270.264 256.348 280.518 245.605 280.518 229.736L280.518 119.385C280.518 103.516 270.264 92.7734 254.883 92.7734L196.045 92.7734C180.664 92.7734 170.41 103.516 170.41 119.385L170.41 229.736C170.41 245.605 180.664 256.348 196.045 256.348ZM366.211 256.348L425.049 256.348C440.43 256.348 450.684 245.605 450.684 229.736L450.684 69.8242C450.684 53.7109 440.43 42.9688 425.049 42.9688L366.211 42.9688C351.074 42.9688 340.576 53.7109 340.576 69.8242L340.576 229.736C340.576 245.605 351.074 256.348 366.211 256.348ZM536.621 256.348L595.703 256.348C611.084 256.348 621.094 245.605 621.094 229.736L621.094 26.6113C621.094 10.7422 611.084 0 595.703 0L536.621 0C521.24 0 510.986 10.7422 510.986 26.6113L510.986 229.736C510.986 245.605 521.24 256.348 536.621 256.348Z"/></svg>
+        <svg width="17" height="12" viewBox="0 0 562.262 406.006" fill="#1B1B1B" aria-hidden="true"><path d="M36.9902 171.143C41.873 175.781 48.7089 175.781 53.3476 170.898C113.406 107.178 192.508 73.4863 281.131 73.4863C370.242 73.4863 449.832 107.422 509.402 171.143C513.797 175.537 520.389 175.293 525.271 170.654L558.963 136.963C563.357 132.568 563.113 127.197 559.695 123.047C502.322 52.2461 394.412 0.244141 281.131 0.244141C168.094 0.244141 59.6952 52.2461 2.56634 123.047C-0.851626 127.197-0.851626 132.568 3.29877 136.963Z"/><path d="M138.309 273.193C143.68 278.32 150.271 277.588 155.154 272.217C184.451 239.746 232.303 216.064 281.131 216.309C330.447 216.064 378.299 240.479 408.084 272.949C412.478 278.076 418.582 277.832 423.953 272.949L461.795 235.352C465.701 231.445 466.189 226.074 462.527 221.68C425.662 176.514 357.303 142.578 281.131 142.578C204.959 142.578 136.6 176.514 99.7343 221.68C96.0722 226.074 96.3163 230.957 100.467 235.352Z"/><path d="M281.131 406.006C286.502 406.006 291.141 403.564 300.662 394.287L360.232 337.158C363.894 333.496 364.871 328.125 361.453 323.73C345.584 303.223 315.555 285.4 281.131 285.4C245.73 285.4 215.701 303.955 199.832 325.195C197.391 329.102 198.367 333.496 202.273 337.158L261.6 394.287C271.121 403.32 275.76 406.006 281.131 406.006Z"/></svg>
+        <svg width="26" height="12" viewBox="0 0 722.656 330.322" fill="#1B1B1B" aria-hidden="true"><path opacity="0.4" d="M130.127 330.322L513.916 330.322C555.664 330.322 590.82 326.416 615.723 301.514C640.625 276.611 644.287 241.943 644.287 200.195L644.287 130.127C644.287 88.3789 640.625 53.7109 615.723 28.8086C590.82 3.90625 555.664 0 513.916 0L129.639 0C88.623 0 53.4668 3.90625 28.5645 28.8086C3.66211 53.7109 0 88.623 0 129.395L0 200.195C0 241.943 3.66211 276.611 28.5645 301.514C53.4668 326.416 88.623 330.322 130.127 330.322ZM123.535 291.016C98.3887 291.016 72.0215 287.598 57.1289 272.949C42.4805 258.057 39.3066 231.934 39.3066 206.787L39.3066 124.023C39.3066 98.3887 42.4805 72.2656 57.1289 57.373C72.0215 42.4805 98.6328 39.3066 124.268 39.3066L520.752 39.3066C545.898 39.3066 572.266 42.7246 586.914 57.373C601.807 72.2656 604.98 98.1445 604.98 123.291L604.98 206.787C604.98 231.934 601.807 258.057 586.914 272.949C572.266 287.598 545.898 291.016 520.752 291.016ZM677.49 228.271C696.777 227.051 722.656 202.393 722.656 165.039C722.656 127.93 696.777 103.271 677.49 102.051Z"/><path d="M110.596 262.695L406.494 262.695C423.34 262.695 433.105 260.254 439.941 253.418C446.777 246.582 449.219 236.816 449.219 219.971L449.219 110.352C449.219 93.5059 446.777 83.7402 439.941 76.9043C433.105 70.0684 423.096 67.627 406.494 67.627L111.328 67.627C93.75 67.627 83.7402 70.0684 77.1484 76.9043C70.3125 83.7402 67.8711 93.75 67.8711 110.84L67.8711 219.971C67.8711 236.816 70.3125 246.582 77.1484 253.418C83.9844 260.254 93.9941 262.695 110.596 262.695Z"/></svg>
+      </div>
+    </div>
+
+    <!-- ===== BARRE SAFARI ===== -->
+    <div class="ncb-safari">
+      <div class="ncb-searchbar">
+        <svg class="ncb-menu" width="18" height="11" viewBox="0 0 493.896 291.26" fill="#1B1B1B" aria-hidden="true">
+          <path d="M121.094 290.771L374.023 290.771C385.01 290.771 393.799 282.227 393.799 271.24C393.799 260.254 385.01 251.465 374.023 251.465L121.094 251.465C110.107 251.465 101.562 260.254 101.562 271.24C101.562 282.227 110.107 290.771 121.094 290.771Z"/>
+          <path d="M71.0449 165.039L424.316 165.039C435.303 165.039 443.848 156.494 443.848 145.508C443.848 134.521 435.303 125.732 424.316 125.732L71.0449 125.732C60.0586 125.732 51.2695 134.521 51.2695 145.508C51.2695 156.494 60.0586 165.039 71.0449 165.039Z"/>
+          <path d="M19.5312 39.3066L474.365 39.3066C485.352 39.3066 493.896 30.7617 493.896 19.7754C493.896 8.78906 485.352 0 474.365 0L19.5312 0C8.54492 0 0 8.78906 0 19.7754C0 30.7617 8.54492 39.3066 19.5312 39.3066Z"/>
+        </svg>
+        <span class="ncb-domain"></span>
+        <button class="ncb-reload" aria-label="Recharger">
+          <svg width="12" height="16" viewBox="0 0 431.152 581.787" fill="#1B1B1B">
+            <path d="M215.576 524.414C334.717 524.414 431.152 427.979 431.152 308.594C431.152 297.852 422.363 289.062 411.621 289.062C400.879 289.062 391.846 297.852 391.846 308.594C391.846 406.006 312.988 484.863 215.576 484.863C118.164 484.863 39.3066 406.006 39.3066 308.594C39.3066 211.182 118.164 132.324 215.576 132.324C237.305 132.324 258.057 136.23 277.344 143.311C289.795 148.193 304.443 141.113 304.688 125.977C304.932 113.525 295.654 108.887 289.062 106.445C266.602 97.9004 241.699 93.2617 215.576 93.2617C96.4355 93.2617 0 189.697 0 308.838C0 427.979 96.4355 524.414 215.576 524.414ZM281.738 122.559L193.115 210.693C188.965 214.355 187.5 219.238 187.5 224.365C187.5 235.596 195.801 244.141 206.543 244.141C212.646 244.141 217.041 241.943 220.703 238.525L321.289 137.451C325.684 133.057 327.637 128.174 327.637 122.803C327.637 117.432 325.439 112.061 321.289 108.154L220.947 6.10352C217.041 2.44141 212.646 0 206.543 0C195.801 0 187.5 9.0332 187.5 20.0195C187.5 25.1465 188.965 30.5176 192.871 34.1797Z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="ncb-toolbar">
+        <button class="ncb-tool" aria-label="Précédent">
+          <svg width="13" height="22" viewBox="0 0 13 22" fill="none"><path d="M11 2 2 11l9 9" stroke="#1B1B1B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="ncb-tool" aria-label="Suivant" disabled>
+          <svg width="13" height="22" viewBox="0 0 13 22" fill="none"><path d="M2 2l9 9-9 9" stroke="#C4C4C6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="ncb-tool" id="ncb-share" aria-label="Partager">
+          <svg width="16" height="25" viewBox="0 0 433.35 670.654" fill="#1B1B1B">
+            <path d="M433.35 296.387L433.35 484.375C433.35 550.049 396.729 586.426 331.055 586.426L102.051 586.426C36.377 586.426 0 550.049 0 484.375L0 296.387C0 230.957 36.377 194.336 102.051 194.336L151.367 194.336L151.367 233.643L102.051 233.643C62.0117 233.643 39.3066 256.348 39.3066 296.387L39.3066 484.375C39.3066 524.658 62.0117 547.119 102.051 547.119L331.055 547.119C371.338 547.119 394.043 524.658 394.043 484.375L394.043 296.387C394.043 256.348 371.338 233.643 331.055 233.643L281.738 233.643L281.738 194.336L331.055 194.336C396.729 194.336 433.35 230.957 433.35 296.387Z"/>
+            <path d="M133.789 152.1C138.428 152.1 143.799 150.146 147.217 146.24L185.059 105.957L216.553 72.5098L248.291 105.957L285.889 146.24C289.307 150.146 294.434 152.1 299.072 152.1C309.326 152.1 316.895 145.02 316.895 135.01C316.895 129.639 314.941 125.732 311.279 122.07L230.713 44.4336C225.83 39.5508 221.68 38.0859 216.553 38.0859C211.67 38.0859 207.52 39.5508 202.393 44.4336L122.07 122.07C118.408 125.732 116.211 129.639 116.211 135.01C116.211 145.02 123.535 152.1 133.789 152.1ZM216.553 395.264C227.051 395.264 236.084 386.719 236.084 376.465L236.084 128.174L233.154 62.2559C232.666 53.4668 225.586 45.8984 216.553 45.8984C207.764 45.8984 200.684 53.4668 200.195 62.2559L197.266 128.174L197.266 376.465C197.266 386.719 206.055 395.264 216.553 395.264Z"/>
+          </svg>
+        </button>
+        <button class="ncb-tool" aria-label="Signets">
+          <svg width="14" height="23" viewBox="0 0 329.102 524.658" fill="#1B1B1B"><path d="M25.8789 523.682C37.8418 523.682 44.9219 516.846 66.8945 495.605L162.354 401.611C163.574 400.391 165.771 400.391 166.748 401.611L262.207 495.605C284.18 516.846 291.26 523.682 303.223 523.682C319.58 523.682 329.102 512.939 329.102 493.896L329.102 70.0684C329.102 23.6816 305.908 0 260.01 0L69.0918 0C23.1934 0 0 23.6816 0 70.0684L0 493.896C0 512.939 9.52148 523.682 25.8789 523.682ZM45.8984 457.764C42.4805 461.182 38.5742 460.205 38.5742 455.322L38.5742 70.5566C38.5742 49.5605 49.5605 38.5742 71.0449 38.5742L258.301 38.5742C279.541 38.5742 290.527 49.5605 290.527 70.5566L290.527 455.322C290.527 460.205 286.865 461.182 283.203 457.764L177.49 355.225C169.678 347.656 159.424 347.656 151.611 355.225Z"/></svg>
+        </button>
+        <button class="ncb-tool" aria-label="Onglets">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <rect x="2" y="6" width="14" height="14" rx="3" stroke="#1B1B1B" stroke-width="2"/>
+            <path d="M6 6V5a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-1" stroke="#1B1B1B" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ===== MORPH : bouton Partager → feuille de partage ===== -->
+    <div class="t-morph" id="morph" data-open="false">
+      <button class="t-morph-plus" id="morph-plus" aria-expanded="false" tabindex="-1" aria-label="Partager">
+        <svg width="16" height="25" viewBox="0 0 433.35 670.654" fill="#1B1B1B">
+          <path d="M433.35 296.387L433.35 484.375C433.35 550.049 396.729 586.426 331.055 586.426L102.051 586.426C36.377 586.426 0 550.049 0 484.375L0 296.387C0 230.957 36.377 194.336 102.051 194.336L151.367 194.336L151.367 233.643L102.051 233.643C62.0117 233.643 39.3066 256.348 39.3066 296.387L39.3066 484.375C39.3066 524.658 62.0117 547.119 102.051 547.119L331.055 547.119C371.338 547.119 394.043 524.658 394.043 484.375L394.043 296.387C394.043 256.348 371.338 233.643 331.055 233.643L281.738 233.643L281.738 194.336L331.055 194.336C396.729 194.336 433.35 230.957 433.35 296.387Z"/>
+          <path d="M133.789 152.1C138.428 152.1 143.799 150.146 147.217 146.24L185.059 105.957L216.553 72.5098L248.291 105.957L285.889 146.24C289.307 150.146 294.434 152.1 299.072 152.1C309.326 152.1 316.895 145.02 316.895 135.01C316.895 129.639 314.941 125.732 311.279 122.07L230.713 44.4336C225.83 39.5508 221.68 38.0859 216.553 38.0859C211.67 38.0859 207.52 39.5508 202.393 44.4336L122.07 122.07C118.408 125.732 116.211 129.639 116.211 135.01C116.211 145.02 123.535 152.1 133.789 152.1ZM216.553 395.264C227.051 395.264 236.084 386.719 236.084 376.465L236.084 128.174L233.154 62.2559C232.666 53.4668 225.586 45.8984 216.553 45.8984C207.764 45.8984 200.684 53.4668 200.195 62.2559L197.266 128.174L197.266 376.465C197.266 386.719 206.055 395.264 216.553 395.264Z"/>
+        </svg>
+      </button>
+
+      <div class="t-morph-menu">
+        <div class="activity">
+          <div class="grabber"></div>
+
+          <div class="header">
+            <div class="thumb-wrap">
+              <div class="thumb"><img src="/icon-192.png" alt="Mosaic Dictée"></div>
+            </div>
+            <div class="middle">
+              <div class="title-block">
+                <div class="title">Mosaic Dictée</div>
+                <div class="subtitle" data-host>dictee.mosaicfin.com</div>
+              </div>
+            </div>
+            <div class="close"><span>✕</span></div>
+          </div>
+
+          <div class="sep"></div>
+
+          <div class="row">
+            <div class="contact">
+              <div class="avatar"><img src="/pwa-anim/avatars/philippe-bernieri.webp" alt="Philippe Bernieri">
+                <div class="badge"><img src="/pwa-anim/messages.webp" alt="Messages"></div>
+              </div>
+              <div class="names"><span class="fn">Philippe</span><span class="ln">Bernieri</span></div>
+            </div>
+            <div class="contact">
+              <div class="avatar"><img src="/pwa-anim/avatars/oscar-baron.webp" alt="Oscar Baron">
+                <div class="badge"><img src="/pwa-anim/messages.webp" alt="Messages"></div>
+              </div>
+              <div class="names"><span class="fn">Oscar</span><span class="ln">Baron</span></div>
+            </div>
+            <div class="contact">
+              <div class="avatar"><img src="/pwa-anim/avatars/jean-philippe-deltour.webp" alt="Jean-Philippe Deltour">
+                <div class="badge"><img src="/pwa-anim/messages.webp" alt="Messages"></div>
+              </div>
+              <div class="names"><span class="fn">Jean-Ph.</span><span class="ln">Deltour</span></div>
+            </div>
+          </div>
+
+          <div class="sep"></div>
+
+          <div class="row">
+            <div class="app"><div class="app-icon"><img src="/pwa-anim/airdrop.webp" alt="AirDrop"></div><div class="app-name">AirDrop</div></div>
+            <div class="app"><div class="app-icon"><img src="/pwa-anim/imessage.webp" alt="Messages"></div><div class="app-name">Messages</div></div>
+            <div class="app"><div class="app-icon"><img src="/pwa-anim/notion.webp" alt="Notion"></div><div class="app-name">Notion</div></div>
+            <div class="app"><div class="app-icon"><img src="/pwa-anim/apple-music.webp" alt="Music"></div><div class="app-name">Music</div></div>
+            <div class="app"><div class="app-icon ic-reminders">☑️</div><div class="app-name">Rappels</div></div>
+          </div>
+
+          <div class="sep"></div>
+
+          <div class="actions-btn">
+            <div class="action-btn"><div class="action-symbol"><svg viewBox="0 0 499.268 614.99" width="26" height="32" aria-label="Copier"><path d="M351.562 24.4141L474.854 149.658C493.164 168.457 499.268 187.5 499.268 217.529L499.268 415.771C499.268 466.553 473.877 492.432 423.584 492.432L380.859 492.432L380.859 453.125L421.387 453.125C446.777 453.125 459.961 439.453 459.961 415.039L459.961 206.299L345.703 206.299C317.627 206.299 303.955 192.871 303.955 164.551L303.955 39.3066L196.045 39.3066C170.654 39.3066 157.715 53.2227 157.715 77.3926L157.715 121.826L118.408 121.826L118.408 76.6602C118.408 25.8789 143.799 0 194.092 0L287.598 0C313.721 0 334.229 6.5918 351.562 24.4141ZM339.355 158.691C339.355 167.236 342.773 170.898 351.318 170.898L449.707 170.898L339.355 58.5938Z" fill="#1A1A1A"/><path d="M0 537.598C0 588.623 25.1465 614.258 75.6836 614.258L305.176 614.258C355.713 614.258 380.859 588.379 380.859 537.598L380.859 346.924C380.859 315.674 377.197 302.002 357.666 281.982L223.145 145.02C204.59 125.977 189.209 121.826 161.865 121.826L75.6836 121.826C25.3906 121.826 0 147.461 0 198.486ZM39.3066 536.865L39.3066 198.975C39.3066 175.049 52.2461 161.133 77.6367 161.133L157.715 161.133L157.715 302.734C157.715 333.496 173.34 348.877 203.613 348.877L341.553 348.877L341.553 536.865C341.553 561.279 328.369 574.951 303.223 574.951L77.3926 574.951C52.2461 574.951 39.3066 561.279 39.3066 536.865ZM208.252 312.012C198.486 312.012 194.58 308.105 194.58 298.34L194.58 170.166L333.984 312.012Z" fill="#1A1A1A"/></svg></div><div class="action-label">Copier</div></div>
+            <div class="action-btn" id="act-home"><div class="action-symbol"><svg viewBox="0 0 450.195 449.951" width="29" height="29" aria-label="Sur l'écran d'accueil"><path d="M132.812 449.951L317.139 449.951C360.107 449.951 393.555 437.5 415.527 415.527C438.232 393.066 450.195 359.619 450.195 316.895L450.195 133.057C450.195 90.332 438.232 56.8848 415.527 34.4238C393.311 12.207 360.107 0 317.139 0L132.812 0C90.0879 0 56.3965 12.4512 34.4238 34.4238C11.9629 56.8848 0 90.332 0 133.057L0 316.895C0 359.619 11.7188 393.066 34.4238 415.527C56.6406 437.744 90.0879 449.951 132.812 449.951ZM132.812 410.645C102.539 410.645 78.8574 402.1 63.4766 386.719C47.6074 371.094 39.3066 347.656 39.3066 316.895L39.3066 133.057C39.3066 102.295 47.6074 78.8574 63.4766 63.2324C78.6133 48.0957 102.539 39.3066 132.812 39.3066L317.139 39.3066C347.656 39.3066 371.094 47.8516 386.719 63.2324C402.588 78.8574 410.889 102.295 410.889 133.057L410.889 316.895C410.889 347.656 402.588 371.094 386.719 386.719C371.338 401.855 347.656 410.645 317.139 410.645Z" fill="#1A1A1A"/><path d="M245.605 316.895L245.605 132.324C245.605 119.873 237.061 111.328 224.854 111.328C212.891 111.328 204.834 119.873 204.834 132.324L204.834 316.895C204.834 329.102 212.891 337.646 224.854 337.646C237.061 337.646 245.605 329.346 245.605 316.895ZM133.057 244.873L317.627 244.873C329.834 244.873 338.379 236.816 338.379 224.854C338.379 212.646 329.834 204.102 317.627 204.102L133.057 204.102C120.361 204.102 112.061 212.646 112.061 224.854C112.061 236.816 120.605 244.873 133.057 244.873Z" fill="#1A1A1A"/></svg></div><div class="action-label">Sur l'écran d'accueil</div></div>
+            <div class="action-btn"><div class="action-symbol"><svg viewBox="0 0 477.051 481.689" width="28" height="28" aria-label="Rechercher"><path d="M0 194.824C0 302.246 87.4023 389.648 194.824 389.648C237.305 389.648 276.123 375.977 308.105 353.027L428.223 473.389C433.838 479.004 441.162 481.689 448.975 481.689C465.576 481.689 477.051 469.238 477.051 452.881C477.051 445.068 474.121 437.988 468.994 432.861L349.609 312.744C374.756 280.029 389.648 239.258 389.648 194.824C389.648 87.4023 302.246 0 194.824 0C87.4023 0 0 87.4023 0 194.824ZM41.748 194.824C41.748 110.352 110.352 41.748 194.824 41.748C279.297 41.748 347.9 110.352 347.9 194.824C347.9 279.297 279.297 347.9 194.824 347.9C110.352 347.9 41.748 279.297 41.748 194.824Z" fill="#1A1A1A"/></svg></div><div class="action-label">Rechercher</div></div>
+            <div class="action-btn"><div class="action-symbol"><svg viewBox="0 0 551.514 533.936" width="31" height="30" aria-label="Imprimer"><path d="M454.834 76.9043L454.834 89.8438L416.992 89.8438L416.992 74.2188C416.992 53.7109 406.738 43.7012 386.23 43.7012L165.283 43.7012C145.02 43.7012 134.521 53.7109 134.521 74.2188L134.521 89.8438L96.6797 89.8438L96.6797 76.9043C96.6797 29.2969 122.803 8.05664 165.771 8.05664L385.742 8.05664C431.152 8.05664 454.834 29.2969 454.834 76.9043Z" fill="#1A1A1A"/><path d="M551.514 161.377L551.514 389.893C551.514 437.5 526.367 461.426 479.004 461.426L453.125 461.426L453.125 424.561L479.492 424.561C500.977 424.561 512.207 413.33 512.207 391.846L512.207 159.424C512.207 137.939 500.977 126.709 479.492 126.709L72.2656 126.709C50.5371 126.709 39.5508 137.939 39.5508 159.424L39.5508 391.846C39.5508 413.33 50.5371 424.561 72.2656 424.561L98.3887 424.561L98.3887 461.426L72.7539 461.426C25.1465 461.426 0 437.5 0 389.893L0 161.377C0 114.014 27.5879 89.8438 72.7539 89.8438L479.004 89.8438C526.367 89.8438 551.514 114.014 551.514 161.377ZM455.078 184.57C455.078 201.416 441.162 215.088 424.805 215.088C407.959 215.088 394.287 201.416 394.287 184.57C394.287 168.213 407.959 154.297 424.805 154.297C441.162 154.297 455.078 168.213 455.078 184.57Z" fill="#1A1A1A"/><path d="M145.02 533.936L406.494 533.936C437.5 533.936 453.125 519.775 453.125 487.305L453.125 288.086C453.125 255.615 437.5 241.455 406.494 241.455L145.02 241.455C115.479 241.455 98.3887 255.615 98.3887 288.086L98.3887 487.305C98.3887 519.775 114.014 533.936 145.02 533.936ZM157.227 497.07C144.287 497.07 137.695 490.723 137.695 477.539L137.695 297.607C137.695 284.424 144.287 278.32 157.227 278.32L394.531 278.32C407.715 278.32 413.818 284.424 413.818 297.607L413.818 477.539C413.818 490.723 407.715 497.07 394.531 497.07ZM191.162 360.107L360.84 360.107C369.629 360.107 375.977 353.516 375.977 344.727C375.977 336.426 369.629 330.078 360.84 330.078L191.162 330.078C182.373 330.078 175.781 336.426 175.781 344.727C175.781 353.516 182.373 360.107 191.162 360.107ZM191.162 445.312L360.84 445.312C369.629 445.312 375.977 438.721 375.977 430.42C375.977 421.875 369.629 415.283 360.84 415.283L191.162 415.283C182.373 415.283 175.781 421.875 175.781 430.42C175.781 438.721 182.373 445.312 191.162 445.312Z" fill="#1A1A1A"/></svg></div><div class="action-label">Imprimer</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== ÉTAPE 3 : Ajouter sur l'écran d'accueil (Panel reveal) ===== -->
+    <div class="t-panel-slide ath" id="panel" data-open="false">
+      <div class="ath-status">
+        <span class="t">9:41</span>
+        <div class="isl"></div>
+        <div class="ic">
+          <svg width="27" height="11" viewBox="0 0 621.094 256.348" fill="#1B1B1B" aria-hidden="true"><path d="M25.6348 256.348L84.4727 256.348C99.8535 256.348 110.107 245.605 110.107 229.736L110.107 158.691C110.107 142.578 99.8535 132.08 84.4727 132.08L25.6348 132.08C10.2539 132.08 0 142.578 0 158.691L0 229.736C0 245.605 10.2539 256.348 25.6348 256.348ZM196.045 256.348L254.883 256.348C270.264 256.348 280.518 245.605 280.518 229.736L280.518 119.385C280.518 103.516 270.264 92.7734 254.883 92.7734L196.045 92.7734C180.664 92.7734 170.41 103.516 170.41 119.385L170.41 229.736C170.41 245.605 180.664 256.348 196.045 256.348ZM366.211 256.348L425.049 256.348C440.43 256.348 450.684 245.605 450.684 229.736L450.684 69.8242C450.684 53.7109 440.43 42.9688 425.049 42.9688L366.211 42.9688C351.074 42.9688 340.576 53.7109 340.576 69.8242L340.576 229.736C340.576 245.605 351.074 256.348 366.211 256.348ZM536.621 256.348L595.703 256.348C611.084 256.348 621.094 245.605 621.094 229.736L621.094 26.6113C621.094 10.7422 611.084 0 595.703 0L536.621 0C521.24 0 510.986 10.7422 510.986 26.6113L510.986 229.736C510.986 245.605 521.24 256.348 536.621 256.348Z"/></svg>
+          <svg width="17" height="12" viewBox="0 0 562.262 406.006" fill="#1B1B1B" aria-hidden="true"><path d="M36.9902 171.143C41.873 175.781 48.7089 175.781 53.3476 170.898C113.406 107.178 192.508 73.4863 281.131 73.4863C370.242 73.4863 449.832 107.422 509.402 171.143C513.797 175.537 520.389 175.293 525.271 170.654L558.963 136.963C563.357 132.568 563.113 127.197 559.695 123.047C502.322 52.2461 394.412 0.244141 281.131 0.244141C168.094 0.244141 59.6952 52.2461 2.56634 123.047C-0.851626 127.197-0.851626 132.568 3.29877 136.963Z"/><path d="M138.309 273.193C143.68 278.32 150.271 277.588 155.154 272.217C184.451 239.746 232.303 216.064 281.131 216.309C330.447 216.064 378.299 240.479 408.084 272.949C412.478 278.076 418.582 277.832 423.953 272.949L461.795 235.352C465.701 231.445 466.189 226.074 462.527 221.68C425.662 176.514 357.303 142.578 281.131 142.578C204.959 142.578 136.6 176.514 99.7343 221.68C96.0722 226.074 96.3163 230.957 100.467 235.352Z"/><path d="M281.131 406.006C286.502 406.006 291.141 403.564 300.662 394.287L360.232 337.158C363.894 333.496 364.871 328.125 361.453 323.73C345.584 303.223 315.555 285.4 281.131 285.4C245.73 285.4 215.701 303.955 199.832 325.195C197.391 329.102 198.367 333.496 202.273 337.158L261.6 394.287C271.121 403.32 275.76 406.006 281.131 406.006Z"/></svg>
+          <svg width="26" height="12" viewBox="0 0 722.656 330.322" fill="#1B1B1B" aria-hidden="true"><path opacity="0.4" d="M130.127 330.322L513.916 330.322C555.664 330.322 590.82 326.416 615.723 301.514C640.625 276.611 644.287 241.943 644.287 200.195L644.287 130.127C644.287 88.3789 640.625 53.7109 615.723 28.8086C590.82 3.90625 555.664 0 513.916 0L129.639 0C88.623 0 53.4668 3.90625 28.5645 28.8086C3.66211 53.7109 0 88.623 0 129.395L0 200.195C0 241.943 3.66211 276.611 28.5645 301.514C53.4668 326.416 88.623 330.322 130.127 330.322ZM123.535 291.016C98.3887 291.016 72.0215 287.598 57.1289 272.949C42.4805 258.057 39.3066 231.934 39.3066 206.787L39.3066 124.023C39.3066 98.3887 42.4805 72.2656 57.1289 57.373C72.0215 42.4805 98.6328 39.3066 124.268 39.3066L520.752 39.3066C545.898 39.3066 572.266 42.7246 586.914 57.373C601.807 72.2656 604.98 98.1445 604.98 123.291L604.98 206.787C604.98 231.934 601.807 258.057 586.914 272.949C572.266 287.598 545.898 291.016 520.752 291.016ZM677.49 228.271C696.777 227.051 722.656 202.393 722.656 165.039C722.656 127.93 696.777 103.271 677.49 102.051Z"/><path d="M110.596 262.695L406.494 262.695C423.34 262.695 433.105 260.254 439.941 253.418C446.777 246.582 449.219 236.816 449.219 219.971L449.219 110.352C449.219 93.5059 446.777 83.7402 439.941 76.9043C433.105 70.0684 423.096 67.627 406.494 67.627L111.328 67.627C93.75 67.627 83.7402 70.0684 77.1484 76.9043C70.3125 83.7402 67.8711 93.75 67.8711 110.84L67.8711 219.971C67.8711 236.816 70.3125 246.582 77.1484 253.418C83.9844 260.254 93.9941 262.695 110.596 262.695Z"/></svg>
+        </div>
+      </div>
+
+      <div class="ath-sheet">
+        <div class="ath-head">
+          <button class="ath-x" aria-label="Fermer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 5l14 14M19 5 5 19"/></svg></button>
+          <div class="ath-title">Sur l'écran d'accueil</div>
+          <button class="ath-add" id="ath-add">Ajouter</button>
+        </div>
+        <div class="ath-id">
+          <div class="ath-icon"><img src="/icon-192.png" alt="Mosaic Dictée"></div>
+          <div class="ath-fields">
+            <div class="ath-name-row">
+              <span class="ath-name">Dictée<span class="ath-caret"></span></span>
+              <button class="ath-clear" aria-label="Effacer"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8a8a8e" stroke-width="2.6"><path d="M5 5l14 14M19 5 5 19"/></svg></button>
+            </div>
+            <div class="ath-url" data-host-url>https://dictee.mosaicfin.com</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ath-webapp">
+        <span>Ouvrir comme app web</span>
+        <div class="ath-toggle"></div>
+      </div>
+      <div class="ath-hint">Une icône sera ajoutée à votre écran d'accueil pour accéder rapidement à ce site web.</div>
+
+      <div class="ath-spacer"></div>
+
+      <div class="ath-kb">
+        <div class="ath-pred"><span>"Dictée"</span><span>Dictée</span><span>Note</span></div>
+        <div id="kb"></div>
+        <div class="ath-globe"><svg width="24" height="24" viewBox="0 0 498.047 498.291" fill="#1b1b1b" aria-hidden="true"><path d="M498.047 249.023C498.047 386.475 386.475 498.047 249.023 498.047C111.572 498.047 0 386.475 0 249.023C0 111.572 111.572 0 249.023 0C386.475 0 498.047 111.572 498.047 249.023ZM236.836 15.1132C219.986 18.0189 204.151 27.2324 190.004 41.5882C157.012 50.8941 127.238 67.869 102.784 90.5335C100.708 89.3674 98.91 88.0349 97.168 86.6699C90.0879 81.0547 80.8105 80.3223 74.4629 86.4258C68.3594 92.5293 67.8711 102.295 74.707 108.643C76.6789 110.423 78.7732 112.17 80.9976 113.877C54.22 146.85 37.1228 187.961 33.8778 232.91L29.2969 232.91C20.5078 232.91 13.1836 240.234 13.1836 249.023C13.1836 257.812 20.5078 264.893 29.2969 264.893L33.8672 264.893C37.0864 310.281 54.434 351.766 81.6208 384.918C79.1623 386.774 76.8616 388.679 74.707 390.625C67.8711 396.729 68.3594 406.738 74.4629 412.842C80.8105 418.945 90.0879 418.213 97.168 412.598C99.1459 411.033 101.196 409.512 103.545 408.177C127.798 430.484 157.244 447.193 189.838 456.416C203.61 470.489 218.983 479.674 235.313 482.902C238.045 487.699 243.153 490.967 249.023 490.967C254.908 490.967 260.137 487.683 262.936 482.866C279.191 479.598 294.494 470.431 308.209 456.416C340.802 447.193 370.249 430.484 394.502 408.177C396.851 409.512 398.901 411.033 400.879 412.598C407.959 418.213 417.236 418.945 423.584 412.842C429.688 406.738 430.176 396.729 423.34 390.625C421.185 388.679 418.885 386.774 416.426 384.918C443.613 351.766 460.96 310.281 464.18 264.893L473.633 264.893C482.422 264.893 489.746 257.812 489.746 249.023C489.746 240.234 482.422 232.91 473.633 232.91L464.169 232.91C460.924 187.961 443.827 146.85 417.049 113.877C419.274 112.17 421.368 110.423 423.34 108.643C430.176 102.295 429.688 92.5293 423.584 86.4258C417.236 80.3223 407.959 81.0547 400.879 86.6699C399.137 88.0349 397.339 89.3674 395.263 90.5335C370.809 67.869 341.035 50.8941 308.042 41.5882C293.944 27.2809 278.168 18.0811 261.382 15.1429C258.41 11.5751 253.946 9.27734 249.023 9.27734C244.115 9.27734 239.739 11.5619 236.836 15.1132Z"/><path d="M233.154 450.898L233.154 474.854C233.154 477.77 233.934 480.524 235.309 482.895C199.434 475.701 168.122 440.099 148.333 386.694C158.055 383.37 168.694 380.72 180.03 378.633C193.594 415.209 212.427 441.849 233.154 450.898ZM349.714 386.694C329.966 439.989 298.741 475.554 262.956 482.834C264.344 480.477 265.137 477.744 265.137 474.854L265.137 450.807C285.767 441.641 304.505 415.066 318.017 378.633C329.353 380.72 339.992 383.37 349.714 386.694ZM359.095 356.832C349.164 353.603 338.524 350.831 327.34 348.55C333.975 323.184 338.215 294.694 339.226 264.893L371.918 264.893C370.996 298.367 366.476 329.384 359.095 356.832ZM170.707 348.55C159.523 350.831 148.883 353.603 138.952 356.832C131.571 329.384 127.051 298.367 126.129 264.893L158.821 264.893C159.832 294.694 164.072 323.184 170.707 348.55ZM170.354 150.65C163.997 175.566 159.903 203.509 158.844 232.91L126.156 232.91C127.139 199.96 131.559 169.43 138.745 142.37C148.633 145.594 159.225 148.363 170.354 150.65ZM371.891 232.91L339.203 232.91C338.144 203.509 334.05 175.566 327.693 150.65C338.822 148.363 349.414 145.594 359.302 142.37C366.488 169.43 370.908 199.96 371.891 232.91ZM233.154 25.3906L233.154 47.1167C212.187 56.1962 193.158 83.1619 179.566 120.466C168.277 118.369 157.697 115.701 148.025 112.377C168.069 57.6697 200.111 21.5322 236.909 15.0303C234.563 17.842 233.154 21.4706 233.154 25.3906ZM350.022 112.377C340.35 115.701 329.77 118.369 318.481 120.466C304.941 83.3057 286.006 56.4044 265.137 47.2065L265.137 25.3906C265.137 21.4774 263.685 17.8546 261.292 15.0446C298.024 21.6323 330.005 57.7453 350.022 112.377Z"/><path d="M249.023 490.967C257.812 490.967 265.137 483.643 265.137 474.854L265.137 25.3906C265.137 16.6016 257.812 9.27734 249.023 9.27734C240.234 9.27734 233.154 16.6016 233.154 25.3906L233.154 474.854C233.154 483.643 240.234 490.967 249.023 490.967ZM97.168 412.598C129.883 386.719 182.373 372.803 249.023 372.803C315.674 372.803 368.164 386.719 400.879 412.598C407.959 418.213 417.236 418.945 423.584 412.842C429.688 406.738 430.176 396.729 423.34 390.625C390.625 361.084 324.219 340.82 249.023 340.82C173.828 340.82 107.422 361.084 74.707 390.625C67.8711 396.729 68.3594 406.738 74.4629 412.842C80.8105 418.945 90.0879 418.213 97.168 412.598ZM29.2969 264.893L473.633 264.893C482.422 264.893 489.746 257.812 489.746 249.023C489.746 240.234 482.422 232.91 473.633 232.91L29.2969 232.91C20.5078 232.91 13.1836 240.234 13.1836 249.023C13.1836 257.812 20.5078 264.893 29.2969 264.893ZM249.023 158.447C324.219 158.447 390.625 138.184 423.34 108.643C430.176 102.295 429.688 92.5293 423.584 86.4258C417.236 80.3223 407.959 81.0547 400.879 86.6699C368.164 112.305 315.674 126.465 249.023 126.465C182.373 126.465 129.883 112.305 97.168 86.6699C90.0879 81.0547 80.8105 80.3223 74.4629 86.4258C68.3594 92.5293 67.8711 102.295 74.707 108.643C107.422 138.184 173.828 158.447 249.023 158.447Z"/></svg></div>
+      </div>
+    </div>
+
+
+    <!-- ===== ÉCRAN D'ACCUEIL (état final + réouverture en boucle) ===== -->
+    <div class="hs" id="hs">
+      <div class="hs-status">
+        <span class="hs-time">9:41</span>
+        <div class="hs-isl"></div>
+        <div class="hs-ic"><svg width="27" height="11" viewBox="0 0 621.094 256.348" fill="#1b1b1b" aria-hidden="true"><path d="M25.6348 256.348L84.4727 256.348C99.8535 256.348 110.107 245.605 110.107 229.736L110.107 158.691C110.107 142.578 99.8535 132.08 84.4727 132.08L25.6348 132.08C10.2539 132.08 0 142.578 0 158.691L0 229.736C0 245.605 10.2539 256.348 25.6348 256.348ZM196.045 256.348L254.883 256.348C270.264 256.348 280.518 245.605 280.518 229.736L280.518 119.385C280.518 103.516 270.264 92.7734 254.883 92.7734L196.045 92.7734C180.664 92.7734 170.41 103.516 170.41 119.385L170.41 229.736C170.41 245.605 180.664 256.348 196.045 256.348ZM366.211 256.348L425.049 256.348C440.43 256.348 450.684 245.605 450.684 229.736L450.684 69.8242C450.684 53.7109 440.43 42.9688 425.049 42.9688L366.211 42.9688C351.074 42.9688 340.576 53.7109 340.576 69.8242L340.576 229.736C340.576 245.605 351.074 256.348 366.211 256.348ZM536.621 256.348L595.703 256.348C611.084 256.348 621.094 245.605 621.094 229.736L621.094 26.6113C621.094 10.7422 611.084 0 595.703 0L536.621 0C521.24 0 510.986 10.7422 510.986 26.6113L510.986 229.736C510.986 245.605 521.24 256.348 536.621 256.348Z"/></svg><svg width="17" height="12" viewBox="0 0 562.262 406.006" fill="#1b1b1b" aria-hidden="true"><path d="M36.9902 171.143C41.873 175.781 48.7089 175.781 53.3476 170.898C113.406 107.178 192.508 73.4863 281.131 73.4863C370.242 73.4863 449.832 107.422 509.402 171.143C513.797 175.537 520.389 175.293 525.271 170.654L558.963 136.963C563.357 132.568 563.113 127.197 559.695 123.047C502.322 52.2461 394.412 0.244141 281.131 0.244141C168.094 0.244141 59.6952 52.2461 2.56634 123.047C-0.851626 127.197-0.851626 132.568 3.29877 136.963Z"/><path d="M138.309 273.193C143.68 278.32 150.271 277.588 155.154 272.217C184.451 239.746 232.303 216.064 281.131 216.309C330.447 216.064 378.299 240.479 408.084 272.949C412.478 278.076 418.582 277.832 423.953 272.949L461.795 235.352C465.701 231.445 466.189 226.074 462.527 221.68C425.662 176.514 357.303 142.578 281.131 142.578C204.959 142.578 136.6 176.514 99.7343 221.68C96.0722 226.074 96.3163 230.957 100.467 235.352Z"/><path d="M281.131 406.006C286.502 406.006 291.141 403.564 300.662 394.287L360.232 337.158C363.894 333.496 364.871 328.125 361.453 323.73C345.584 303.223 315.555 285.4 281.131 285.4C245.73 285.4 215.701 303.955 199.832 325.195C197.391 329.102 198.367 333.496 202.273 337.158L261.6 394.287C271.121 403.32 275.76 406.006 281.131 406.006Z"/></svg><svg width="26" height="12" viewBox="0 0 722.656 330.322" fill="#1b1b1b" aria-hidden="true"><path opacity="0.4" d="M130.127 330.322L513.916 330.322C555.664 330.322 590.82 326.416 615.723 301.514C640.625 276.611 644.287 241.943 644.287 200.195L644.287 130.127C644.287 88.3789 640.625 53.7109 615.723 28.8086C590.82 3.90625 555.664 0 513.916 0L129.639 0C88.623 0 53.4668 3.90625 28.5645 28.8086C3.66211 53.7109 0 88.623 0 129.395L0 200.195C0 241.943 3.66211 276.611 28.5645 301.514C53.4668 326.416 88.623 330.322 130.127 330.322ZM123.535 291.016C98.3887 291.016 72.0215 287.598 57.1289 272.949C42.4805 258.057 39.3066 231.934 39.3066 206.787L39.3066 124.023C39.3066 98.3887 42.4805 72.2656 57.1289 57.373C72.0215 42.4805 98.6328 39.3066 124.268 39.3066L520.752 39.3066C545.898 39.3066 572.266 42.7246 586.914 57.373C601.807 72.2656 604.98 98.1445 604.98 123.291L604.98 206.787C604.98 231.934 601.807 258.057 586.914 272.949C572.266 287.598 545.898 291.016 520.752 291.016ZM677.49 228.271C696.777 227.051 722.656 202.393 722.656 165.039C722.656 127.93 696.777 103.271 677.49 102.051Z"/><path d="M110.596 262.695L406.494 262.695C423.34 262.695 433.105 260.254 439.941 253.418C446.777 246.582 449.219 236.816 449.219 219.971L449.219 110.352C449.219 93.5059 446.777 83.7402 439.941 76.9043C433.105 70.0684 423.096 67.627 406.494 67.627L111.328 67.627C93.75 67.627 83.7402 70.0684 77.1484 76.9043C70.3125 83.7402 67.8711 93.75 67.8711 110.84L67.8711 219.971C67.8711 236.816 70.3125 246.582 77.1484 253.418C83.9844 260.254 93.9941 262.695 110.596 262.695Z"/></svg></div>
+      </div>
+
+      <div class="hs-apps">
+        <div class="hs-row"><div class="hs-app"><div class="hs-ico"><img src="/pwa-anim/claude.webp" alt="Claude"></div><div class="hs-name">Claude</div></div><div class="hs-app"><div class="hs-ico"><img src="/pwa-anim/qonto.webp" alt="Qonto"></div><div class="hs-name">Qonto</div></div><div class="hs-app"><div class="hs-ico on-white"><img src="/pwa-anim/notion.webp" alt="Notion"></div><div class="hs-name">Notion</div></div><div class="hs-app"><div class="hs-ico on-white"><img src="/pwa-anim/linkedin.webp" alt="LinkedIn"></div><div class="hs-name">LinkedIn</div></div></div>
+        <div class="hs-row"><div class="hs-app"><div class="hs-ico"><img src="/pwa-anim/whatsapp.svg" alt="WhatsApp"></div><div class="hs-name">WhatsApp</div></div><div class="hs-app"><div class="hs-ico"><img src="/pwa-anim/gmail.webp" alt="Gmail"></div><div class="hs-name">Gmail</div></div><div class="hs-app"><div class="hs-ico"><img src="/pwa-anim/calculator.webp" alt="Calculette"></div><div class="hs-name">Calculette</div></div>
+          <div class="hs-app installed" id="hsNotion">
+            <div class="hs-ico" id="hsNotionIco"><img src="/icon-192.png" alt="Mosaic Dictée"></div>
+            <div class="hs-name">Dictée</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hs-searchwrap"><div class="hs-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg> Rechercher</div></div>
+
+      <div class="hs-dock-wrap">
+        <div class="hs-dock">
+          <div class="hs-ico"><img src="/pwa-anim/phone.webp" alt="Téléphone"></div>
+          <div class="hs-ico"><img src="/pwa-anim/safari.webp" alt="Safari"></div>
+          <div class="hs-ico"><img src="/pwa-anim/apple-music.webp" alt="Music"></div>
+          <div class="hs-ico"><img src="/pwa-anim/messages.webp" alt="Messages"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== OUVERTURE D'APP (glass morphism → révèle la page de départ) ===== -->
+    <div class="appopen" id="appopen"><div class="appopen-snap"><div class="ncb-page">
+      <div class="ncb-halo"></div>
+      <div class="ncb-app">
+        <header class="ncb-topbar">
+          <div class="ncb-sk ncb-logo"></div>
+          <div class="ncb-actions">
+            <div class="ncb-sk ncb-circle"></div>
+            <div class="ncb-sk ncb-circle"></div>
+            <div class="ncb-sk ncb-circle"></div>
+          </div>
+        </header>
+        <div class="ncb-sk ncb-hero">
+          <div class="ncb-sk2 ncb-hero-l1"></div>
+          <div class="ncb-sk2 ncb-hero-l2"></div>
+          <div class="ncb-sk2 ncb-hero-pill"></div>
+        </div>
+        <div class="ncb-segmented">
+          <div class="ncb-sk ncb-seg ncb-seg--active"></div>
+          <div class="ncb-sk ncb-seg"></div>
+          <div class="ncb-sk ncb-seg"></div>
+        </div>
+        <div class="ncb-sk ncb-title"></div>
+        <div class="ncb-grid">
+          <div class="ncb-card"><div class="ncb-sk2 ncb-card-thumb"></div><div class="ncb-sk2 ncb-card-l1"></div><div class="ncb-sk2 ncb-card-l2"></div></div>
+          <div class="ncb-card"><div class="ncb-sk2 ncb-card-thumb"></div><div class="ncb-sk2 ncb-card-l1"></div><div class="ncb-sk2 ncb-card-l2"></div></div>
+          <div class="ncb-card"><div class="ncb-sk2 ncb-card-thumb"></div><div class="ncb-sk2 ncb-card-l1"></div><div class="ncb-sk2 ncb-card-l2"></div></div>
+          <div class="ncb-card"><div class="ncb-sk2 ncb-card-thumb"></div><div class="ncb-sk2 ncb-card-l1"></div><div class="ncb-sk2 ncb-card-l2"></div></div>
+        </div>
+      </div>
+      <div class="ncb-bottom-fade"></div>
+    </div>
+
+    <!-- ===== STATUS BAR ===== -->
+    <div class="ncb-top-fade"></div>
+    <div class="ncb-statusbar">
+      <span class="ncb-time">9:41</span>
+      <div class="ncb-island"></div>
+      <div class="ncb-status-icons">
+        <svg width="27" height="11" viewBox="0 0 621.094 256.348" fill="#1B1B1B" aria-hidden="true"><path d="M25.6348 256.348L84.4727 256.348C99.8535 256.348 110.107 245.605 110.107 229.736L110.107 158.691C110.107 142.578 99.8535 132.08 84.4727 132.08L25.6348 132.08C10.2539 132.08 0 142.578 0 158.691L0 229.736C0 245.605 10.2539 256.348 25.6348 256.348ZM196.045 256.348L254.883 256.348C270.264 256.348 280.518 245.605 280.518 229.736L280.518 119.385C280.518 103.516 270.264 92.7734 254.883 92.7734L196.045 92.7734C180.664 92.7734 170.41 103.516 170.41 119.385L170.41 229.736C170.41 245.605 180.664 256.348 196.045 256.348ZM366.211 256.348L425.049 256.348C440.43 256.348 450.684 245.605 450.684 229.736L450.684 69.8242C450.684 53.7109 440.43 42.9688 425.049 42.9688L366.211 42.9688C351.074 42.9688 340.576 53.7109 340.576 69.8242L340.576 229.736C340.576 245.605 351.074 256.348 366.211 256.348ZM536.621 256.348L595.703 256.348C611.084 256.348 621.094 245.605 621.094 229.736L621.094 26.6113C621.094 10.7422 611.084 0 595.703 0L536.621 0C521.24 0 510.986 10.7422 510.986 26.6113L510.986 229.736C510.986 245.605 521.24 256.348 536.621 256.348Z"/></svg>
+        <svg width="17" height="12" viewBox="0 0 562.262 406.006" fill="#1B1B1B" aria-hidden="true"><path d="M36.9902 171.143C41.873 175.781 48.7089 175.781 53.3476 170.898C113.406 107.178 192.508 73.4863 281.131 73.4863C370.242 73.4863 449.832 107.422 509.402 171.143C513.797 175.537 520.389 175.293 525.271 170.654L558.963 136.963C563.357 132.568 563.113 127.197 559.695 123.047C502.322 52.2461 394.412 0.244141 281.131 0.244141C168.094 0.244141 59.6952 52.2461 2.56634 123.047C-0.851626 127.197-0.851626 132.568 3.29877 136.963Z"/><path d="M138.309 273.193C143.68 278.32 150.271 277.588 155.154 272.217C184.451 239.746 232.303 216.064 281.131 216.309C330.447 216.064 378.299 240.479 408.084 272.949C412.478 278.076 418.582 277.832 423.953 272.949L461.795 235.352C465.701 231.445 466.189 226.074 462.527 221.68C425.662 176.514 357.303 142.578 281.131 142.578C204.959 142.578 136.6 176.514 99.7343 221.68C96.0722 226.074 96.3163 230.957 100.467 235.352Z"/><path d="M281.131 406.006C286.502 406.006 291.141 403.564 300.662 394.287L360.232 337.158C363.894 333.496 364.871 328.125 361.453 323.73C345.584 303.223 315.555 285.4 281.131 285.4C245.73 285.4 215.701 303.955 199.832 325.195C197.391 329.102 198.367 333.496 202.273 337.158L261.6 394.287C271.121 403.32 275.76 406.006 281.131 406.006Z"/></svg>
+        <svg width="26" height="12" viewBox="0 0 722.656 330.322" fill="#1B1B1B" aria-hidden="true"><path opacity="0.4" d="M130.127 330.322L513.916 330.322C555.664 330.322 590.82 326.416 615.723 301.514C640.625 276.611 644.287 241.943 644.287 200.195L644.287 130.127C644.287 88.3789 640.625 53.7109 615.723 28.8086C590.82 3.90625 555.664 0 513.916 0L129.639 0C88.623 0 53.4668 3.90625 28.5645 28.8086C3.66211 53.7109 0 88.623 0 129.395L0 200.195C0 241.943 3.66211 276.611 28.5645 301.514C53.4668 326.416 88.623 330.322 130.127 330.322ZM123.535 291.016C98.3887 291.016 72.0215 287.598 57.1289 272.949C42.4805 258.057 39.3066 231.934 39.3066 206.787L39.3066 124.023C39.3066 98.3887 42.4805 72.2656 57.1289 57.373C72.0215 42.4805 98.6328 39.3066 124.268 39.3066L520.752 39.3066C545.898 39.3066 572.266 42.7246 586.914 57.373C601.807 72.2656 604.98 98.1445 604.98 123.291L604.98 206.787C604.98 231.934 601.807 258.057 586.914 272.949C572.266 287.598 545.898 291.016 520.752 291.016ZM677.49 228.271C696.777 227.051 722.656 202.393 722.656 165.039C722.656 127.93 696.777 103.271 677.49 102.051Z"/><path d="M110.596 262.695L406.494 262.695C423.34 262.695 433.105 260.254 439.941 253.418C446.777 246.582 449.219 236.816 449.219 219.971L449.219 110.352C449.219 93.5059 446.777 83.7402 439.941 76.9043C433.105 70.0684 423.096 67.627 406.494 67.627L111.328 67.627C93.75 67.627 83.7402 70.0684 77.1484 76.9043C70.3125 83.7402 67.8711 93.75 67.8711 110.84L67.8711 219.971C67.8711 236.816 70.3125 246.582 77.1484 253.418C83.9844 260.254 93.9941 262.695 110.596 262.695Z"/></svg>
+      </div>
+    </div>
+
+    <!-- ===== BARRE SAFARI ===== -->
+    <div class="ncb-safari">
+      <div class="ncb-searchbar">
+        <svg class="ncb-menu" width="18" height="11" viewBox="0 0 493.896 291.26" fill="#1B1B1B" aria-hidden="true">
+          <path d="M121.094 290.771L374.023 290.771C385.01 290.771 393.799 282.227 393.799 271.24C393.799 260.254 385.01 251.465 374.023 251.465L121.094 251.465C110.107 251.465 101.562 260.254 101.562 271.24C101.562 282.227 110.107 290.771 121.094 290.771Z"/>
+          <path d="M71.0449 165.039L424.316 165.039C435.303 165.039 443.848 156.494 443.848 145.508C443.848 134.521 435.303 125.732 424.316 125.732L71.0449 125.732C60.0586 125.732 51.2695 134.521 51.2695 145.508C51.2695 156.494 60.0586 165.039 71.0449 165.039Z"/>
+          <path d="M19.5312 39.3066L474.365 39.3066C485.352 39.3066 493.896 30.7617 493.896 19.7754C493.896 8.78906 485.352 0 474.365 0L19.5312 0C8.54492 0 0 8.78906 0 19.7754C0 30.7617 8.54492 39.3066 19.5312 39.3066Z"/>
+        </svg>
+        <span class="ncb-domain"></span>
+        <button class="ncb-reload" aria-label="Recharger">
+          <svg width="12" height="16" viewBox="0 0 431.152 581.787" fill="#1B1B1B">
+            <path d="M215.576 524.414C334.717 524.414 431.152 427.979 431.152 308.594C431.152 297.852 422.363 289.062 411.621 289.062C400.879 289.062 391.846 297.852 391.846 308.594C391.846 406.006 312.988 484.863 215.576 484.863C118.164 484.863 39.3066 406.006 39.3066 308.594C39.3066 211.182 118.164 132.324 215.576 132.324C237.305 132.324 258.057 136.23 277.344 143.311C289.795 148.193 304.443 141.113 304.688 125.977C304.932 113.525 295.654 108.887 289.062 106.445C266.602 97.9004 241.699 93.2617 215.576 93.2617C96.4355 93.2617 0 189.697 0 308.838C0 427.979 96.4355 524.414 215.576 524.414ZM281.738 122.559L193.115 210.693C188.965 214.355 187.5 219.238 187.5 224.365C187.5 235.596 195.801 244.141 206.543 244.141C212.646 244.141 217.041 241.943 220.703 238.525L321.289 137.451C325.684 133.057 327.637 128.174 327.637 122.803C327.637 117.432 325.439 112.061 321.289 108.154L220.947 6.10352C217.041 2.44141 212.646 0 206.543 0C195.801 0 187.5 9.0332 187.5 20.0195C187.5 25.1465 188.965 30.5176 192.871 34.1797Z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="ncb-toolbar">
+        <button class="ncb-tool" aria-label="Précédent">
+          <svg width="13" height="22" viewBox="0 0 13 22" fill="none"><path d="M11 2 2 11l9 9" stroke="#1B1B1B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="ncb-tool" aria-label="Suivant" disabled>
+          <svg width="13" height="22" viewBox="0 0 13 22" fill="none"><path d="M2 2l9 9-9 9" stroke="#C4C4C6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="ncb-tool" aria-label="Partager">
+          <svg width="16" height="25" viewBox="0 0 433.35 670.654" fill="#1B1B1B">
+            <path d="M433.35 296.387L433.35 484.375C433.35 550.049 396.729 586.426 331.055 586.426L102.051 586.426C36.377 586.426 0 550.049 0 484.375L0 296.387C0 230.957 36.377 194.336 102.051 194.336L151.367 194.336L151.367 233.643L102.051 233.643C62.0117 233.643 39.3066 256.348 39.3066 296.387L39.3066 484.375C39.3066 524.658 62.0117 547.119 102.051 547.119L331.055 547.119C371.338 547.119 394.043 524.658 394.043 484.375L394.043 296.387C394.043 256.348 371.338 233.643 331.055 233.643L281.738 233.643L281.738 194.336L331.055 194.336C396.729 194.336 433.35 230.957 433.35 296.387Z"/>
+            <path d="M133.789 152.1C138.428 152.1 143.799 150.146 147.217 146.24L185.059 105.957L216.553 72.5098L248.291 105.957L285.889 146.24C289.307 150.146 294.434 152.1 299.072 152.1C309.326 152.1 316.895 145.02 316.895 135.01C316.895 129.639 314.941 125.732 311.279 122.07L230.713 44.4336C225.83 39.5508 221.68 38.0859 216.553 38.0859C211.67 38.0859 207.52 39.5508 202.393 44.4336L122.07 122.07C118.408 125.732 116.211 129.639 116.211 135.01C116.211 145.02 123.535 152.1 133.789 152.1ZM216.553 395.264C227.051 395.264 236.084 386.719 236.084 376.465L236.084 128.174L233.154 62.2559C232.666 53.4668 225.586 45.8984 216.553 45.8984C207.764 45.8984 200.684 53.4668 200.195 62.2559L197.266 128.174L197.266 376.465C197.266 386.719 206.055 395.264 216.553 395.264Z"/>
+          </svg>
+        </button>
+        <button class="ncb-tool" aria-label="Signets">
+          <svg width="14" height="23" viewBox="0 0 329.102 524.658" fill="#1B1B1B"><path d="M25.8789 523.682C37.8418 523.682 44.9219 516.846 66.8945 495.605L162.354 401.611C163.574 400.391 165.771 400.391 166.748 401.611L262.207 495.605C284.18 516.846 291.26 523.682 303.223 523.682C319.58 523.682 329.102 512.939 329.102 493.896L329.102 70.0684C329.102 23.6816 305.908 0 260.01 0L69.0918 0C23.1934 0 0 23.6816 0 70.0684L0 493.896C0 512.939 9.52148 523.682 25.8789 523.682ZM45.8984 457.764C42.4805 461.182 38.5742 460.205 38.5742 455.322L38.5742 70.5566C38.5742 49.5605 49.5605 38.5742 71.0449 38.5742L258.301 38.5742C279.541 38.5742 290.527 49.5605 290.527 70.5566L290.527 455.322C290.527 460.205 286.865 461.182 283.203 457.764L177.49 355.225C169.678 347.656 159.424 347.656 151.611 355.225Z"/></svg>
+        </button>
+        <button class="ncb-tool" aria-label="Onglets">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <rect x="2" y="6" width="14" height="14" rx="3" stroke="#1B1B1B" stroke-width="2"/>
+            <path d="M6 6V5a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-1" stroke="#1B1B1B" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </div></div></div>
+
+    <!-- ===== POINTEUR ===== -->
+    <div class="ncb-tap" id="tap"><span class="ring"></span></div>
+
+  </div>
+  </div>
+</div>
+
+<script>
+(function syncHost(){
+  var h = location.host;
+  if (!h || location.protocol === 'file:') return;
+  document.querySelector('.ncb-phone')?.style.setProperty('--browser-url', JSON.stringify(h));
+  document.querySelectorAll('[data-host]').forEach(function(el){ el.textContent = h; });
+  document.querySelectorAll('[data-host-url]').forEach(function(el){ el.textContent = 'https://' + h; });
+})();
+const phone   = document.getElementById('phone');
+const scene   = document.getElementById('scene');
+const morph   = document.getElementById('morph');
+const menu    = morph.querySelector('.t-morph-menu');
+const share   = document.getElementById('ncb-share');
+const actHome = document.getElementById('act-home');
+const athAdd  = document.getElementById('ath-add');
+const hs          = document.getElementById('hs');
+const hsNotion    = document.getElementById('hsNotion');
+const hsNotionIco = document.getElementById('hsNotionIco');
+const appopen     = document.getElementById('appopen');
+const panel   = document.getElementById('panel');
+const tap     = document.getElementById('tap');
+
+let scale = 1;
+/* ---- pilotage par la page hôte (postMessage, même origine) ----
+   - {type:'pwa-anim:play', bg}  : (re)part du début ; bg = couleur de fond de la modale hôte
+   - {type:'pwa-anim:pause'}     : met la boucle en pause (animation préchargée mais invisible)
+   Démarre en pause si l'URL contient #paused ; #bg=RRGGBB fixe le fond dès le chargement.
+   Le fond est peint par l'animation elle-même (et non laissé transparent) pour former un seul
+   bloc avec la modale, quel que soit le comportement du navigateur vis-à-vis des iframes. */
+const ABORT = Symbol('abort');
+let gen = 0;
+let paused = /(^|[#&])paused(&|$)/.test(location.hash);
+let resumePlay = null;
+function setBg(hex){
+  if (!/^#?[0-9a-fA-F]{6}$/.test(hex || '')) return;
+  const c = hex[0] === '#' ? hex : '#' + hex;
+  document.documentElement.style.background = c;
+  document.body.style.background = c;
+}
+setBg((location.hash.match(/bg=([0-9a-fA-F]{6})/) || [])[1]);
+const sleep = ms => new Promise((res, rej) => { const g = gen; setTimeout(() => (g === gen ? res() : rej(ABORT)), ms); });
+function waitPlay(){ return paused ? new Promise(r => { resumePlay = r; }) : Promise.resolve(); }
+addEventListener('message', (e) => {
+  if (e.origin !== location.origin || !e.data || typeof e.data !== 'object') return;
+  if (e.data.type === 'pwa-anim:play') {
+    setBg(e.data.bg);
+    gen++; paused = false;
+    fit(); place();
+    requestAnimationFrame(() => { fit(); place(); }); // l'iframe vient peut-être de devenir visible
+    if (resumePlay) { resumePlay(); resumePlay = null; }
+  } else if (e.data.type === 'pwa-anim:pause') {
+    gen++; paused = true;
+    resetScene();
+  }
+});
+
+/* ---- clavier AZERTY ---- */
+(function buildKb(){
+  const rows = [
+    ['a','z','e','r','t','y','u','i','o','p'],
+    ['q','s','d','f','g','h','j','k','l','m'],
+    [{k:'shift',sys:1,wide:1},'w','x','c','v','b','n','\u2019',{k:'del',sys:1,wide:1}],
+    [{k:'123',sys:1,w2:1},{k:'emoji',sys:1},{k:'space'},{k:'return'}]
+  ];
+  const shift = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1b1b1b" stroke-width="2"><path d="M12 4 5 11h4v7h6v-7h4l-7-7Z"/></svg>';
+  const del   = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1b1b1b" stroke-width="1.8"><path d="M20 6H9L3 12l6 6h11a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Z"/><path d="M16 10l-4 4M12 10l4 4"/></svg>';
+  const ret   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>';
+  const kb = document.getElementById('kb');
+  rows.forEach((row,i)=>{
+    const r = document.createElement('div');
+    r.className = 'ath-kbrow' + (i===1 ? ' ath-kbrow--2' : '');
+    row.forEach(key=>{
+      const b = document.createElement('button');
+      b.className = 'ath-key';
+      if(typeof key === 'string'){ b.textContent = key; }
+      else {
+        if(key.sys)  b.classList.add('ath-key--sys');
+        if(key.wide) b.classList.add('ath-key--wide');
+        if(key.w2)   b.classList.add('ath-key--w2');
+        if(key.k==='space'){ b.classList.add('ath-key--space'); b.innerHTML='<span class="ath-space-a">A</span>'; }
+        else if(key.k==='return'){ b.classList.add('ath-key--return'); b.innerHTML=ret; }
+        else if(key.k==='shift'){ b.innerHTML=shift; }
+        else if(key.k==='del'){ b.innerHTML=del; }
+        else if(key.k==='123'){ b.textContent='123'; }
+        else if(key.k==='emoji'){ b.innerHTML='<svg width="22" height="22" viewBox="0 0 498.047 498.291" fill="#1b1b1b" aria-hidden="true"><path d="M249.023 498.047C386.475 498.047 498.047 386.475 498.047 249.023C498.047 111.572 386.475 0 249.023 0C111.572 0 0 111.572 0 249.023C0 386.475 111.572 498.047 249.023 498.047ZM249.023 456.543C134.277 456.543 41.5039 363.77 41.5039 249.023C41.5039 134.277 134.277 41.5039 249.023 41.5039C363.77 41.5039 456.543 134.277 456.543 249.023C456.543 363.77 363.77 456.543 249.023 456.543Z"/><path d="M248.779 371.338C299.805 371.338 333.984 337.402 333.984 321.289C333.984 315.43 328.369 312.744 323.242 315.186C305.42 324.951 284.18 335.938 248.779 335.938C213.379 335.938 192.139 324.707 174.561 315.186C169.189 312.744 163.574 315.43 163.574 321.289C163.574 337.402 197.754 371.338 248.779 371.338ZM176.514 227.295C191.895 227.295 205.566 213.379 205.566 193.848C205.566 174.072 192.139 160.156 176.514 160.156C161.133 160.156 147.705 174.072 147.705 193.848C147.705 213.379 161.133 227.295 176.514 227.295ZM321.289 227.295C336.67 227.295 350.342 213.379 350.342 193.848C350.342 174.072 336.914 160.156 321.289 160.156C305.908 160.156 292.48 174.072 292.48 193.848C292.48 213.379 305.908 227.295 321.289 227.295Z"/></svg>'; b.setAttribute('aria-label','Emoji'); }
+      }
+      r.appendChild(b);
+    });
+    kb.appendChild(r);
+  });
+})();
+
+/* ---- échelle + positionnement ---- */
+function fit(){
+  /* Marge interne minime → le téléphone remplit au mieux la zone d'animation
+     (rendu showcase, plus grand). On échelonne sur la hauteur TOTALE du cadre
+     (view-h + gap d'ombre) pour que l'ombre du bas reste visible, jamais
+     re-rognée par la carte hôte. */
+  const cs = getComputedStyle(document.documentElement);
+  const pad = 6;
+  const vh  = parseFloat(cs.getPropertyValue('--view-h')) || 690;
+  const gx  = parseFloat(cs.getPropertyValue('--gap-x')) || 0;
+  const gb  = parseFloat(cs.getPropertyValue('--gap-bottom')) || 0;
+  const fw  = 402 + gx * 2;   // largeur totale du cadre (téléphone + marges d'ombre latérales)
+  const fh  = vh + gb;        // hauteur totale du cadre (téléphone visible + marge d'ombre bas)
+  scale = Math.min(1, (innerHeight - pad*2)/fh, (innerWidth - pad*2)/fw);
+  scene.style.transform = `scale(${scale})`;
+}
+function place(){
+  const pr = phone.getBoundingClientRect();
+  const br = share.getBoundingClientRect();
+  const cx = (br.left + br.width/2 - pr.left) / scale;
+  const cy = (br.top  + br.height/2 - pr.top) / scale;
+  tap.style.left = cx + 'px';
+  tap.style.top  = cy + 'px';
+  morph.style.bottom = ((874 - cy) - 18) + 'px';
+  morph.style.setProperty('--open-h', (menu.offsetHeight + 8) + 'px');
+}
+function tapToEl(el){
+  const pr = phone.getBoundingClientRect();
+  const r  = el.getBoundingClientRect();
+  tap.style.left = ((r.left + r.width/2 - pr.left) / scale) + 'px';
+  tap.style.top  = ((r.top  + r.height/2 - pr.top) / scale) + 'px';
+}
+addEventListener('resize', ()=>{ fit(); place(); });
+addEventListener('load',   ()=>{ fit(); place(); });
+fit(); place();
+
+/* ---- pointeur ---- */
+function tapShow(){ tap.classList.add('on'); }
+function tapHide(){ tap.classList.remove('on'); }
+async function tapPress(){
+  tap.classList.remove('press'); void tap.offsetWidth; tap.classList.add('press');
+  await sleep(440);
+}
+
+/* ---- ouverture d'app : le verre grandit depuis l'icône puis se dissipe,
+       révélant la page de départ (skeleton) — qui relance la boucle ---- */
+function iconRect(el){
+  const pr = phone.getBoundingClientRect();
+  const r  = el.getBoundingClientRect();
+  return { left:(r.left-pr.left)/scale, top:(r.top-pr.top)/scale, w:r.width/scale, h:r.height/scale };
+}
+async function appOpen(){
+  const R  = iconRect(hsNotionIco);
+  const cx = R.left + R.w/2, cy = R.top + R.h/2;     // centre de l'icône
+  const s0 = R.w / 402;                               // largeur miniature = largeur icône
+  const tx = cx - 402*s0/2, ty = cy - 874*s0/2;       // centrer la miniature sur l'icône
+  const r0 = 14 / s0;                                  // radius compensé (~14px perçu)
+  // état « miniature » sur l'icône, sans transition : le contenu ENTIER est là, en petit
+  appopen.style.transition='none';
+  appopen.style.transform=`translate(${tx}px, ${ty}px) scale(${s0})`;
+  appopen.style.borderRadius=r0+'px';
+  appopen.classList.add('on');
+  void appopen.offsetWidth;
+  // zoom : la miniature entière s'agrandit jusqu'au plein écran (scale, pas reveal)
+  appopen.style.transition='transform .52s var(--app-ease), border-radius .52s var(--app-ease)';
+  appopen.style.transform='translate(0px, 0px) scale(1)';
+  appopen.style.borderRadius='0px';
+  await sleep(560);
+  // la vraie page (identique) est révélée dessous, puis on retire l'appopen sans fade
+  hs.style.transition='none'; hs.classList.remove('show'); void hs.offsetWidth; hs.style.transition='';
+  appopen.classList.remove('on');
+}
+
+/* Remise à zéro complète de la scène : la boucle peut être interrompue et relancée à tout moment. */
+function resetScene(){
+  appopen.style.transition = 'none'; appopen.style.transform = ''; appopen.style.borderRadius = '';
+  athAdd.style.transform = '';
+  morph.dataset.open = 'false'; morph.classList.remove('armed');
+  panel.dataset.open = 'false';
+  hs.classList.remove('show'); hsNotion.classList.remove('popped');
+  appopen.classList.remove('on','full');
+  tapHide();
+  place();
+}
+
+/* ---- boucle (3 étapes), façon GIF ---- */
+async function cycle(){
+  // 1) repos sur la page Safari
+  resetScene();
+  await sleep(550);
+
+  // 2) toucher Partager → la feuille de partage morphe
+  tapShow();
+  await sleep(300);
+  await tapPress();
+  morph.classList.add('armed');
+  await sleep(60);
+  morph.dataset.open = 'true';
+  tapHide();
+  await sleep(350 + 600);
+
+  // 3) toucher « Sur l'écran d'accueil »
+  tapToEl(actHome);
+  tapShow();
+  await sleep(380);
+  await tapPress();
+  tapHide();
+
+  // 4) la page de confirmation monte (Panel reveal)
+  panel.dataset.open = 'true';
+  await sleep(120);
+  morph.dataset.open = 'false'; morph.classList.remove('armed');
+  await sleep(400 + 700);
+
+  // 5) clic guidé sur « Ajouter »
+  tapToEl(athAdd);
+  tapShow();
+  await sleep(420);
+  await tapPress();
+  athAdd.style.transform = 'scale(0.94)';
+  await sleep(120);
+  athAdd.style.transform = '';
+  tapHide();
+  await sleep(220);
+
+  // 6) transition vers l'écran d'accueil : le panneau redescend et le révèle
+  hs.classList.add('show');
+  await sleep(60);
+  panel.dataset.open = 'false';
+  await sleep(420);
+  // l'app Mosaic apparaît à son emplacement (vrai logo)
+  hsNotion.classList.add('popped');
+  await sleep(2300);
+
+  // 7) réouverture de l'app → le verre se dissipe sur la page de départ,
+  //    ce qui relance directement la boucle (skeleton)
+  await appOpen();
+  await sleep(450);
+}
+
+(async function run(){
+  while (true) {
+    await waitPlay();
+    try { await cycle(); } catch (err) { if (err !== ABORT) throw err; }
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+node_modules
+dist
+dev-dist
+.env
+.env.local
+.vercel
+*.tsbuildinfo
+public/ort
+
+# macOS
+.DS_Store

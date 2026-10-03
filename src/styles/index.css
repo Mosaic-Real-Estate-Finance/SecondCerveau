@@ -1,0 +1,470 @@
+@import "tailwindcss";
+@import "@fontsource/lora/400.css";
+@import "@fontsource/lora/600.css";
+@import "./transitions/_root.css";
+@import "./transitions/snippets.css";
+
+/* Light theme only: dark: variants in vendored components never fire. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Mosaic palette: two blues on two neutrals, nothing else. The two blues are
+   indistinguishable from each other (1.21:1), so hierarchy comes from size,
+   weight and space, never from choosing one blue over the other. */
+@theme {
+  --color-*: initial;
+  --color-midnight-blue: #020342;
+  --color-navy: #000082;
+  --color-white: #ffffff;
+  --color-white-smoke: #f7f7f7;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --font-*: initial;
+  --font-serif: Lora, Georgia, serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+
+  /* Site scale 10 / 12 / 16 / 23 / 29, body leading brought down to 1.5. */
+  --text-*: initial;
+  --text-2xs: 10px;
+  --text-2xs--line-height: 1.4;
+  --text-xs: 12px;
+  --text-xs--line-height: 1.5;
+  --text-base: 16px;
+  --text-base--line-height: 1.5;
+  --text-xl: 23px;
+  --text-xl--line-height: 1.3;
+  --text-2xl: 29px;
+  --text-2xl--line-height: 1.2;
+}
+
+/* Theme hooks the transitions ask to be tuned in app rules. */
+:root {
+  --shimmer-base: rgb(2 3 66 / 0.45);
+  --shimmer-highlight: #020342;
+  --muted: rgb(2 3 66 / 0.62);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  color-scheme: light;
+
+  /* Page side-by-side, tuned through the variable the snippet exposes for
+     it rather than by touching the snippet. At the default of 0 the two
+     pages cross-fade on top of each other and the screen reads as a smear
+     for a moment; the incoming one now waits until the outgoing one is most
+     of the way gone. This is a legibility change, not a speed one: measured
+     at a quarter of the processor speed, the stagger and the blur depth
+     make no difference to the frames. What did was the work that used to
+     run on top of the transition — see schedule.ts. */
+  --page-stagger: 70ms;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* The canvas behind the rubber band of an overscroll, and the colour iOS
+   paints beyond the safe areas. */
+html {
+  background: var(--color-white);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---- Installed app ---------------------------------------------------
+   Rules that only make sense once the app runs without browser chrome. */
+@media (display-mode: standalone) {
+  /* After the first keyboard opening, WebKit contracts the layout viewport
+     from the bottom and never restores it: 100dvh and height:100% lose the
+     top safe area for good, while 100lvh keeps the real height. In a browser
+     tab lvh would run under Safari's own bars, so this stays scoped here. */
+  html,
+  body,
+  #root {
+    height: 100lvh;
+  }
+
+  /* An installed app should not select its own interface on a long press,
+     nor rubber-band as a page does. Text fields keep both. */
+  html,
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    overscroll-behavior-y: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
+/* Held over the app until React paints; index.html carries the element. */
+#splash-cover {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--color-white);
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 320ms var(--page-fade-ease);
+}
+#splash-cover.is-gone {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #splash-cover {
+    transition: none;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--color-white);
+  color: var(--color-midnight-blue);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-navy);
+  outline-offset: 2px;
+}
+
+a {
+  font-weight: 600;
+}
+
+/* ---- Pages ----------------------------------------------------------
+   The side by side snippet ships two pages; the review screen is a third.
+   These rules extend it without touching its selectors. */
+.t-page-slide .t-page[data-page-id="3"] {
+  --t-page-from-x: var(--page-slide-distance);
+}
+.t-page-slide[data-page="3"] .t-page[data-page-id="2"] {
+  --t-page-from-x: calc(var(--page-slide-distance) * -1);
+}
+.t-page-slide[data-page="3"] .t-page[data-page-id="3"] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+  filter: blur(0);
+  transition-delay: var(--page-stagger);
+}
+/* The side by side snippet parks the pages it is not showing 8px to the
+   side; clip that, or the document is wider than the screen. `clip` rather
+   than `hidden` so the pages keep their own vertical scrolling. */
+.t-page-slide {
+  overflow-x: clip;
+}
+.t-page {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---- Record morph ---------------------------------------------------
+   Real sizes for the snippet's placeholder 40px / 183 x 172 box: a 96px
+   microphone, centred, that opens into a panel as wide as the column. The
+   button is pinned to the bottom centre instead of a corner, so it stays
+   put while the box grows to both sides. */
+.record-morph.t-morph {
+  width: 96px;
+  height: 96px;
+  background: var(--color-navy);
+  color: var(--color-white);
+  --morph-r-closed: 48px;
+  --morph-r-open: 24px;
+}
+.record-morph.t-morph[data-open="true"] {
+  width: min(calc(100vw - 32px), 448px);
+  height: 168px;
+}
+.record-morph .t-morph-plus {
+  inset: auto auto 0 calc(50% - 48px);
+  width: 96px;
+  height: 96px;
+  color: inherit;
+}
+/* Reset behind a screen that has already slid away: there is nothing to
+   animate for, and its clock would run against the page transition. */
+.t-morph[data-quiet],
+.t-morph[data-quiet] .t-morph-plus,
+.t-morph[data-quiet] .t-morph-plus svg,
+.t-morph[data-quiet] .t-morph-menu {
+  transition: none !important;
+}
+
+/* ---- Voice note on the review screen --------------------------------
+   The Rare UI file stays untouched; its neutrals are mapped to the Mosaic
+   ones here, same as the recorder. The accent glow comes from the prop. */
+.voice-note-mosaic > div:first-child {
+  background: var(--color-white-smoke);
+}
+.voice-note-mosaic [data-slot="voice-note-control"] {
+  background: var(--color-white);
+  color: var(--color-midnight-blue);
+}
+.voice-note-mosaic [data-slot="voice-note-track"] > div:first-child > span {
+  background: rgb(2 3 66 / 0.3);
+}
+.voice-note-mosaic [data-slot="voice-note-track"] > div:last-child span {
+  background: var(--color-midnight-blue);
+}
+.voice-note-mosaic [data-slot="voice-note-time"] {
+  color: var(--muted);
+}
+
+/* ---- Contact list skeleton ------------------------------------------
+   The list has no fixed height: the content layer stays in flow and sizes
+   the wrapper, the skeleton lies over it while loading. */
+.contact-skel {
+  /* The reveal blurs its content layer, here a list of a few hundred rows:
+     one of the snippet's own variables drops that blur, keeping the fade. */
+  --reveal-blur: 0px;
+}
+.contact-skel .t-skel-content {
+  position: relative;
+}
+.contact-skel.is-revealed .t-skel-skeleton {
+  pointer-events: none;
+}
+
+.voice-note-mosaic [data-slot="voice-note-time"] {
+  font-size: 12px;
+}
+
+/* Rows off screen are not rendered until they scroll in: the contact list
+   holds a few hundred of them. The reserved size keeps the scrollbar honest. */
+.contact-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+}
+
+/* ---- Chips ----------------------------------------------------------
+   The pasted chip recipe, kept as given (geometry, the three transitions,
+   the spring curve and the pop) with the Mosaic palette in place of its
+   dark surface and orange accent. */
+.chip {
+  /* Eight of these sit in one group. At the pasted size they filled three
+     lines and read as the loudest thing on the form, so they are taken down
+     to the size of a tag: a dense group reads as one control, and each one
+     still clears the 32px iOS calls for on a chip. */
+  padding: 6px 12px;
+  border-radius: 100px;
+  border: 1px solid rgb(2 3 66 / 0.18);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  min-height: 34px;
+  background: var(--color-white);
+  transition:
+    transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s;
+}
+.chip.on {
+  background: var(--color-navy);
+  color: var(--color-white);
+  border-color: var(--color-navy);
+}
+.chip.pop {
+  transform: scale(1.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip {
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+  }
+  .chip.pop {
+    transform: none;
+  }
+}
+
+/* ---- Panel morphing out of a small button ---------------------------
+   The snippet owns the radius and the cross fade; the four insets are what
+   carry the growth, and they are animated on the same clocks. The values
+   come from the anchor's rectangle (see morph-panel.tsx). */
+.morph-panel.t-morph {
+  position: fixed;
+  top: var(--morph-top, 0px);
+  right: var(--morph-right, 0px);
+  bottom: var(--morph-bottom, 0px);
+  left: var(--morph-left, 0px);
+  z-index: 40;
+  width: auto;
+  height: auto;
+  /* The surface is white from the first frame. It used to open navy and
+     turn white on the way, which flashed the whole screen; the navy now
+     lives on the button alone, so what grows is the sheet itself. */
+  background: var(--color-white);
+  color: var(--color-midnight-blue);
+  --morph-r-closed: 24px;
+  --morph-r-open: 0px;
+  /* No overshoot: a 48px button can bounce, a full screen cannot. */
+  --morph-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --morph-open-dur: 320ms;
+  --morph-close-dur: 240ms;
+  --morph-fade-dur: 200ms;
+  transition:
+    top var(--morph-close-dur) var(--morph-close-ease),
+    right var(--morph-close-dur) var(--morph-close-ease),
+    bottom var(--morph-close-dur) var(--morph-close-ease),
+    left var(--morph-close-dur) var(--morph-close-ease),
+    background var(--morph-close-dur) var(--morph-close-ease),
+    border-radius var(--morph-close-dur) var(--morph-close-ease);
+}
+.morph-panel.t-morph[data-open="true"] {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transition:
+    top var(--morph-open-dur) var(--morph-ease),
+    right var(--morph-open-dur) var(--morph-ease),
+    bottom var(--morph-open-dur) var(--morph-ease),
+    left var(--morph-open-dur) var(--morph-ease),
+    background var(--morph-open-dur) var(--morph-ease),
+    border-radius var(--morph-open-dur) var(--morph-ease);
+}
+/* Before the first measurement the insets are 0, which would flash a
+   full-screen panel; the same class hides a closed button whose row has
+   scrolled out of its scroller (see morph-panel.tsx). */
+.morph-panel.is-measuring {
+  opacity: 0;
+  pointer-events: none;
+}
+/* A company is created from inside the contact panel. The inner panel is
+   not a second full page: it grows from its button into a card laid over
+   the contact form, which stays visible around it and behind the scrim, so
+   it reads as one step inside the same screen rather than a new one. */
+.morph-panel.is-nested {
+  z-index: 45;
+}
+.morph-panel.is-nested.t-morph[data-open="true"] {
+  top: max(calc(var(--safe-top) + 24px), 8vh);
+  bottom: max(calc(var(--safe-bottom) + 24px), 8vh);
+  left: max(12px, calc(50vw - 228px));
+  right: max(12px, calc(50vw - 228px));
+  --morph-r-open: 24px;
+  box-shadow: 0 28px 70px rgb(2 3 66 / 0.3);
+}
+.morph-panel.is-nested .t-morph-menu {
+  padding: 20px;
+}
+/* The scrim belongs to the card, so it fades on the card's own clock. */
+.morph-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  background: rgb(2 3 66 / 0.32);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--morph-close-dur) var(--morph-close-ease);
+}
+.morph-scrim[data-open="true"] {
+  opacity: 1;
+  pointer-events: auto;
+  transition-duration: var(--morph-open-dur);
+}
+/* The button itself carries the colour, and stays put while the sheet grows
+   out from behind it. The snippet flies it 40px to the side and blurs it,
+   which at this size drags a navy square across the screen. */
+.morph-panel .t-morph-plus {
+  inset: 0;
+  width: 48px;
+  height: 48px;
+  background: var(--color-navy);
+  color: var(--color-white);
+  border-radius: inherit;
+}
+.morph-panel.t-morph[data-open="true"] > .t-morph-plus {
+  transform: scale(0.94);
+  filter: none;
+}
+/* Same reason on the way in: a form the size of the screen is faded and
+   barely scaled, never slid or blurred. */
+.morph-panel .t-morph-menu {
+  transform: scale(0.985);
+  filter: none;
+  padding: 16px calc(16px + env(safe-area-inset-left, 0px)) calc(16px + env(safe-area-inset-bottom, 0px));
+  padding-top: calc(var(--safe-top) + 16px);
+}
+.morph-panel.t-morph[data-open="true"] > .t-morph-menu {
+  transform: scale(1);
+}
+/* A morph inside a morph — a company created from the contact form. The
+   snippet addresses its parts with descendant selectors, which is right for
+   one panel and wrong for two: the open outer panel was opening the inner
+   one's menu as well, and that empty full-width box then sat over the very
+   button meant to open it. The inner panel's closed state is restated here
+   from its own data-open, and it has to come after the rules it undoes. */
+.t-morph .t-morph:not([data-open="true"]) > .t-morph-menu {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(var(--morph-slide)) scale(var(--morph-scale));
+}
+.t-morph .t-morph:not([data-open="true"]) > .t-morph-plus {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  filter: none;
+}
+.t-morph .t-morph:not([data-open="true"]) > .t-morph-plus svg {
+  transform: none;
+}
+/* The panel is the screen when open: its content column matches the app. */
+.morph-panel .t-morph-menu > * {
+  margin: 0 auto;
+  max-width: 480px;
+  height: 100%;
+}
+/* The only scroller inside the panel. Contained, so reaching its end does
+   not hand the gesture to the page underneath and drag the whole screen. */
+.morph-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---- Search field with the clear dissolve ---------------------------- */
+.search-field.t-clear > input,
+.search-field .t-clear-mirror,
+.search-field .t-clear-placeholder {
+  padding-left: 44px;
+  padding-right: 48px;
+  font: inherit;
+}
+.search-field .t-clear-placeholder {
+  color: var(--muted);
+}
+
+/* ---- Error shake on the send button --------------------------------- */
+.send-button.t-input {
+  border: 2px solid transparent;
+}
+.send-button.t-input.is-error {
+  border-color: var(--color-midnight-blue);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .record-morph.t-morph {
+    transition: none !important;
+  }
+}
