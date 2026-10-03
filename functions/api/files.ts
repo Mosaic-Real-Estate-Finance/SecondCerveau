@@ -23,7 +23,7 @@ function safeName(raw: string) {
 }
 
 export const onRequestPost: Handler = async ({ request, env }) => {
-  const denied = guard(request, env);
+  const denied = await guard(request, env);
   if (denied instanceof Response) return denied;
 
   let form: FormData;

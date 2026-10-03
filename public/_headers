@@ -5,6 +5,15 @@
   Referrer-Policy: same-origin
   Permissions-Policy: microphone=(self)
 
+# The Outlook taskpane is the one place that must not be cross origin isolated:
+# COEP require-corp blocks office.js, which Microsoft serves only from its own
+# CDN, and COOP breaks the sign-in window. The "! " prefix removes a header set
+# by a broader rule above; it is the only way to undo the /* block.
+# https://developers.cloudflare.com/pages/configuration/headers/
+/outlook*
+  ! Cross-Origin-Opener-Policy
+  ! Cross-Origin-Embedder-Policy
+
 # The service worker must never be served from a cache: a stale copy delays
 # every update by hours. Same for the manifest, on a short leash.
 /sw.js

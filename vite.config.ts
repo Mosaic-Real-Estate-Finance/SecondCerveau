@@ -12,6 +12,67 @@ const isolation = {
   "Cross-Origin-Embedder-Policy": "require-corp",
 };
 
+// The taskpane is the one place that must NOT be isolated: COEP require-corp
+// blocks office.js, which Microsoft only serves from its own CDN and does not
+// support being bundled, and COOP breaks the sign-in window. In production
+// public/_headers takes the two headers back off for /outlook*; the dev and
+// preview servers put them on every path through `server.headers`, so they
+// have to come back off here.
+//
+// Removing them in a later middleware does not work: `server.headers` is
+// applied after this plugin's middlewares, so there is nothing to remove yet.
+// What works regardless of order is to make the header unsettable — the two
+// names are dropped at the source, so whoever writes them later cannot.
+//
+// Deliberately narrow: it only ever touches a /outlook request, and only these
+// two names. The dictation cannot open a microphone or start Whisper without
+// them, so nothing here may be able to reach its responses.
+function taskpaneHeaders(): Plugin {
+  const banned = Object.keys(isolation).map((name) => name.toLowerCase());
+
+  type Res = {
+    setHeader(name: string, value: unknown): unknown;
+    removeHeader(name: string): unknown;
+    writeHead(...args: unknown[]): unknown;
+  };
+
+  const strip = (req: { url?: string }, res: Res, next: () => void) => {
+    if (!(req.url ?? "").startsWith("/outlook")) return next();
+
+    // Whichever side of this middleware `server.headers` lands on: take them
+    // off if they are already there, and keep them off if they are not yet.
+    for (const name of banned) res.removeHeader(name);
+
+    const setHeader = res.setHeader.bind(res);
+    res.setHeader = (name: string, value: unknown) =>
+      banned.includes(String(name).toLowerCase()) ? res : setHeader(name, value);
+
+    // Node also allows the whole header map to be passed at write time.
+    const writeHead = res.writeHead.bind(res);
+    res.writeHead = (...args: unknown[]) => {
+      const last = args[args.length - 1];
+      if (last && typeof last === "object" && !Array.isArray(last)) {
+        for (const name of Object.keys(last)) {
+          if (banned.includes(name.toLowerCase())) delete (last as Record<string, unknown>)[name];
+        }
+      }
+      return writeHead(...args);
+    };
+
+    next();
+  };
+
+  return {
+    name: "taskpane-headers",
+    configureServer(server) {
+      server.middlewares.use(strip);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(strip);
+    },
+  };
+}
+
 // Runs the Cloudflare Pages Functions in the Vite dev server, so the app talks
 // to the exact same handlers locally and in production.
 function pagesFunctions(env: Record<string, string>): Plugin {
@@ -23,6 +84,14 @@ function pagesFunctions(env: Record<string, string>): Plugin {
     "POST /api/session": { file: "/functions/api/session.ts", name: "onRequestPost" },
     "POST /api/notes": { file: "/functions/api/notes.ts", name: "onRequestPost" },
     "POST /api/files": { file: "/functions/api/files.ts", name: "onRequestPost" },
+    "POST /api/outlook/contacts/match": {
+      file: "/functions/api/outlook/contacts/match.ts",
+      name: "onRequestPost",
+    },
+    "POST /api/outlook/contacts": { file: "/functions/api/outlook/contacts/index.ts", name: "onRequestPost" },
+    "GET /api/outlook/notes": { file: "/functions/api/outlook/notes.ts", name: "onRequestGet" },
+    "POST /api/outlook/notes": { file: "/functions/api/outlook/notes.ts", name: "onRequestPost" },
+    "PATCH /api/outlook/notes": { file: "/functions/api/outlook/notes.ts", name: "onRequestPatch" },
   };
   return {
     name: "pages-functions",
@@ -73,6 +142,16 @@ export default defineConfig(({ mode }) => {
     server: { headers: isolation },
     preview: { headers: isolation },
     worker: { format: "es" },
+    // Two entries: the dictation PWA, and the Outlook taskpane. They share the
+    // components and the brand, nothing else.
+    build: {
+      rollupOptions: {
+        input: {
+          main: fileURLToPath(new URL("./index.html", import.meta.url)),
+          outlook: fileURLToPath(new URL("./outlook.html", import.meta.url)),
+        },
+      },
+    },
     optimizeDeps: { exclude: ["@huggingface/transformers"] },
     plugins: [
       // `npm run dev:mobile`: HTTPS on the local network with a self-signed
@@ -80,6 +159,7 @@ export default defineConfig(({ mode }) => {
       mode === "mobile" && basicSsl({ name: "mosaic-dictee" }),
       react(),
       tailwindcss(),
+      taskpaneHeaders(),
       pagesFunctions(env),
       VitePWA({
         registerType: "autoUpdate",
@@ -104,10 +184,20 @@ export default defineConfig(({ mode }) => {
           globPatterns: ["**/*.{js,css,html,svg,png,webp,woff2}"],
           // The ONNX Runtime binary is cached on first use instead (below),
           // and the launch screens are only read by iOS, never by the app.
-          globIgnores: ["**/*.wasm", "splash/**"],
+          //
+          // The Outlook taskpane is excluded too, and that one matters: this
+          // service worker has scope "/", so it controls /outlook whether the
+          // taskpane asks for it or not. Precached, outlook.html would be
+          // served from the dictation's cache — the denylist below only governs
+          // the navigation fallback, never an exact precache hit — and the
+          // add-in would run on a stale build with no way to notice.
+          globIgnores: ["**/*.wasm", "splash/**", "outlook.html", "outlook/**", "assets/outlook-*.js"],
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
           navigateFallback: "index.html",
-          navigateFallbackDenylist: [/^\/api\//],
+          // The dictation's service worker has scope "/", so without /outlook
+          // on this list it answers a taskpane navigation with the dictation
+          // shell — and the add-in shows the wrong application entirely.
+          navigateFallbackDenylist: [/^\/api\//, /^\/outlook/],
           // A cold launch of the installed app on a poor connection would
           // otherwise wait for the network with no time limit, which on iOS
           // shows a white screen for up to a minute. Past three seconds the
@@ -120,6 +210,14 @@ export default defineConfig(({ mode }) => {
               // 200 that is not JSON, which the screens then read as a reply
               // with every field missing.
               urlPattern: ({ url }) => url.pathname.startsWith("/api/"),
+              handler: "NetworkOnly",
+            },
+            {
+              // The taskpane, always live, for the same reason: this service
+              // worker belongs to the dictation and must be transparent to the
+              // other tool. Without this rule the navigate rule below would
+              // answer /outlook.html from the dictation's document cache.
+              urlPattern: ({ url }) => url.pathname.startsWith("/outlook"),
               handler: "NetworkOnly",
             },
             {

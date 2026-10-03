@@ -1,4 +1,5 @@
-import { findUser, type User } from "./users";
+import { AUTH_MESSAGES, identify } from "./auth";
+import { type User } from "./users";
 
 // Thin server side layer over the Notion API. It exists for two reasons:
 // the Notion API does not answer CORS preflights, so a browser cannot call it,
@@ -20,6 +21,15 @@ export type Env = {
   NOTES_PROP_AUTHOR?: string;
   NOTES_PROP_CLIENT_ID?: string;
   NOTES_PROP_FILE?: string;
+  CONTACTS_PROP_EMAIL?: string;
+  NOTES_PROP_SOURCE?: string;
+  NOTES_PROP_AI_STATUS?: string;
+  NOTES_PROP_LAST_MESSAGE?: string;
+  // The Outlook add-in. Both empty: the Microsoft token path is off and only
+  // the dictation's header identifies a caller.
+  ENTRA_API_CLIENT_ID?: string;
+  ENTRA_TENANT_IDS?: string;
+  INTERNAL_DOMAINS?: string;
 };
 
 export type Handler = (context: { request: Request; env: Env }) => Promise<Response>;
@@ -44,7 +54,18 @@ export const props = (env: Env) => ({
   noteAuthor: env.NOTES_PROP_AUTHOR || "Auteur",
   noteClientId: env.NOTES_PROP_CLIENT_ID || "",
   noteFile: env.NOTES_PROP_FILE || "Fichiers",
+  // The email column of the Contacts base. Several addresses fit in it,
+  // separated by commas.
+  contactEmail: env.CONTACTS_PROP_EMAIL || "Email",
+  // Which of the two tools wrote the note: the Notion AI prompt reads it to
+  // know whether the text is in a property or in the body of the page.
+  noteSource: env.NOTES_PROP_SOURCE || "Source",
+  noteAiStatus: env.NOTES_PROP_AI_STATUS || "Statut IA",
+  noteLastMessage: env.NOTES_PROP_LAST_MESSAGE || "Dernier message",
 });
+
+/** The values written in the Source column, one per tool. */
+export const SOURCE = { dictation: "Dictée", email: "Email" } as const;
 
 export class NotionError extends Error {
   constructor(
@@ -193,15 +214,16 @@ export function json(body: unknown, status = 200): Response {
   });
 }
 
-export function guard(request: Request, env: Env): { user: User } | Response {
+// The single door, for every route of both tools. Who may come through is
+// decided in ./auth.ts: the dictation's address header, or a verified
+// Microsoft access token from the Outlook add-in.
+export async function guard(request: Request, env: Env): Promise<{ user: User } | Response> {
   if (!env.NOTION_TOKEN || !env.NOTION_CONTACTS_DB || !env.NOTION_NOTES_DB) {
     return json({ error: "Configuration serveur incomplète" }, 500);
   }
-  const user = findUser(request.headers.get("x-user-email"));
-  // The allowlist is the only check: an address alone lets someone in, so it
-  // identifies the author rather than proving who they are.
-  if (!user) return json({ error: "Adresse non autorisée" }, 401);
-  return { user };
+  const identity = await identify(request, env);
+  if ("failure" in identity) return json({ error: AUTH_MESSAGES[identity.failure] }, 401);
+  return { user: identity.user };
 }
 
 export function fail(error: unknown): Response {

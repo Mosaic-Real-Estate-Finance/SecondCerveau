@@ -58,7 +58,7 @@ let cache: { at: number; body: unknown } | null = null;
 const TTL = 60_000;
 
 export const onRequestGet: Handler = async ({ request, env }) => {
-  const denied = guard(request, env);
+  const denied = await guard(request, env);
   if (denied instanceof Response) return denied;
   if (cache && Date.now() - cache.at < TTL && !new URL(request.url).searchParams.has("fresh")) {
     return json(cache.body);
@@ -175,7 +175,7 @@ function phoneProperties(schema: Schema, phones: NonNullable<NewContact["phones"
 }
 
 export const onRequestPost: Handler = async ({ request, env }) => {
-  const denied = guard(request, env);
+  const denied = await guard(request, env);
   if (denied instanceof Response) return denied;
 
   const body = (await request.json().catch(() => ({}))) as NewContact;

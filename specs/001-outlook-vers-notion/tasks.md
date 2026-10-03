@@ -38,45 +38,40 @@ Dépôt à deux fronts et un socle serveur, conformément à **Structure Decisio
 
 ## État d'avancement au 2026-10-03
 
-**Les deux dépendances bloquantes sont levées.** `Interlocuteur` n'est pas limitée à une page,
-constaté dans l'interface. Les quatre propriétés de la base Notes ont été créées par l'API et
-confirmées par relecture : 15 propriétés, les onze d'origine intactes. `.env.local` est
-renseigné, et l'idempotence de la dictée — absente jusqu'ici, faute de colonne — a été
-vérifiée de bout en bout : deux envois du même identifiant rendent la même page, le second avec
-`duplicate: true`. La page de sonde a été archivée. Au passage, cette sonde confirme le besoin
-de T022 : `Source` est restée vide.
+**24 tâches sur 79.** Les deux dépendances bloquantes sont levées et le socle est en place ;
+il ne reste de prérequis externe que T003, l'application Entra, qui ne bloque que la phase 7.
 
-Treize tâches faites : la part de l'implémentation qui n'ajoute que des fichiers neufs, sans
-dépendance nouvelle et sans toucher un fichier que l'application en service importe. Le
-serveur de développement tourne en mode mobile — la dictée est en test sur le téléphone — et
-`vite.config.ts` comme `.env.local` restent intouchés : les modifier relance Vite et a déjà
-coûté un écran blanc sur l'appareil.
+**Notion.** `Interlocuteur` n'est pas limitée à une page, constaté dans l'interface. Les quatre
+propriétés manquantes ont été créées par l'API et confirmées par relecture : 15 propriétés, les
+onze d'origine intactes. `.env.local` et `.env.example` sont renseignés.
 
-**Faites** : T001, T002, T004, T006, T011, T012, T017, T018, T019, T020, T021, T023, T060 —
-plus `src/outlook/config.ts`, non prévu au plan, qui porte les domaines internes dont le
-panneau a besoin avant le premier appel, et `.env.example`, qui décrit toutes les variables
-avec `NOTION_TOKEN` marqué secret.
+**La dictée a gagné son idempotence**, qui lui manquait faute de colonne `ID client` : deux
+envois du même identifiant rendent la même page, le second avec `duplicate: true`. Vérifié
+contre la vraie route, et les notes portent désormais `Source = Dictée`. Les pages de sonde ont
+été archivées.
 
-Vérifié après écriture : `tsc -p tsconfig.app.json` passe, le manifeste est un XML bien formé,
-`blocksFor` et `batches` ont été exercés sur six cas (message vide, deux paragraphes, pièce
-jointe, paragraphe de 5 000 caractères, 200 paragraphes, 40 messages) et respectent les trois
-limites de l'API. La PWA répond toujours `200` avec ses deux en-têtes d'isolation.
+**Faites** : T001, T002, T004, T005, T006, T007, T008, T009, T010, T010b, T011, T012, T013,
+T014, T015, T016, T017, T018, T019, T020, T021, T022, T023, T060.
 
-**Réserves à lever quand le téléphone n'est plus en test**
+**Vérifié, pas supposé** : `tsc` propre sur les deux projets · `npm run build` produit les deux
+entrées · `/` porte les deux en-têtes d'isolation, `/outlook.html`, le manifeste et les icônes
+n'en portent aucun · 401 sans identité et 200 avec, sur les routes existantes · **un Bearer
+forgé accompagné d'un `x-user-email` valide est refusé en 401**, ce qui est la propriété qui
+compte · une route Outlook non encore écrite rend 500 sans emporter le serveur.
 
-- **T017 est complète côté nouveau fichier**, mais `richText()` existe encore en double dans
-  `functions/api/notes.ts`. L'extraction demandée touche une route en service ; elle part avec
-  le lot ci-dessous.
-- **T009 n'est pas faite, et cela se voit** : `/outlook.html` porte encore COOP et COEP en
-  développement, donc office.js y serait bloqué. C'est exactement ce que T008 et T009 corrigent.
-- **Lot à passer en une fois, serveur arrêté** : T007, T008, T009, T010 (`vite.config.ts` et
-  `public/_headers`), puis T013, T015, T016, T022 (`functions/_lib/notion.ts` et les cinq
-  routes existantes). Chaque élément de ce lot est additif, mais il relance Vite et touche le
-  chemin de la dictée : il mérite d'être fait d'un bloc, suivi de la grille de non-régression
-  de `quickstart.md` §5.
+**Deux choses que seul le build a révélées**, et qui n'étaient pas au plan :
 
-**Seul prérequis humain restant** : T003, l'application Entra, qui ne bloque que la phase 7.
-Les routes Notion (T024 à T028, T036, T040, T041) n'ont plus de dépendance externe.
+1. Le service worker de la dictée **précachait `outlook.html` et les icônes du complément**. La
+   denylist de T010 ne couvre que le repli de navigation, jamais un succès de précache : le
+   taskpane aurait été servi depuis le cache de la dictée. D'où T010b.
+2. Retirer les en-têtes d'isolation dans un middleware postérieur ne fonctionne pas — Vite
+   applique `server.headers` avant les middlewares de plugin. Le middleware de T009 agit donc
+   des deux côtés, et il est volontairement étroit : seules les requêtes `/outlook`, seuls ces
+   deux noms. La dictée ne peut pas ouvrir de microphone sans eux.
+
+**Reste à faire avant la phase 3** : écrire les quatre routes `functions/api/outlook/*`
+(T024 à T028, T036, T040, T041). Elles sont déjà déclarées dans le pont `pagesFunctions` de
+`vite.config.ts`, donc elles répondront dès qu'elles existeront, sans y retoucher.
 
 ---
 
@@ -92,12 +87,13 @@ reste de prérequis humain que T003, l'application Entra, et seulement pour la p
 - [X] T002 Créer dans la base Notes les quatre propriétés manquantes : `ID client` (texte), `Source` (sélection, options exactement `Dictée` et `Email`), `Dernier message` (texte), `Statut IA` (sélection, options exactement `À traiter` et `Traité`) — tableau de référence dans `specs/001-outlook-vers-notion/data-model.md` §2 (hors code, Théo)
 - [ ] T003 [P] Enregistrer l'application Microsoft Entra : SPA, redirection NAA `brk-multihub://<domaine>`, API exposée avec un scope pour le backend, permission déléguée `Mail.Read`, consentement administrateur — `specs/001-outlook-vers-notion/quickstart.md` §0.4 (hors code, Théo ; requise seulement à partir de la phase 7)
 - [X] T004 Renseigner dans `.env.local` les sept variables nouvelles ou vides : `NOTES_PROP_CLIENT_ID=ID client`, `NOTES_PROP_SOURCE=Source`, `NOTES_PROP_AI_STATUS=Statut IA`, `NOTES_PROP_LAST_MESSAGE=Dernier message`, `CONTACTS_PROP_EMAIL=Email`, `INTERNAL_DOMAINS=mosaicfin.com`, et créer `.env.example` qui les liste toutes avec `NOTION_TOKEN` marqué comme secret (dépend de T002)
-- [ ] T005 Installer les dépendances dans `package.json` : `@azure/msal-browser`, `jose`, et `@types/office-js` en dépendance de développement
+- [X] T005 Installer les dépendances dans `package.json` : `jose` (fait). `@azure/msal-browser` arrive avec T049 ; `@types/office-js` n'est pas nécessaire — `src/outlook/office.ts` déclare la surface d'Office qu'il utilise, qui est petite
 - [X] T006 Créer `outlook.html` à la racine, entrée du taskpane, qui charge `https://appsforoffice.microsoft.com/lib/1/hosted/office.js` par balise `<script>` puis `src/outlook/main.tsx` — office.js n'est jamais bundlé (research E-3)
-- [ ] T007 Déclarer les deux entrées dans `vite.config.ts` via `build.rollupOptions.input` : `index.html` et `outlook.html`
-- [ ] T008 Ajouter dans `public/_headers` un bloc `/outlook*` qui supprime les deux en-têtes d'isolation par le préfixe `! ` : `! Cross-Origin-Embedder-Policy` et `! Cross-Origin-Opener-Policy` — COEP bloquerait office.js, COOP casserait la fenêtre d'authentification (research E-1)
-- [ ] T009 Ajouter dans `vite.config.ts` un middleware de serveur de développement qui retire ces deux mêmes en-têtes pour toute requête dont le chemin commence par `/outlook` — `server.headers` les pose aujourd'hui sur tout, et le taskpane doit se comporter en dev comme en production
-- [ ] T010 Ajouter `/^\/outlook/` à `workbox.navigateFallbackDenylist` dans `vite.config.ts` — sans cela le service worker de la dictée, de portée `/`, répond l'application de dictée sur `/outlook` (research E-2)
+- [X] T007 Déclarer les deux entrées dans `vite.config.ts` via `build.rollupOptions.input` : `index.html` et `outlook.html`
+- [X] T008 Ajouter dans `public/_headers` un bloc `/outlook*` qui supprime les deux en-têtes d'isolation par le préfixe `! ` : `! Cross-Origin-Embedder-Policy` et `! Cross-Origin-Opener-Policy` — COEP bloquerait office.js, COOP casserait la fenêtre d'authentification (research E-1)
+- [X] T009 Ajouter dans `vite.config.ts` un middleware qui retire ces deux mêmes en-têtes pour toute requête dont le chemin commence par `/outlook`, en développement **et** en prévisualisation. Les retirer dans un middleware postérieur ne marche pas : `server.headers` est appliqué avant les middlewares de plugin. Le middleware fait donc les deux — `removeHeader` pour ce qui est déjà posé, et un `setHeader` neutralisé pour ce qui le serait ensuite — et ne touche jamais qu'une requête `/outlook`
+- [X] T010 Ajouter `/^\/outlook/` à `workbox.navigateFallbackDenylist` dans `vite.config.ts` — sans cela le service worker de la dictée, de portée `/`, répond l'application de dictée sur `/outlook` (research E-2)
+- [X] T010b Sortir le taskpane du précache du service worker : `globIgnores` gagne `outlook.html`, `outlook/**` et `assets/outlook-*.js`, et une règle `NetworkOnly` sur `/outlook` passe avant la règle de navigation. **Découvert en inspectant le build, pas prévu au plan** : la denylist ne gouverne que le repli de navigation, jamais un succès de précache, donc `outlook.html` était servi depuis le cache de la dictée — le complément aurait tourné sur une version périmée sans moyen de s'en apercevoir. Précache passé de 55 à 48 entrées
 - [X] T011 [P] Créer `public/outlook/manifest.xml`, manifeste « add-in only » : surface `MessageReadCommandSurface`, un bouton ouvrant le taskpane libellé « Vers Notion », `SupportsPinning` activé, `AppDomains` limité au domaine de déploiement. Ne pas y déclarer `NestedAppAuth` : ce jeu d'exigences n'est pas déclarable dans un manifeste et se teste à l'exécution (research B-2)
 - [X] T012 [P] Produire `public/outlook/icon-16.png`, `icon-32.png`, `icon-64.png`, `icon-80.png`, `icon-128.png` depuis `src/assets/mosaic-symbole.svg`
 
@@ -113,16 +109,16 @@ conversion des messages en blocs, et la coquille du panneau.
 
 **⚠️ CRITICAL** : aucune user story ne peut commencer avant la fin de cette phase.
 
-- [ ] T013 Étendre `props()` et le type `Env` dans `functions/_lib/notion.ts` avec quatre entrées : `noteSource` (`NOTES_PROP_SOURCE`, défaut `"Source"`), `noteAiStatus` (`NOTES_PROP_AI_STATUS`, défaut `"Statut IA"`), `noteLastMessage` (`NOTES_PROP_LAST_MESSAGE`, défaut `"Dernier message"`), `contactEmail` (`CONTACTS_PROP_EMAIL`, défaut `"Email"`), plus `ENTRA_API_CLIENT_ID`, `ENTRA_TENANT_IDS`, `INTERNAL_DOMAINS`
-- [ ] T014 Créer `functions/_lib/auth.ts` exportant `identify(request, env): Promise<User | null>` selon `specs/001-outlook-vers-notion/contracts/auth.md` : chemin Bearer vérifié par `jose` (signature JWKS, `iss`, `aud` = `ENTRA_API_CLIENT_ID`, `exp`, `nbf`, `tid` ∈ `ENTRA_TENANT_IDS`), email pris dans `preferred_username` puis `upn` puis `email`, puis `findUser`. Un Bearer présent mais invalide **n'est jamais rattrapé** par le repli : sinon un faux Bearer accompagné d'un `x-user-email` contournerait toute la vérification
-- [ ] T015 Rendre `guard()` asynchrone dans `functions/_lib/notion.ts` et le faire appeler `identify()`, en gardant sa signature de retour `{ user } | Response` et ses messages d'erreur actuels pour le chemin `x-user-email` (dépend de T014)
-- [ ] T016 Ajouter `await` devant les appels à `guard()` dans `functions/api/contacts.ts`, `functions/api/companies.ts`, `functions/api/notes.ts`, `functions/api/files.ts` et `functions/api/session.ts` — changement purement mécanique, aucun comportement modifié (dépend de T015)
+- [X] T013 Étendre `props()` et le type `Env` dans `functions/_lib/notion.ts` avec quatre entrées : `noteSource` (`NOTES_PROP_SOURCE`, défaut `"Source"`), `noteAiStatus` (`NOTES_PROP_AI_STATUS`, défaut `"Statut IA"`), `noteLastMessage` (`NOTES_PROP_LAST_MESSAGE`, défaut `"Dernier message"`), `contactEmail` (`CONTACTS_PROP_EMAIL`, défaut `"Email"`), plus `ENTRA_API_CLIENT_ID`, `ENTRA_TENANT_IDS`, `INTERNAL_DOMAINS`
+- [X] T014 Créer `functions/_lib/auth.ts` exportant `identify(request, env): Promise<User | null>` selon `specs/001-outlook-vers-notion/contracts/auth.md` : chemin Bearer vérifié par `jose` (signature JWKS, `iss`, `aud` = `ENTRA_API_CLIENT_ID`, `exp`, `nbf`, `tid` ∈ `ENTRA_TENANT_IDS`), email pris dans `preferred_username` puis `upn` puis `email`, puis `findUser`. Un Bearer présent mais invalide **n'est jamais rattrapé** par le repli : sinon un faux Bearer accompagné d'un `x-user-email` contournerait toute la vérification
+- [X] T015 Rendre `guard()` asynchrone dans `functions/_lib/notion.ts` et le faire appeler `identify()`, en gardant sa signature de retour `{ user } | Response` et ses messages d'erreur actuels pour le chemin `x-user-email` (dépend de T014)
+- [X] T016 Ajouter `await` devant les appels à `guard()` dans `functions/api/contacts.ts`, `functions/api/companies.ts`, `functions/api/notes.ts`, `functions/api/files.ts` et `functions/api/session.ts` — changement purement mécanique, aucun comportement modifié (dépend de T015)
 - [X] T017 [P] Créer `functions/_lib/thread.ts` : `blocksFor(messages)` rend, par message, un `callout` « Échange du D MMMM YYYY » (mois en français, en toutes lettres) dont les enfants sont un `divider` puis les paragraphes du contenu, et un dernier paragraphe « Pièces jointes : … » seulement s'il y a des noms. Contraintes à respecter littéralement : 2 000 caractères maximum par élément de rich text, 100 blocs maximum par requête, deux niveaux d'imbrication maximum par requête. Réutiliser le découpage de `richText()` de `functions/api/notes.ts` en l'extrayant ici (research D-1, data-model §3)
 - [X] T018 [P] Créer `src/outlook/office.ts` : `ready()` attend `Office.onReady`, `supportsNaa()` renvoie `Office.context.requirements.isSetSupported("NestedAppAuth", "1.1")`, `readItem()` rend `{ itemId, conversationId, subject, from, to, cc }`, et `onItemChanged(cb)` s'abonne à `Office.EventType.ItemChanged`
 - [X] T019 [P] Créer `src/outlook/participants.ts` : `split(participants, internalDomains, users)` sépare internes et externes, et `dedupe(matched)` fusionne deux adresses pointant la même page Notion en **une** entrée de relation — le dédoublonnage se fait sur l'identifiant de page, jamais sur l'adresse (data-model §1, invariant)
 - [X] T020 [P] Créer `src/outlook/graph.ts` : `fetchThread(token, conversationId)` appelle `GET /me/messages?$filter=conversationId eq '…'` avec l'en-tête `Prefer: outlook.body-content-type="text"`, suit `@odata.nextLink` jusqu'au bout, lit `uniqueBody` et **trie côté client** sur `receivedDateTime` — Graph refuse `$orderby` combiné à ce `$filter` (research C-2)
 - [X] T021 Créer `src/outlook/api.ts`, client typé des quatre routes `/api/outlook/*`, avec les formes de requête et de réponse de `specs/001-outlook-vers-notion/contracts/`, et une classe d'erreur portant le statut HTTP et le drapeau `retry`
-- [ ] T022 Ajouter dans `functions/api/notes.ts` l'écriture `Source` = `Dictée`, conditionnée à la présence de la propriété dans le schéma lu, comme toutes les autres écritures de cette route. **Unique modification d'une route de la dictée** ; justifiée dans **Complexity Tracking** de [plan.md](./plan.md) : sans elle, SC-005 est invérifiable et le prompt Notion AI ne peut pas distinguer les deux sources (dépend de T002, T013)
+- [X] T022 Ajouter dans `functions/api/notes.ts` l'écriture `Source` = `Dictée`, conditionnée à la présence de la propriété dans le schéma lu, comme toutes les autres écritures de cette route. **Unique modification d'une route de la dictée** ; justifiée dans **Complexity Tracking** de [plan.md](./plan.md) : sans elle, SC-005 est invérifiable et le prompt Notion AI ne peut pas distinguer les deux sources (dépend de T002, T013)
 - [X] T023 Créer `src/outlook/main.tsx` et `src/outlook/Panel.tsx` : coquille du panneau, environ 320 px, une colonne, sans défilement horizontal, DA Mosaic avec Lora, **fond clair imposé même si Outlook est en thème sombre**, et la machine à états des dix états de `data-model.md` §5 câblée mais encore vide (dépend de T018)
 
 **Checkpoint** : le parcours complet de la dictée passe sur l'iPhone, inchangé, et le taskpane

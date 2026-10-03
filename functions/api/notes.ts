@@ -1,4 +1,16 @@
-import { dataSourceId, fail, guard, json, notion, props, schemaOf, type Env, type Handler } from "../_lib/notion";
+import {
+  dataSourceId,
+  fail,
+  guard,
+  json,
+  notion,
+  props,
+  schemaOf,
+  SOURCE,
+  type Env,
+  type Handler,
+} from "../_lib/notion";
+import { richText } from "../_lib/thread";
 
 type Body = {
   clientId?: string;
@@ -9,22 +21,9 @@ type Body = {
   files?: { id: string; name: string }[];
 };
 
-// Notion caps one rich text item at 2000 characters, so a long dictation is
-// sent as several items of the same property.
-// https://developers.notion.com/reference/request-limits
-function richText(text: string) {
-  const parts: string[] = [];
-  let rest = text.trim();
-  while (rest.length > 2000) {
-    const window = rest.slice(0, 2000);
-    const cut = Math.max(window.lastIndexOf(". "), window.lastIndexOf(" "));
-    const at = cut > 1000 ? cut + 1 : 2000;
-    parts.push(rest.slice(0, at));
-    rest = rest.slice(at);
-  }
-  if (rest) parts.push(rest);
-  return parts.map((content) => ({ type: "text", text: { content } }));
-}
+// The 2000 character splitter lives in ../_lib/thread.ts: the Outlook add-in
+// needs the same one for the body of its pages, and two copies of a limit are
+// one copy too many.
 
 // The default template of the notes data source, which carries the layout and
 // the blocks of a note. Notion applies it after the page is created, so the
@@ -40,7 +39,7 @@ async function defaultTemplateId(env: Env, sourceId: string) {
 }
 
 export const onRequestPost: Handler = async ({ request, env }) => {
-  const denied = guard(request, env);
+  const denied = await guard(request, env);
   if (denied instanceof Response) return denied;
   const { user } = denied;
 
@@ -98,6 +97,13 @@ export const onRequestPost: Handler = async ({ request, env }) => {
     }
     if (p.noteClientId && schema[p.noteClientId]) {
       properties[p.noteClientId] = { rich_text: [{ type: "text", text: { content: body.clientId } }] };
+    }
+    // Which tool wrote the note. The Notion AI prompt reads it to know where
+    // the text is: a dictation puts it in "Transcription brute", a mail in the
+    // body of the page. Conditional on the column existing, like everything
+    // else this route writes — without it, the behaviour is what it was.
+    if (schema[p.noteSource]?.type === "select") {
+      properties[p.noteSource] = { select: { name: SOURCE.dictation } };
     }
     // Attachments are optional, so this only ever runs when the user added
     // one — and then a missing column is worth saying out loud rather than
