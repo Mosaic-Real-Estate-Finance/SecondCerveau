@@ -169,6 +169,42 @@ Sur `messages`, Graph impose que toute propriété de `$orderby` apparaisse auss
   en mémoire.
 - **Alternative écartée** : `$search`, qui ne se combine pas avec `$filter`.
 
+### C-4. Un fil n'est pas une liste d'échanges, c'est une liste de copies — **constaté en production**
+
+Une note rendait quatre encadrés pour trois mails. Le quatrième ne contenait rien d'autre
+qu'une signature Outlook pour Mac, un bloc `De : / Date : / À : / Objet :` et la répétition
+du message précédent.
+
+Trois causes se cumulent, et aucune n'est un bug de notre code :
+
+1. `/me/messages` balaie **toute la boîte**, dossiers compris. Une réponse envoyée revient
+   donc en double — la copie dans Éléments envoyés et celle reçue — avec deux `id` Graph
+   différents. La seule chose que les deux copies partagent est le Message-ID RFC 5322,
+   exposé par Graph sous `internetMessageId` : c'est **l'identité d'un mail**, là où `id`
+   n'est que l'identité d'une copie.
+2. `uniqueBody` doit rendre la partie neuve d'une réponse sans l'historique. Sur la forme
+   que compose Outlook pour Mac — texte neuf **au-dessus** de l'en-tête cité —
+   l'heuristique rend parfois exactement l'inverse : la part qu'elle aurait dû retirer.
+3. « Envoyé à partir d'Outlook pour Mac » n'a été écrit par personne.
+
+- **Décision** : `src/outlook/unique.ts`. Le texte est coupé au premier marqueur de
+  citation (séparateur Outlook, attribution « … a écrit : », ou bloc d'en-tête — trois
+  lignes `Libellé :` consécutives dont un `De :`, jamais moins, pour qu'un « Objet : relance »
+  écrit à la main survive) ; les signatures d'appareil et les lignes `>` sont retirées ;
+  puis les copies sont repliées sur `internetMessageId`, avec l'égalité de texte à
+  expéditeur identique comme filet, au-delà de 40 caractères — « Ok » deux fois dans un fil,
+  ce sont deux mails.
+- Un message qui **avait** du texte et n'en a plus après nettoyage est écarté : il ne
+  contenait que les mots d'un autre. Un message **vide à l'arrivée** est conservé, parce
+  qu'il a réellement été envoyé. C'est cette distinction qui justifie que le nettoyage
+  rende un `{ text, quoteOnly }` plutôt qu'une chaîne.
+- Les brouillons (`isDraft`) sont exclus : un brouillon est un mail que personne n'a reçu.
+- Garde-fou : si tout le fil se révélait être de la citation, la liste d'origine est rendue
+  telle quelle. Un panneau vide n'explique rien.
+- **Filtré côté client**, dans `graph.ts`, parce que c'est là que vit la connaissance de
+  Graph — et parce que le compteur « n messages identifiés », la marque « Dernier message »
+  et le décompte des nouveaux retombent alors tous sur la même liste.
+
 ### C-3. Permission
 
 `Mail.Read` déléguée, jeton NAA distinct de celui du backend. Graph accepte l'appel depuis le
@@ -210,6 +246,21 @@ avant de déclarer un contact reconnu.
   sémantique juste — principe VII tenu.
 - **Alternative écartée** : une requête par adresse (N appels, plafond Notion de 3 req/s
   atteint sur un fil à dix participants).
+
+### D-4. L'icône d'un encadré se nomme, elle ne s'adresse pas — **vérifié contre la base réelle le 3 octobre 2026**
+
+Quatre formes ont été postées sur une page jetable, puis relues :
+
+| Envoyé | Résultat |
+| --- | --- |
+| `{ type: "icon", icon: { name: "conversation", color: "gray" } }` | 200, **stocké tel quel** |
+| `{ type: "external", external: { url: ".../icons/conversation_gray.svg" } }` | 200, mais **réécrit** par Notion dans la forme ci-dessus |
+| `{ type: "custom_emoji", custom_emoji: { name: "conversation" } }` | 400 — `custom_emoji.id` exigé |
+| `{ name: "conversation", color: "gray" }` | 400 |
+
+- **Décision** : la forme native nommée. L'URL externe marche, mais elle décrit par un
+  fichier ce que l'API sait désigner par son nom, et c'est Notion qui finit par la traduire.
+- `color: "gray_background"` sur l'encadré : accepté et relu tel quel.
 
 ---
 

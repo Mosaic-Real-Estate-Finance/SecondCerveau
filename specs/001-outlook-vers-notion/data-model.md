@@ -97,17 +97,26 @@ précédent du `Fichier` / `Fichiers` a coûté assez cher pour que la règle so
 
 ---
 
-## 3. Corps de la page — un message, un bloc
+## 3. Corps de la page — un mail, un bloc
 
-Pour chaque message, dans l'ordre chronologique :
+Pour chaque mail — et un mail n'est pas une copie, voir research C-4 — dans l'ordre
+chronologique :
 
 ```text
-callout  « Échange du 3 octobre 2026 »        (date du message, mois en français)
+callout  icône « conversation », fond gris
+  « Jean-Marc Vasseur a écrit le 3 octobre 2026 à 20:57 »
   ├── divider
   ├── paragraph  …contenu…                    (2 000 caractères maximum par paragraphe)
   ├── paragraph  …suite…
   └── paragraph  « Pièces jointes : plan.pdf, photo.jpg »   (seulement s'il y en a)
 ```
+
+Le titre porte le **nom d'affichage** de l'expéditeur, jamais son adresse — l'adresse n'y
+paraît que si Graph n'a pas donné de nom. L'heure est celle d'**Europe/Paris**, fixe et non
+celle du lecteur, pour qu'une note dise la même chose à tout le monde.
+
+L'icône est postée sous sa forme nommée, `{ type: "icon", icon: { name: "conversation",
+color: "gray" } }`, et le fond sous `color: "gray_background"` (research D-4).
 
 Contraintes de l'API respectées (research D-1) : deux niveaux d'imbrication par requête,
 100 blocs par requête, 2 000 caractères par élément de rich text. Le découpage réutilise

@@ -9,8 +9,13 @@
 //  - `$orderby` cannot be combined with this `$filter`: Graph requires every
 //    ordered property to appear in the filter first. So the thread comes back
 //    unordered and is sorted here.
+//
+// A third, which is why `unique()` exists: this query spans the whole mailbox,
+// folders included, so one mail can come back several times under several ids.
+// See src/outlook/unique.ts.
 
 import type { ThreadMessage } from "./api";
+import { unique } from "./unique";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 const PAGE = 50;
@@ -19,6 +24,8 @@ type GraphRecipient = { emailAddress?: { name?: string; address?: string } };
 
 type GraphMessage = {
   id: string;
+  internetMessageId?: string;
+  isDraft?: boolean;
   receivedDateTime?: string;
   from?: GraphRecipient;
   sender?: GraphRecipient;
@@ -27,6 +34,9 @@ type GraphMessage = {
   hasAttachments?: boolean;
   attachments?: { name?: string }[];
 };
+
+/** A message on its way through `unique()`, before the id of a mail is dropped. */
+type Candidate = ThreadMessage & { internetMessageId?: string };
 
 const namesOf = (message: GraphMessage) =>
   (message.attachments ?? []).map((file) => file.name ?? "").filter(Boolean);
@@ -53,8 +63,9 @@ const tidy = (text: string) =>
     .join("\n")
     .trim();
 
-const convert = (message: GraphMessage): ThreadMessage => ({
+const convert = (message: GraphMessage): Candidate => ({
   id: message.id,
+  internetMessageId: message.internetMessageId,
   receivedAt: message.receivedDateTime ?? new Date().toISOString(),
   from: {
     name: message.from?.emailAddress?.name ?? message.sender?.emailAddress?.name ?? "",
@@ -75,13 +86,13 @@ export async function fetchThread(
   conversationId: string,
   onProgress?: (count: number) => void,
 ): Promise<ThreadMessage[]> {
-  const select = "id,receivedDateTime,from,sender,uniqueBody,hasAttachments";
+  const select = "id,internetMessageId,isDraft,receivedDateTime,from,sender,uniqueBody,hasAttachments";
   // Expanding the attachments with only their name costs nothing and spares a
   // request per message: the files themselves are never downloaded.
   let url =
     `${GRAPH}/me/messages?$filter=conversationId eq '${encodeURIComponent(conversationId)}'` +
     `&$select=${select}&$expand=attachments($select=name)&$top=${PAGE}`;
-  const messages: ThreadMessage[] = [];
+  const messages: Candidate[] = [];
   const missingNames: string[] = [];
 
   while (url) {
@@ -98,12 +109,17 @@ export async function fetchThread(
     }
     const page = (await response.json()) as { value?: GraphMessage[]; "@odata.nextLink"?: string };
     for (const message of page.value ?? []) {
+      // A draft is a mail nobody has received. It belongs to the thread in
+      // Outlook and to nothing at all in a record of exchanges.
+      if (message.isDraft) continue;
       messages.push(convert(message));
       // An expand that came back empty on a message that has attachments: ask
       // for its names on their own rather than list none.
       if (message.hasAttachments && !namesOf(message).length) missingNames.push(message.id);
     }
-    onProgress?.(messages.length);
+    // The count the panel shows is the count of mails, not of copies: it would
+    // otherwise announce "5 messages identifiés" and then offer to add 3.
+    onProgress?.(unique(messages).length);
     url = page["@odata.nextLink"] ?? "";
   }
 
@@ -114,8 +130,12 @@ export async function fetchThread(
   }
 
   // Graph would not sort this query (see the note at the top of the file).
+  // Sorting comes first because `unique()` keeps the oldest copy of a mail,
+  // and "oldest" has to mean something before anything is folded.
   messages.sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
-  return messages;
+
+  // The id of a mail is Graph's business, not Notion's: it leaves here.
+  return unique(messages).map(({ internetMessageId: _, ...message }) => message);
 }
 
 /** Names only, for a message whose expand came back without them. */

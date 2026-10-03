@@ -47,12 +47,46 @@ const MONTHS = [
   "décembre",
 ];
 
-/** "3 octobre 2026", from an ISO date. Invalid or missing: today. */
-export function frenchDate(iso: string): string {
+// A mail carries an instant, not a time: 18:57 UTC is what Graph returns for
+// something written at 20:57 in Paris. The note has to read in the hour the
+// exchange happened, so the stamp is built in the firm's own time zone —
+// fixed, not the reader's, so the same note says the same thing to everyone.
+const ZONE = "Europe/Paris";
+
+// Numeric parts only, assembled by hand: an ICU update can change where fr-FR
+// puts its comma or which space it uses, and the title of a block is not the
+// place to discover that.
+const PARTS = new Intl.DateTimeFormat("en-GB", {
+  timeZone: ZONE,
+  day: "numeric",
+  month: "numeric",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+const partsOf = (iso: string) => {
   const date = new Date(iso);
   const safe = Number.isNaN(date.getTime()) ? new Date() : date;
-  return `${safe.getUTCDate()} ${MONTHS[safe.getUTCMonth()]} ${safe.getUTCFullYear()}`;
+  return Object.fromEntries(PARTS.formatToParts(safe).map((part) => [part.type, part.value]));
+};
+
+/** "3 octobre 2026", in Paris time. Invalid or missing: today. */
+export function frenchDate(iso: string): string {
+  const { day, month, year } = partsOf(iso);
+  return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
 }
+
+/** "3 octobre 2026 à 20:57", in Paris time. */
+export function frenchStamp(iso: string): string {
+  const { hour, minute } = partsOf(iso);
+  return `${frenchDate(iso)} à ${hour}:${minute}`;
+}
+
+/** The display name, never the address — unless the name is all we lack. */
+const writerOf = (from: { name: string; address: string }) =>
+  from.name.trim() || from.address.trim() || "Expéditeur inconnu";
 
 // Cuts on a sentence end when there is one late enough, on a space otherwise,
 // and mid-word only when a single word is longer than the limit. Same rule as
@@ -77,11 +111,19 @@ const paragraph = (text: string): Block => ({
   paragraph: { rich_text: richText(text) },
 });
 
+// `icon` here is Notion's own icon set, addressed by name — the same names as
+// the /icons/<name>_<colour>.svg URLs. Checked against the live API on
+// 2026-10-03: posted this way it is stored and returned verbatim, where an
+// external URL to the same file is silently rewritten into it.
+const ICON = { type: "icon", icon: { name: "conversation", color: "gray" } };
+
 const callout = (title: string, children: Block[]): Block => ({
   object: "block",
   type: "callout",
   callout: {
-    rich_text: [{ type: "text", text: { content: title } }],
+    rich_text: richText(title),
+    icon: ICON,
+    color: "gray_background",
     children: [{ object: "block", type: "divider", divider: {} }, ...children],
   },
 });
@@ -113,7 +155,7 @@ export function blocksFor(messages: ThreadMessage[]): Block[] {
     // happened, and its id counts as handled either way.
     if (!body.length) body.push("(message sans texte)");
 
-    const title = `Échange du ${frenchDate(message.receivedAt)}`;
+    const title = `${writerOf(message.from)} a écrit le ${frenchStamp(message.receivedAt)}`;
     for (let at = 0; at < body.length; at += PARAGRAPHS) {
       const slice = body.slice(at, at + PARAGRAPHS);
       blocks.push(callout(at === 0 ? title : `${title} (suite)`, slice.map(paragraph)));
