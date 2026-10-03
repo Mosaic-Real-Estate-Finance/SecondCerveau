@@ -14,7 +14,10 @@
     "icons": "node scripts/generate-icons.mjs",
     "splash": "node scripts/generate-ios-splash.mjs",
     "typecheck": "tsc -b",
-    "avatars": "node scripts/generate-avatars.mjs"
+    "avatars": "node scripts/generate-avatars.mjs",
+    "dev:outlook": "node scripts/outlook-manifest.mjs localhost:5173 && vite --host --mode outlook --port 5173 --strictPort",
+    "outlook:manifest": "node scripts/outlook-manifest.mjs",
+    "outlook:certs": "office-addin-dev-certs install --days 365 --domains 127.0.0.1,localhost,192.168.1.86"
   },
   "dependencies": {
     "@fontsource/lora": "^5.3.0",
@@ -35,6 +38,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "office-addin-dev-certs": "^3.0.1",
     "sharp": "^0.35.4",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",

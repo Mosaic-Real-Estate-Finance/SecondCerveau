@@ -32,9 +32,21 @@ spécifiée.
 
    Les deux variables Entra (`ENTRA_API_CLIENT_ID`, `ENTRA_TENANT_IDS`) ne sont nécessaires
    qu'à partir de la phase 4 : sans elles, le repli `x-user-email` suffit pour développer.
-4. **App Entra** (phase 4) : SPA, redirection NAA
-   `brk-multihub://<domaine>`, API exposée avec un scope pour le backend, permission déléguée
-   `Mail.Read`, consentement administrateur.
+4. **App Entra** (phase 7) : plateforme **Single-page application**, API exposée avec un scope
+   pour le backend, permission déléguée `Mail.Read`, consentement administrateur.
+
+   URI de redirection, de type SPA. Le schéma attend **l'origine seule, port compris**, et
+   aucun sous-chemin :
+
+   - `brk-multihub://localhost:5173` — c'est celui qui sert, le taskpane tournant dans Outlook
+     sur la machine de développement ;
+   - `brk-multihub://192.168.1.86:5173` — seulement utile pour un sideload depuis un autre
+     appareil du réseau ;
+   - `https://localhost:5173/outlook.html` — la page qui demande les jetons, pour les clients
+     web qui passent par le flux d'authentification standard.
+
+   Puis renseigner `ENTRA_API_CLIENT_ID` et `ENTRA_TENANT_IDS` dans `.env.local`. Les deux
+   absentes, le chemin par jeton Microsoft reste désactivé et le repli `x-user-email` suffit.
 
 Vérifier que les propriétés sont bien là, sans ouvrir Notion :
 
@@ -54,36 +66,72 @@ Attendu : `ID client`, `Source`, `Dernier message`, `Statut IA` présents.
 
 ```sh
 npm install
-npm run dev:mobile    # HTTPS avec certificat auto-signé : Outlook exige une origine sûre
+npm run outlook:certs    # une seule fois : certificat approuvé par le système
+npm run dev:outlook      # génère le manifeste de dev, puis sert l'app
 ```
 
-Le taskpane est sur `https://<ip-locale>:5173/outlook.html`, la PWA reste sur `/`.
+`npm run outlook:certs` appelle `office-addin-dev-certs` pour un certificat valable un an
+couvrant `localhost`, `127.0.0.1` et `192.168.1.86`, et installe son autorité dans le trousseau.
+Aucun mot de passe n'est demandé. Vérification :
 
-**Deux vérifications d'hygiène avant tout le reste :**
+```sh
+curl -s -o/dev/null -w '%{http_code}\n' https://localhost:5173/outlook.html
+```
+
+**Sans `-k`.** Si ça rend `200`, le certificat est réellement approuvé. C'est le point qui
+compte : **Outlook sur le web charge le taskpane dans une iframe, et une iframe n'offre aucun
+avertissement à contourner** — un certificat auto-signé y donne un panneau vide, sans message.
+
+### Deux modes, et pourquoi
+
+| Commande | Certificat | Pour |
+| --- | --- | --- |
+| `npm run dev:mobile` | auto-signé (`basicSsl`) | le téléphone, qui a déjà accepté celui-là |
+| `npm run dev:outlook` | approuvé par le système | Outlook, qui n'accepte que celui-là |
+
+Ils ne diffèrent que par le certificat : même port, mêmes routes, mêmes variables.
+`dev:mobile` reste intact exprès — la PWA installée sur le téléphone est en service, et un
+certificat non approuvé dans une PWA en mode autonome échoue en écran blanc, pas en question.
+
+Pour n'avoir qu'un seul serveur pour les deux, installer une fois l'autorité sur le téléphone :
+envoyer `~/.office-addin-dev-certs/ca.crt`, l'ouvrir, puis Réglages → Profil téléchargé →
+Installer, et enfin Réglages → Général → Informations → Réglages des certificats → activer la
+confiance totale. `dev:outlook` sert alors aussi le téléphone sans avertissement.
+
+### Hygiène, à vérifier à chaque démarrage
 
 ```sh
 # Le taskpane ne doit PAS porter les en-têtes d'isolation, sinon office.js est bloqué
-curl -ks -D- -o/dev/null https://localhost:5173/outlook.html | grep -i cross-origin
-# attendu : rien
+curl -s -D- -o/dev/null https://localhost:5173/outlook.html | grep -ic cross-origin   # 0
 
 # La PWA doit les porter, sinon le microphone et Whisper cassent sur iPhone
-curl -ks -D- -o/dev/null https://localhost:5173/ | grep -i cross-origin
-# attendu : les deux en-têtes
+curl -s -D- -o/dev/null https://localhost:5173/ | grep -ic cross-origin               # 2
 ```
 
 ---
 
 ## 2. Sideload dans Outlook
 
+Le manifeste de développement est écrit par `dev:outlook` dans `.outlook/manifest.dev.xml`
+(ignoré par git : il porte un hôte propre à la machine). Il a **son propre identifiant et son
+propre libellé de ruban, « Vers Notion (dev) »** : Outlook indexe un complément sur son
+identifiant, donc partager celui de la production ferait que la version de développement
+remplace la vraie dans le ruban, silencieusement.
+
+Pour un autre hôte : `npm run outlook:manifest -- notes.mosaicfin.com prod`.
+
 | Client | Chemin |
 | --- | --- |
-| Outlook sur le web | Paramètres → Compléments → *Mes compléments* → *Ajouter un complément personnalisé* → *À partir d'un fichier* → `public/outlook/manifest.xml` |
+| Outlook sur le web | Paramètres → Compléments → *Mes compléments* → *Ajouter un complément personnalisé* → *À partir d'un fichier* → `.outlook/manifest.dev.xml` |
 | Nouvel Outlook Windows | idem, depuis le panneau Compléments |
-| Outlook classique Windows | Partage réseau comme catalogue de confiance, ou `npx office-addin-debugging start public/outlook/manifest.xml` |
+| Outlook classique Windows | partage réseau comme catalogue de confiance, ou `npx office-addin-debugging start .outlook/manifest.dev.xml` |
 | Outlook Mac | copier le manifeste dans `~/Library/Containers/com.microsoft.Outlook/Data/Documents/wef` |
 
-Un certificat auto-signé doit être accepté par le navigateur **et** par le système avant que
-le client lourd charge le taskpane.
+Puis ouvrir un mail en lecture : le bouton **Vers Notion (dev)** apparaît dans le ruban.
+
+À ce stade, sans application Entra configurée, le panneau n'a pas encore de jeton Microsoft et
+les appels partent avec le repli `x-user-email` de la PWA. C'est voulu : les phases 1 à 3 se
+développent sans Entra.
 
 ---
 
@@ -131,15 +179,25 @@ aboutit une fois le réseau revenu, et **aucun doublon** — ni de contact, ni d
 ## 4. Vérifications sans interface
 
 ```sh
-# 401 sans identité, sur chacune des quatre routes
-for r in "GET /api/outlook/notes?conversationId=x" "POST /api/outlook/notes" \
-         "POST /api/outlook/contacts" "POST /api/outlook/contacts/match"; do
-  set -- $r
-  echo -n "$1 $2 → "
-  curl -ks -o/dev/null -w '%{http_code}\n' -X "$1" "https://localhost:5173$2" \
-       -H 'Content-Type: application/json' -d '{}'
-done
+# 401 sans identité, sur les cinq points d'entrée.
+# Pas de corps sur le GET : le pont de développement ne peut pas construire une
+# requête GET avec un corps, et rend 500 avant d'atteindre la route.
+check() { printf '%-5s %-36s → ' "$1" "$2"
+  curl -s -o/dev/null -w '%{http_code}\n' -X "$1" "https://localhost:5173$2" \
+    ${3:+-H 'Content-Type: application/json'} ${3:+--data "$3"}; }
+check GET   "/api/outlook/notes?conversationId=x"
+check POST  "/api/outlook/notes"            '{}'
+check PATCH "/api/outlook/notes"            '{}'
+check POST  "/api/outlook/contacts"         '{}'
+check POST  "/api/outlook/contacts/match"   '{}'
 # attendu : 401 partout
+
+# Et le cas qui compte vraiment : un faux jeton accompagné d'une adresse
+# autorisée ne doit JAMAIS passer.
+curl -s -o/dev/null -w '%{http_code}\n' -X POST https://localhost:5173/api/outlook/contacts/match \
+  -H 'Authorization: Bearer forge' -H 'x-user-email: theo@gouman.fr' \
+  -H 'Content-Type: application/json' --data '{"addresses":["a@b.fr"]}'
+# attendu : 401
 ```
 
 ```sh

@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { getHttpsServerOptions } from "office-addin-dev-certs";
 
 // Cross origin isolation unlocks SharedArrayBuffer, which ONNX Runtime needs to
 // run the WASM backend on several threads. Same values as public/_headers.
@@ -135,13 +136,37 @@ function pagesFunctions(env: Record<string, string>): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) => {
+// Outlook on the web loads the taskpane in an iframe and refuses a certificate
+// its browser does not trust — there is no warning to click through inside an
+// iframe. `npm run dev:outlook` therefore serves the same app behind the
+// certificate issued by office-addin-dev-certs, whose CA is installed in the
+// system trust store.
+//
+// It is a separate mode on purpose. `dev:mobile` keeps its self-signed
+// certificate, because that is the one the phone has already accepted and the
+// installed PWA is in use: a new certificate there means a new warning, and an
+// untrusted certificate in a standalone PWA fails as a blank screen rather
+// than as a question.
+async function trustedHttps(mode: string) {
+  if (mode !== "outlook") return undefined;
+  try {
+    return await getHttpsServerOptions();
+  } catch {
+    throw new Error(
+      "Certificat de développement absent. Lancez une fois :\n" +
+        "  npx office-addin-dev-certs install --days 365 --domains 127.0.0.1,localhost,192.168.1.86",
+    );
+  }
+}
+
+export default defineConfig(async ({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const https = await trustedHttps(mode);
   return {
     resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
-    server: { headers: isolation },
-    preview: { headers: isolation },
-    worker: { format: "es" },
+    server: { headers: isolation, ...(https ? { https } : {}) },
+    preview: { headers: isolation, ...(https ? { https } : {}) },
+    worker: { format: "es" as const },
     // Two entries: the dictation PWA, and the Outlook taskpane. They share the
     // components and the brand, nothing else.
     build: {
@@ -156,6 +181,9 @@ export default defineConfig(({ mode }) => {
     plugins: [
       // `npm run dev:mobile`: HTTPS on the local network with a self-signed
       // certificate, because iOS only opens the microphone on a secure origin.
+      // Only for the phone. In `outlook` mode the trusted certificate above
+      // takes over, and two plugins fighting over `server.https` would leave
+      // whichever ran last.
       mode === "mobile" && basicSsl({ name: "mosaic-dictee" }),
       react(),
       tailwindcss(),

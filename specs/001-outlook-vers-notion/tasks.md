@@ -38,40 +38,83 @@ Dépôt à deux fronts et un socle serveur, conformément à **Structure Decisio
 
 ## État d'avancement au 2026-10-03
 
-**24 tâches sur 79.** Les deux dépendances bloquantes sont levées et le socle est en place ;
-il ne reste de prérequis externe que T003, l'application Entra, qui ne bloque que la phase 7.
+**32 tâches sur 79.** Les quatre routes serveur sont écrites et éprouvées contre la vraie base
+Notion. Il ne reste de prérequis externe que T003, l'application Entra, qui ne bloque que la
+phase 7.
 
-**Notion.** `Interlocuteur` n'est pas limitée à une page, constaté dans l'interface. Les quatre
-propriétés manquantes ont été créées par l'API et confirmées par relecture : 15 propriétés, les
-onze d'origine intactes. `.env.local` et `.env.example` sont renseignés.
+### Ce qui a été vérifié, pas supposé
 
-**La dictée a gagné son idempotence**, qui lui manquait faute de colonne `ID client` : deux
-envois du même identifiant rendent la même page, le second avec `duplicate: true`. Vérifié
-contre la vraie route, et les notes portent désormais `Source = Dictée`. Les pages de sonde ont
-été archivées.
+Toutes les sondes ci-dessous ont écrit dans la base de production puis ont été archivées dans
+la même exécution.
 
-**Faites** : T001, T002, T004, T005, T006, T007, T008, T009, T010, T010b, T011, T012, T013,
-T014, T015, T016, T017, T018, T019, T020, T021, T022, T023, T060.
+**Reconnaissance des contacts** — un contact dont `Email` vaut `a@…, b@…` est trouvé sur la
+seconde adresse, en majuscules comme en minuscules. Et surtout : chercher `sonde.beta@…` ne
+trouve **pas** un contact dont l'adresse est `zz.sonde.beta@…`. C'est la revérification
+d'égalité exacte qui tient, après le filtre `contains` qui n'est qu'un dégrossissage.
 
-**Vérifié, pas supposé** : `tsc` propre sur les deux projets · `npm run build` produit les deux
-entrées · `/` porte les deux en-têtes d'isolation, `/outlook.html`, le manifeste et les icônes
-n'en portent aucun · 401 sans identité et 200 avec, sur les routes existantes · **un Bearer
-forgé accompagné d'un `x-user-email` valide est refusé en 401**, ce qui est la propriété qui
-compte · une route Outlook non encore écrite rend 500 sans emporter le serveur.
+**Cycle de vie d'une note** — `GET` sans note → `POST` → `POST` rejoué qui rend la même page
+avec `duplicate: true` → `GET` qui retrouve la note et sa borne → `PATCH` avec une borne
+périmée qui rend 409 → `PATCH` qui n'ajoute que le message nouveau → `PATCH` rejoué qui rend
+`messagesAdded: 0`. Dans la page : `Source = Email`, `Statut IA = À traiter`, `ID client`,
+`Dernier message`, `Date` du dernier message, `Interlocuteur`, `Auteur`, et
+`Transcription brute` laissée vide.
 
-**Deux choses que seul le build a révélées**, et qui n'étaient pas au plan :
+**Fil long** — 60 messages donnent 60 callouts, sur plusieurs requêtes d'ajout, sans perte ni
+doublon, et la borne finale est juste. Un message de 2 509 caractères arrive entier : envoyé en
+deux éléments de rich text, Notion les recolle en un seul.
 
-1. Le service worker de la dictée **précachait `outlook.html` et les icônes du complément**. La
-   denylist de T010 ne couvre que le repli de navigation, jamais un succès de précache : le
-   taskpane aurait été servi depuis le cache de la dictée. D'où T010b.
-2. Retirer les en-têtes d'isolation dans un middleware postérieur ne fonctionne pas — Vite
-   applique `server.headers` avant les middlewares de plugin. Le middleware de T009 agit donc
-   des deux côtés, et il est volontairement étroit : seules les requêtes `/outlook`, seuls ces
-   deux noms. La dictée ne peut pas ouvrir de microphone sans eux.
+**Non-régression de la dictée** — `contacts.ts` a été refactoré sur la bibliothèque partagée,
+donc ses deux chemins ont été repassés : la liste rend 236 contacts avec leurs sociétés
+résolues, et une création écrit titre, Fonction, Type, `Téléphone FR`, `Téléphone CH` et le
+lien Société, en laissant `Email` vide — la dictée n'en demande pas, et c'est inchangé.
 
-**Reste à faire avant la phase 3** : écrire les quatre routes `functions/api/outlook/*`
-(T024 à T028, T036, T040, T041). Elles sont déjà déclarées dans le pont `pagesFunctions` de
-`vite.config.ts`, donc elles répondront dès qu'elles existeront, sans y retoucher.
+**Authentification** — 401 sans identité sur les cinq points d'entrée, et 401 pour un Bearer
+forgé accompagné d'un `x-user-email` valide.
+
+**Certificat** — `curl` **sans `-k`** rend 200 sur `https://localhost:5173/outlook.html` et sur
+l'IP du réseau : l'autorité est réellement approuvée par le système.
+
+### Faites
+
+T001, T002, T004, T005, T006, T007, T008, T009, T010, T010b, T011, T012, T013, T014, T015,
+T016, T017, T018, T019, T020, T021, T022, T023, T024, T025, T026, T027, T028, T036, T040,
+T041, T060 — plus, hors plan : `functions/_lib/contact.ts`, `scripts/outlook-manifest.mjs`,
+`src/outlook/config.ts`, `.env.example`, et le mode `dev:outlook`.
+
+### Décisions prises en cours de route
+
+- **`functions/_lib/contact.ts`** : la création d'un contact est devenue une fonction partagée
+  plutôt qu'une copie dans la route Outlook. Dupliquer la logique des colonnes téléphone, du
+  lien société et du titre sans nom aurait voulu dire qu'un correctif d'un côté n'atteindrait
+  pas l'autre — et l'endroit où cela dériverait est le CRM du client. `contacts.ts` passe de
+  260 à 104 lignes et son comportement est inchangé, vérifié.
+- **La route Outlook exige l'adresse** à la création d'un contact, là où celle de la dictée ne
+  la demande pas. Un contact créé sans adresse serait invisible à toute reconnaissance
+  ultérieure : le mail suivant de la même personne proposerait de la créer une seconde fois.
+- **Le modèle par défaut est attendu, pas exigé** : cinq essais espacés de 400 ms, puis les
+  blocs sont ajoutés quoi qu'il arrive et `templateTimedOut` le dit. Perdre l'ordre de quelques
+  blocs est cosmétique ; perdre le mail ne l'est pas.
+- **`dev:outlook` est un mode séparé de `dev:mobile`**, et pas un remplacement. Outlook sur le
+  web charge le taskpane dans une iframe, où aucun avertissement de certificat n'est
+  contournable ; le téléphone, lui, a déjà accepté le certificat auto-signé, et un certificat
+  non approuvé dans une PWA autonome échoue en écran blanc plutôt qu'en question.
+
+### Pièges rencontrés
+
+1. Le service worker de la dictée **précachait `outlook.html`** et les icônes du complément :
+   `navigateFallbackDenylist` ne couvre que le repli de navigation, jamais un succès de
+   précache. D'où T010b.
+2. Retirer les en-têtes d'isolation du taskpane dans un middleware **postérieur** ne marche
+   pas : Vite applique `server.headers` avant les middlewares de plugin. Le middleware agit des
+   deux côtés et reste étroit.
+3. Le pont de développement ne peut pas construire une requête **GET avec un corps** et rend
+   500 avant d'atteindre la route. C'est un artefact du harnais de test, pas de la route.
+
+### Reste
+
+- **T003** : l'application Entra, puis `ENTRA_API_CLIENT_ID` et `ENTRA_TENANT_IDS`.
+- **Phase 3** : brancher le panneau sur les routes (T029, T030, T035, T037, T038, T042, T043).
+- **Phases 6 à 11** : cas limites, authentification NAA, migration Vercel, production.
 
 ---
 
@@ -135,11 +178,11 @@ liée à ces contacts, avec le fil entier dans le corps de la page.
 « Créer la note », ouvrir le lien renvoyé — la note existe, elle est liée au contact, et elle
 contient tous les messages du fil du plus ancien au plus récent.
 
-- [ ] T024 [P] [US1] Implémenter `POST /api/outlook/contacts/match` dans `functions/api/outlook/contacts/match.ts` selon `specs/001-outlook-vers-notion/contracts/outlook-contacts-match.md` : **une seule** requête Notion par filtre composé `or` de `Email.contains`, puis découpage des valeurs sur les virgules et **revérification d'égalité exacte en minuscules** — `contains` est une sous-chaîne, donc `o@m.com` trouverait `theo@m.com` (research D-3). Limites : 1 à 100 adresses, 400 au-delà ; adresses en doublon fusionnées ; deux contacts sur la même adresse → le premier est retenu et l'adresse est listée dans `ambiguous`
-- [ ] T025 [P] [US1] Implémenter `GET /api/outlook/notes?conversationId=` dans `functions/api/outlook/notes.ts` : filtre sur `ID client`, rend `{ note: { id, url, lastMessageId } }` ou `{ note: null }`, et `lastMessageId: null` si `Dernier message` est vide — une note antérieure à cette feature fait alors traiter tous les messages comme nouveaux, un doublon visible valant mieux qu'un message perdu
-- [ ] T026 [US1] Implémenter `POST /api/outlook/notes` dans `functions/api/outlook/notes.ts` : déduplication sur `ID client` avant toute écriture (réponse `200` + `duplicate: true`, rien d'écrit), création de la page depuis le modèle par défaut avec `Interlocuteur`, `Date` (date du dernier message), `Auteur`, `Source` = `Email`, `ID client`, `Statut IA` = `À traiter`, sans toucher `Transcription brute`. `contactIds` vide → 400 « Aucun interlocuteur à rattacher » ; `messages` vide → 400 (dépend de T017, T021)
-- [ ] T027 [US1] Ajouter dans `functions/api/outlook/notes.ts` l'attente du modèle par défaut : interroger les enfants de la page par essais espacés et plafonnés avant d'ajouter les blocs, parce que Notion applique le modèle après la création et interdit `children` à la création. Au dépassement du plafond, **ajouter quand même** et renvoyer `templateTimedOut: true` — perdre l'ordre est acceptable, perdre le mail ne l'est pas (research D-2, principe VI)
-- [ ] T028 [US1] Ajouter dans `functions/api/outlook/notes.ts` l'ajout des blocs par lots de 100 via `PATCH /v1/blocks/{id}/children`, puis l'écriture de `Dernier message` **après** l'ajout, et jamais avant (data-model §4)
+- [X] T024 [P] [US1] Implémenter `POST /api/outlook/contacts/match` dans `functions/api/outlook/contacts/match.ts` selon `specs/001-outlook-vers-notion/contracts/outlook-contacts-match.md` : **une seule** requête Notion par filtre composé `or` de `Email.contains`, puis découpage des valeurs sur les virgules et **revérification d'égalité exacte en minuscules** — `contains` est une sous-chaîne, donc `o@m.com` trouverait `theo@m.com` (research D-3). Limites : 1 à 100 adresses, 400 au-delà ; adresses en doublon fusionnées ; deux contacts sur la même adresse → le premier est retenu et l'adresse est listée dans `ambiguous`
+- [X] T025 [P] [US1] Implémenter `GET /api/outlook/notes?conversationId=` dans `functions/api/outlook/notes.ts` : filtre sur `ID client`, rend `{ note: { id, url, lastMessageId } }` ou `{ note: null }`, et `lastMessageId: null` si `Dernier message` est vide — une note antérieure à cette feature fait alors traiter tous les messages comme nouveaux, un doublon visible valant mieux qu'un message perdu
+- [X] T026 [US1] Implémenter `POST /api/outlook/notes` dans `functions/api/outlook/notes.ts` : déduplication sur `ID client` avant toute écriture (réponse `200` + `duplicate: true`, rien d'écrit), création de la page depuis le modèle par défaut avec `Interlocuteur`, `Date` (date du dernier message), `Auteur`, `Source` = `Email`, `ID client`, `Statut IA` = `À traiter`, sans toucher `Transcription brute`. `contactIds` vide → 400 « Aucun interlocuteur à rattacher » ; `messages` vide → 400 (dépend de T017, T021)
+- [X] T027 [US1] Ajouter dans `functions/api/outlook/notes.ts` l'attente du modèle par défaut : interroger les enfants de la page par essais espacés et plafonnés avant d'ajouter les blocs, parce que Notion applique le modèle après la création et interdit `children` à la création. Au dépassement du plafond, **ajouter quand même** et renvoyer `templateTimedOut: true` — perdre l'ordre est acceptable, perdre le mail ne l'est pas (research D-2, principe VI)
+- [X] T028 [US1] Ajouter dans `functions/api/outlook/notes.ts` l'ajout des blocs par lots de 100 via `PATCH /v1/blocks/{id}/children`, puis l'écriture de `Dernier message` **après** l'ajout, et jamais avant (data-model §4)
 - [ ] T029 [US1] Câbler dans `src/outlook/Panel.tsx` les états `chargement`, `nouvelle conversation`, `envoi` et `succès` : nombre de messages et période couverte, liste des participants externes cochés, bouton « Créer la note », puis confirmation avec lien « Ouvrir dans Notion » et la mention que la réécriture par l'IA prend quelques secondes (dépend de T023, T021)
 - [ ] T030 [US1] Câbler dans `src/outlook/Panel.tsx` la présélection : tout contact reconnu est coché avec son nom et sa société, et chaque ligne reste décochable ; le bouton d'envoi est désactivé si aucune ligne n'est cochée (dépend de T024, T019)
 - [ ] T031 [US1] Vérifier le test indépendant d'US1 dans Outlook sur le web selon `specs/001-outlook-vers-notion/quickstart.md` §3, et contrôler dans Notion : `Source` = `Email`, `Statut IA` = `À traiter`, un callout par message, ordre chronologique
@@ -161,7 +204,7 @@ formulaire proposé, envoyer — le contact existe dans Contacts avec son email,
 est liée.
 
 - [ ] T035 [P] [US2] Ajouter un champ `email` à `src/components/contact-form.tsx`, préremplissable et requis quand le formulaire est utilisé par le panneau, optionnel pour la PWA de dictée qui n'en passe pas — aucun changement de comportement pour l'écran de dictée
-- [ ] T036 [US2] Implémenter `POST /api/outlook/contacts` dans `functions/api/outlook/contacts/index.ts` selon `specs/001-outlook-vers-notion/contracts/outlook-contacts.md` : reprend la logique de `functions/api/contacts.ts` **sans la modifier**, et ajoute l'écriture de `Email` (FR-014). Le titre est ciblé par son type `title`, jamais par son nom, qui est vide dans ce schéma (research A-5). `Email` absente du schéma → 500 nommant la colonne, jamais un abandon silencieux
+- [X] T036 [US2] Implémenter `POST /api/outlook/contacts` dans `functions/api/outlook/contacts/index.ts` selon `specs/001-outlook-vers-notion/contracts/outlook-contacts.md` : reprend la logique de `functions/api/contacts.ts` **sans la modifier**, et ajoute l'écriture de `Email` (FR-014). Le titre est ciblé par son type `title`, jamais par son nom, qui est vide dans ce schéma (research A-5). `Email` absente du schéma → 500 nommant la colonne, jamais un abandon silencieux
 - [ ] T037 [US2] Câbler dans `src/outlook/Panel.tsx` l'état `participant inconnu` : ligne marquée « Nouveau contact », dépliable en formulaire, nom et email préremplis, décochable pour ignorer une newsletter ou un assistant automatique ; le bouton d'envoi est désactivé tant qu'un formulaire coché est incomplet (dépend de T035)
 - [ ] T038 [US2] Enchaîner dans `src/outlook/Panel.tsx` la création des contacts **avant** la note, en série, en conservant chaque identifiant obtenu dans l'état du panneau : la route de création n'est pas idempotente et un « Réessayer » ne doit jamais recréer un contact déjà créé (data-model §4)
 - [ ] T039 [US2] Vérifier le test indépendant d'US2 selon `specs/001-outlook-vers-notion/quickstart.md` §3, y compris les deux cas négatifs : décocher l'inconnu laisse l'envoi possible, et un formulaire coché au nom vide désactive le bouton
@@ -178,8 +221,8 @@ est liée.
 la note existante et le nombre de nouveaux messages ; après envoi, la note contient l'ancien
 et le nouveau, une seule fois chacun.
 
-- [ ] T040 [US3] Implémenter `PATCH /api/outlook/notes` dans `functions/api/outlook/notes.ts` selon `specs/001-outlook-vers-notion/contracts/outlook-notes.md` : revérifier `sinceMessageId` contre `Dernier message` de la page et répondre `409` avec la vraie valeur s'ils diffèrent, puis ne garder que les messages postérieurs à la borne (FR-008)
-- [ ] T041 [US3] Compléter dans `functions/api/outlook/notes.ts` les propriétés à l'enrichissement : `Interlocuteur` par **union** des contacts existants et nouveaux, jamais par remplacement ; `Auteur` par **ajout** de l'utilisateur courant à la liste existante s'il n'y est pas (FR-005, clarification de session) ; `Date` à la date du dernier message ; `Statut IA` remis à `À traiter` ; `Dernier message` mis à jour après l'ajout des blocs (dépend de T040)
+- [X] T040 [US3] Implémenter `PATCH /api/outlook/notes` dans `functions/api/outlook/notes.ts` selon `specs/001-outlook-vers-notion/contracts/outlook-notes.md` : revérifier `sinceMessageId` contre `Dernier message` de la page et répondre `409` avec la vraie valeur s'ils diffèrent, puis ne garder que les messages postérieurs à la borne (FR-008)
+- [X] T041 [US3] Compléter dans `functions/api/outlook/notes.ts` les propriétés à l'enrichissement : `Interlocuteur` par **union** des contacts existants et nouveaux, jamais par remplacement ; `Auteur` par **ajout** de l'utilisateur courant à la liste existante s'il n'y est pas (FR-005, clarification de session) ; `Date` à la date du dernier message ; `Statut IA` remis à `À traiter` ; `Dernier message` mis à jour après l'ajout des blocs (dépend de T040)
 - [ ] T042 [US3] Câbler dans `src/outlook/Panel.tsx` les états `note existante` — « Note existante, N nouveaux messages », lien vers la note, bouton « Enrichir la note » — et `note à jour` — lien vers la note, **aucun** bouton d'envoi (dépend de T025)
 - [ ] T043 [US3] Traiter le `409` dans `src/outlook/Panel.tsx` en rechargeant l'état du fil plutôt qu'en écrivant par-dessus, avec un message disant que la note a été enrichie entre-temps
 - [ ] T044 [US3] Vérifier le test indépendant d'US3 selon `specs/001-outlook-vers-notion/quickstart.md` §3, et qu'un `PATCH` rejoué rend `messagesAdded: 0` sans aucun bloc en double

@@ -9,3 +9,6 @@ public/ort
 
 # macOS
 .DS_Store
+
+# Manifestes Outlook générés : ils portent un hôte propre à la machine.
+.outlook/

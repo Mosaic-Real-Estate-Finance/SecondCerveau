@@ -1,56 +1,15 @@
-import { createCompany } from "./companies";
 import {
-  dataSourceId,
-  notion,
-  type Schema,
-  fail,
-  guard,
-  json,
-  plain,
-  props,
-  queryAll,
-  schemaOf,
-  type Env,
-  type Handler,
-} from "../_lib/notion";
+  companyNames,
+  ContactError,
+  createContact,
+  rollupText,
+  titleOf,
+  type Contact,
+  type NewContact,
+} from "../_lib/contact";
+import { dataSourceId, fail, guard, json, plain, props, queryAll, schemaOf, type Handler } from "../_lib/notion";
 
-export type Contact = {
-  id: string;
-  name: string;
-  company: string;
-  role: string;
-  // Type is a multi select in the Contacts base: a contact can be both.
-  types: string[];
-  // Every phone column of the base (Téléphone, Téléphone FR, Téléphone CH).
-  phones: string[];
-  createdAt: string;
-};
-
-// A rollup of the company name comes back as an array of title or text values.
-const rollupText = (property: any): string => {
-  if (!property || property.type !== "rollup") return "";
-  const rollup = property.rollup;
-  if (rollup?.type === "array") {
-    return rollup.array
-      .map((item: any) => plain(item?.[item.type]))
-      .filter(Boolean)
-      .join(", ");
-  }
-  if (rollup?.type === "string") return rollup.string ?? "";
-  return "";
-};
-
-const titleOf = (properties: Record<string, any>) =>
-  plain(Object.values(properties).find((property) => property?.type === "title")?.title);
-
-// Without the rollup column, the company names come from one query on the
-// companies data source (titles only), never from one call per contact.
-async function companyNames(env: Env, companiesSourceId: string) {
-  const schema = await schemaOf(env, companiesSourceId);
-  const title = Object.values(schema).find((property) => property.type === "title");
-  const pages = await queryAll(env, companiesSourceId, {}, title ? [title.id] : []);
-  return new Map(pages.map((page) => [page.id, titleOf(page.properties)]));
-}
+export type { Contact };
 
 // Contacts barely change during a working session: a short cache spares the
 // Notion quota when several phones open the app at once.
@@ -130,100 +89,16 @@ export const onRequestGet: Handler = async ({ request, env }) => {
 
 // ---- Creating a contact -----------------------------------------------------
 
-type NewContact = {
-  name?: string;
-  role?: string;
-  // Each number carries the country picked in the form, which decides the
-  // column it lands in.
-  phones?: { country?: string; dial?: string; number?: string }[];
-  types?: string[];
-  companyId?: string;
-  newCompany?: { name: string; description?: string; site?: string; type?: string; address?: string };
-};
-
-// International form: "+33 6 12 34 56 78". A number already starting with +
-// is left alone, and a national leading zero is dropped before the code.
-function international(dial: string | undefined, number: string) {
-  const trimmed = number.trim().replace(/\s+/g, " ");
-  if (trimmed.startsWith("+") || !/^\+\d{1,4}$/.test(dial ?? "")) return trimmed;
-  return `${dial} ${trimmed.replace(/^0\s?/, "")}`;
-}
-
-// One phone column per country, and a catch-all. Several numbers for the same
-// country share their column, separated by a slash.
-function phoneProperties(schema: Schema, phones: NonNullable<NewContact["phones"]>) {
-  const columns: Record<string, string> = { FR: "Téléphone FR", CH: "Téléphone CH", other: "Téléphone" };
-  const buckets: Record<string, string[]> = { FR: [], CH: [], other: [] };
-  for (const phone of phones) {
-    const number = phone.number?.trim();
-    if (!number) continue;
-    buckets[phone.country === "FR" || phone.country === "CH" ? phone.country : "other"].push(
-      international(phone.dial, number),
-    );
-  }
-  const properties: Record<string, unknown> = {};
-  for (const [key, numbers] of Object.entries(buckets)) {
-    const column = schema[columns[key]];
-    if (!numbers.length) continue;
-    // No column for that country: fall back to the generic one.
-    const target = column ?? schema[columns.other];
-    if (!target) continue;
-    const existing = (properties[target.name] as { phone_number?: string } | undefined)?.phone_number;
-    properties[target.name] = { phone_number: [existing, ...numbers].filter(Boolean).join(" / ") };
-  }
-  return properties;
-}
-
 export const onRequestPost: Handler = async ({ request, env }) => {
   const denied = await guard(request, env);
   if (denied instanceof Response) return denied;
 
-  const body = (await request.json().catch(() => ({}))) as NewContact;
-  const name = body.name?.trim();
-  if (!name) return json({ error: "Le nom est obligatoire" }, 400);
-
   try {
-    const p = props(env);
-    const sourceId = await dataSourceId(env, env.NOTION_CONTACTS_DB);
-    const schema = await schemaOf(env, sourceId);
-
-    let company = body.companyId ? { id: body.companyId, name: "", type: "" } : null;
-    if (!company && body.newCompany?.name?.trim()) {
-      company = await createCompany(env, { ...body.newCompany, name: body.newCompany.name.trim() });
-    }
-
-    // The title of this base has no name, so it is keyed by its id.
-    const properties: Record<string, unknown> = {
-      title: { title: [{ type: "text", text: { content: name } }] },
-      ...phoneProperties(schema, body.phones ?? []),
-    };
-    if (body.role?.trim() && schema[p.role]) {
-      properties[p.role] = { rich_text: [{ type: "text", text: { content: body.role.trim().slice(0, 2000) } }] };
-    }
-    if (body.types?.length && schema[p.type]?.type === "multi_select") {
-      properties[p.type] = { multi_select: body.types.map((option) => ({ name: option })) };
-    }
-    if (company && schema[p.companyRelation]?.type === "relation") {
-      properties[p.companyRelation] = { relation: [{ id: company.id }] };
-    }
-
-    const page = await notion<{ id: string; properties: Record<string, any> }>(env, "/pages", {
-      method: "POST",
-      body: { parent: { type: "data_source_id", data_source_id: sourceId }, properties },
-    });
-
+    const contact = await createContact(env, (await request.json().catch(() => ({}))) as NewContact);
     cache = null;
-    const contact: Contact = {
-      id: page.id,
-      name,
-      company: company?.name ?? "",
-      role: body.role?.trim() ?? "",
-      types: body.types ?? [],
-      phones: (body.phones ?? []).map((phone) => phone.number?.trim()).filter((number): number is string => !!number),
-      createdAt: new Date().toISOString(),
-    };
     return json({ contact });
   } catch (error) {
+    if (error instanceof ContactError) return json({ error: error.message }, 400);
     return fail(error);
   }
 };
