@@ -8,6 +8,15 @@ import { removeNote, useNote } from "@/lib/notes";
 import { sendNote, transcribeNote } from "@/lib/pipeline";
 import { cn } from "@/lib/utils";
 
+// The Notion mark, monochrome (Simple Icons).
+function NotionLogo({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" className={className} fill="currentColor">
+      <path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.981-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.167V6.354c0-.606-.233-.933-.748-.887l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952L12.21 19s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.139c-.093-.514.28-.887.747-.933zM1.936 1.035l13.31-.98c1.634-.14 2.055-.047 3.082.7l4.249 2.986c.7.513.934.653.934 1.213v16.378c0 1.026-.373 1.634-1.68 1.726l-15.458.934c-.98.047-1.448-.093-1.962-.747l-3.129-4.06c-.56-.747-.793-1.306-.793-1.96V2.667c0-.839.374-1.54 1.447-1.632z" />
+    </svg>
+  );
+}
+
 // The last step. A document or a photo may be attached — it is optional —
 // and then the note goes to Notion.
 //
@@ -55,6 +64,9 @@ export function AttachScreen({
   // idle → waiting (the text is not in yet) → sending → sent.
   const [phase, setPhase] = useState<"idle" | "waiting" | "sending" | "sent">("idle");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // The page Notion created, kept for the confirmation screen: the note
+  // itself is gone from the device by then.
+  const [pageUrl, setPageUrl] = useState<string | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLDivElement>(null);
@@ -65,6 +77,7 @@ export function AttachScreen({
     if (!active) return;
     setPhase("idle");
     setConfirmDelete(false);
+    setPageUrl(null);
     top.current?.closest(".t-page")?.scrollTo({ top: 0 });
   }, [active, noteId]);
 
@@ -141,9 +154,14 @@ export function AttachScreen({
     setPhase("sending");
     void (async () => {
       try {
-        await sendNote(note.id, files.flatMap((file) => (file.ref ? [{ id: file.ref.id, name: file.ref.name }] : [])));
+        const page = await sendNote(
+          note.id,
+          files.flatMap((file) => (file.ref ? [{ id: file.ref.id, name: file.ref.name }] : [])),
+        );
+        setPageUrl(page.url);
+        // No timer back to the home screen: the user may want to open the
+        // page, and leaves with « Fermer » when they are done.
         setPhase("sent");
-        setTimeout(onDone, 1800);
       } catch (error) {
         setPhase("idle");
         if (error instanceof ApiError && error.status === 401) onUnauthorized();
@@ -173,6 +191,24 @@ export function AttachScreen({
         <SuccessCheck show />
         <h1 className="mt-6 font-serif text-2xl">Note envoyée</h1>
         <p className="mt-2 text-base text-[color:var(--muted)]">Notion AI la met au propre dans la base de notes.</p>
+        {pageUrl && (
+          <a
+            href={pageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-8 inline-flex items-center justify-center gap-2 rounded-full bg-white-smoke px-5 py-3 text-base font-medium text-navy"
+          >
+            <NotionLogo className="h-5 w-5 shrink-0" />
+            <span>Ouvrir la note dans Notion ↗</span>
+          </a>
+        )}
+        <button
+          type="button"
+          onClick={onDone}
+          className={cn("text-sm text-[color:var(--muted)] underline underline-offset-2", pageUrl ? "mt-4" : "mt-8")}
+        >
+          Fermer
+        </button>
       </Screen>
     );
   }
