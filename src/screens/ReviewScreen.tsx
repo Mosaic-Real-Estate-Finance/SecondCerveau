@@ -10,7 +10,6 @@ import {
   decidePerson,
   fetchReview,
   ignoreCall,
-  removeExcluded,
   retryCall,
   type Closed,
   type Contact,
@@ -76,7 +75,6 @@ export function ReviewScreen({
 }) {
   const toast = useToast();
   const [items, setItems] = useState<ReviewItem[]>([]);
-  const [excluded, setExcluded] = useState<string[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -87,7 +85,6 @@ export function ReviewScreen({
     try {
       const data = await fetchReview();
       setItems(data.items);
-      setExcluded(data.excluded);
       setStatus("ready");
       onCount(data.count);
     } catch (cause) {
@@ -209,14 +206,6 @@ export function ReviewScreen({
     }
   };
 
-  const unexclude = async (email: string) => {
-    try {
-      setExcluded((await removeExcluded(email)).excluded);
-    } catch (cause) {
-      failed(cause);
-    }
-  };
-
   return (
     <Screen>
       <TopBar title="À valider" onBack={onBack} backLabel="Accueil" />
@@ -258,24 +247,6 @@ export function ReviewScreen({
         ))}
       </ul>
 
-      {excluded.length > 0 && (
-        <section className="mt-8">
-          <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Pas nécessaires</h2>
-          <p className="mb-3 text-xs text-[color:var(--muted)]">
-            Ces adresses ne sont plus jamais proposées, pour toute l'équipe.
-          </p>
-          <ul className="flex flex-col gap-1">
-            {excluded.map((email) => (
-              <li key={email} className="flex min-h-11 items-center justify-between gap-2 rounded-xl bg-white-smoke px-3">
-                <span className="truncate text-sm">{email}</span>
-                <TextButton onClick={() => void unexclude(email)} className="-mr-2 shrink-0 text-sm">
-                  Retirer
-                </TextButton>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
     </Screen>
   );
 }

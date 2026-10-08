@@ -262,7 +262,9 @@ a {
   box-shadow: 0 -8px 40px rgb(2 3 66 / 0.12);
   padding-bottom: var(--safe-bottom);
   transform: translateY(100%);
-  transition: transform var(--sheet-dur) var(--sheet-ease);
+  transition:
+    transform var(--sheet-dur) var(--sheet-ease),
+    height var(--sheet-dur) var(--sheet-ease);
   will-change: transform;
 }
 /* A form is the large detent, as on iOS: the whole screen but a strip

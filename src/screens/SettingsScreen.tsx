@@ -3,24 +3,39 @@ import { PrimaryButton, TextButton } from "@/components/screen";
 import { Shimmer } from "@/components/shimmer";
 import { useToast } from "@/components/toast";
 import { openInstallInvite } from "@/components/install-invite";
-import { logout } from "@/lib/api";
+import { ApiError, fetchReview, logout, removeExcluded } from "@/lib/api";
 import { currentSubscription, disablePush, enablePush, pushSupported } from "@/lib/push";
 import { isStandalone } from "@/lib/standalone";
 
-// Two settings: notifications, and signing out.
+// Notifications, the contacts excluded from Read AI, and signing out. The
+// excluded contacts open in the same sheet, grown to its large detent.
 
 export function SettingsScreen({
   active,
   email,
   onBack,
   onSignedOut,
+  onExpand,
 }: {
   active: boolean;
   email: string;
   onBack: () => void;
   onSignedOut: () => void;
+  /** The excluded contacts want the sheet's large detent. */
+  onExpand: (expanded: boolean) => void;
 }) {
   const toast = useToast();
+  const [view, setView] = useState<"main" | "excluded">("main");
+  const show = (next: "main" | "excluded") => {
+    setView(next);
+    onExpand(next === "excluded");
+  };
+  // Back to the first view whenever the sheet is opened again.
+  useEffect(() => {
+    if (active) return;
+    setView("main");
+    onExpand(false);
+  }, [active, onExpand]);
   const [push, setPush] = useState<"unknown" | "on" | "off">("unknown");
   const [busy, setBusy] = useState(false);
   const installed = isStandalone();
@@ -66,6 +81,8 @@ export function SettingsScreen({
       onSignedOut();
     }
   };
+
+  if (view === "excluded") return <ExcludedContacts onBack={() => show("main")} onUnauthorized={onSignedOut} />;
 
   return (
     <div>
@@ -113,6 +130,20 @@ export function SettingsScreen({
         )}
       </section>
 
+      <button
+        type="button"
+        onClick={() => show("excluded")}
+        className="mt-4 flex w-full items-center gap-3 rounded-2xl bg-white-smoke p-4 text-left"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-base font-medium">Contacts exclus</span>
+          <span className="mt-1 block text-xs text-[color:var(--muted)]">
+            Les personnes que vous avez choisi de ne pas ajouter dans Notion.
+          </span>
+        </span>
+        <Chevron />
+      </button>
+
       <section className="mt-4 rounded-2xl bg-white-smoke p-4">
         <h2 className="text-base font-medium">Compte</h2>
         <p className="mt-1 truncate text-xs text-[color:var(--muted)]">
@@ -123,6 +154,84 @@ export function SettingsScreen({
       <PrimaryButton onClick={() => void signOut()} disabled={busy} className="mt-6">
         Se déconnecter
       </PrimaryButton>
+    </div>
+  );
+}
+
+const Chevron = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[color:var(--muted)]" aria-hidden>
+    <path d="M9 5l7 7-7 7" />
+  </svg>
+);
+
+// The exclusion list is the team's: an address set aside by one is no
+// longer proposed to anyone.
+function ExcludedContacts({ onBack, onUnauthorized }: { onBack: () => void; onUnauthorized: () => void }) {
+  const toast = useToast();
+  const [emails, setEmails] = useState<string[] | null>(null);
+  const [error, setError] = useState("");
+  const [removing, setRemoving] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    fetchReview()
+      .then((data) => live && setEmails(data.excluded))
+      .catch((cause) => {
+        if (!live) return;
+        if (cause instanceof ApiError && cause.status === 401) return onUnauthorized();
+        setError((cause as Error).message || "Liste indisponible.");
+      });
+    return () => {
+      live = false;
+    };
+  }, [onUnauthorized]);
+
+  const remove = async (email: string) => {
+    if (removing) return;
+    setRemoving(email);
+    try {
+      setEmails((await removeExcluded(email)).excluded);
+    } catch (cause) {
+      toast.show((cause as Error).message || "Le contact n'a pas pu être retiré.");
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  return (
+    <div>
+      <header className="mb-2">
+        <TextButton onClick={onBack} className="-ml-3 flex items-center gap-1">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M15 5l-7 7 7 7" />
+          </svg>
+          Réglages
+        </TextButton>
+        <h1 className="mt-1 font-serif text-2xl">Contacts exclus</h1>
+      </header>
+      <p className="mb-4 text-xs text-[color:var(--muted)]">
+        Les personnes que vous avez refusé d'ajouter dans Notion ne vous sont plus proposées, ni à vos collègues.
+        Retirez-en une pour qu'elle le soit à nouveau.
+      </p>
+
+      {error ? (
+        <p className="text-sm text-[color:var(--muted)]">{error}</p>
+      ) : emails === null ? (
+        <p className="text-sm text-[color:var(--muted)]">Chargement…</p>
+      ) : emails.length === 0 ? (
+        <p className="rounded-2xl bg-white-smoke p-4 text-sm text-[color:var(--muted)]">Aucun contact exclu.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {emails.map((email) => (
+            <li key={email} className="flex min-h-14 items-center justify-between gap-3 rounded-2xl bg-white-smoke py-2 pl-4 pr-2">
+              <span className="min-w-0 truncate text-sm">{email}</span>
+              <TextButton onClick={() => void remove(email)} disabled={removing !== null} className="shrink-0 text-sm">
+                {removing === email ? "Retrait…" : "Retirer"}
+              </TextButton>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
