@@ -26,11 +26,31 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
   return registration.pushManager.getSubscription();
 }
 
+// Turned off from the settings on this device: the app does not subscribe
+// it again on its own, even though the permission is still granted.
+const OPT_OUT = "mosaic-push-off";
+export const pushOptedOut = () => {
+  try {
+    return localStorage.getItem(OPT_OUT) === "1";
+  } catch {
+    return false;
+  }
+};
+const setOptOut = (off: boolean) => {
+  try {
+    if (off) localStorage.setItem(OPT_OUT, "1");
+    else localStorage.removeItem(OPT_OUT);
+  } catch {
+    // Private mode: the choice lasts as long as the subscription does.
+  }
+};
+
 /** From a tap. Resolves false when the permission was refused. */
 export async function enablePush(): Promise<boolean> {
   if (!pushSupported()) return false;
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return false;
+  setOptOut(false);
   const registration = await navigator.serviceWorker.ready;
   const subscription =
     (await registration.pushManager.getSubscription()) ??
@@ -39,7 +59,9 @@ export async function enablePush(): Promise<boolean> {
   return true;
 }
 
-export async function disablePush(): Promise<void> {
+/** `optOut`: the user turned them off, rather than signing out. */
+export async function disablePush({ optOut = false } = {}): Promise<void> {
+  if (optOut) setOptOut(true);
   const subscription = await currentSubscription();
   if (!subscription) return;
   await deletePushSubscription(subscription.endpoint).catch(() => undefined);

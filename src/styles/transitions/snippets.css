@@ -402,29 +402,74 @@
   .t-toast { transition: none !important; }
 }
 
-/* ==== panel-reveal.md (transitions.dev, verbatim) ==== */
-.t-panel-slide {
-  transform: translateY(var(--panel-translate-y));
-  opacity: 0;
-  filter: blur(var(--panel-blur));
-  pointer-events: none;
-  transition:
-    transform var(--panel-close-dur) var(--panel-ease),
-    opacity   var(--panel-close-dur) var(--panel-ease),
-    filter    var(--panel-close-dur) var(--panel-ease);
-  will-change: transform, opacity, filter;
-}
-.t-panel-slide[data-open="true"] {
-  transform: translateY(0);
-  opacity: 1;
+/* ==== banner-stacking.md (transitions.dev, verbatim) ==== */
+.t-stack { position: relative; }
+.t-stack-banner {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  /* Centre origin so an arriving banner scales like a toast; the
+     push-back depths switch to the bottom edge, which they can do
+     freely because the swap happens at identity. */
+  transform-origin: 50% 50%;
+  /* Explicit blur(0) rather than an unset filter — blur → none is
+     not reliably interpolated, and the cross-blur would snap. */
   filter: blur(0);
-  pointer-events: auto;
+  will-change: transform, opacity, filter;
   transition:
-    transform var(--panel-open-dur) var(--panel-ease),
-    opacity   var(--panel-open-dur) var(--panel-ease),
-    filter    var(--panel-open-dur) var(--panel-ease);
+    transform var(--stack-open) var(--stack-ease),
+    opacity var(--stack-open) var(--stack-ease),
+    filter var(--stack-open) var(--stack-ease);
+}
+.t-stack-banner[data-depth="0"] {
+  z-index: 3;
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+.t-stack-banner[data-depth="1"] {
+  z-index: 2;
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--stack-peek) * -1))
+             scale(calc(1 - var(--stack-depth-scale)));
+  opacity: calc(1 - var(--stack-depth-fade));
+}
+.t-stack-banner[data-depth="2"] {
+  z-index: 1;
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--stack-peek) * -2))
+             scale(calc(1 - var(--stack-depth-scale) * 2));
+  opacity: calc(1 - var(--stack-depth-fade) * 1.6);
+}
+/* Spread: newest stays put, older ones climb one banner height
+   each (100% = the banner's own height). Driven by a class, not
+   :hover — the gaps between spread banners belong to no element. */
+.t-stack.is-spread .t-stack-banner[data-depth="1"],
+.t-stack.is-spread .t-stack-banner[data-depth="2"] { opacity: 1; }
+.t-stack.is-spread .t-stack-banner[data-depth="1"] {
+  transform: translateY(calc((100% + var(--stack-spread-gap)) * -1)) scale(1);
+}
+.t-stack.is-spread .t-stack-banner[data-depth="2"] {
+  transform: translateY(calc((100% + var(--stack-spread-gap)) * -2)) scale(1);
+}
+.t-stack-banner.is-enter {
+  transition: none;
+  transform: translateY(var(--stack-rise)) scale(var(--stack-scale));
+  opacity: 0;
+  filter: blur(var(--stack-blur));
+}
+.t-stack-banner.is-leaving {
+  z-index: 0;
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--stack-peek) * -3))
+             scale(calc(1 - var(--stack-depth-scale) * 3));
+  opacity: 0;
+  filter: blur(var(--stack-blur));
+  transition:
+    transform var(--stack-close) var(--stack-ease),
+    opacity var(--stack-close) var(--stack-ease),
+    filter var(--stack-close) var(--stack-ease);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .t-panel-slide { transition: none !important; }
+  .t-stack-banner { transition: none !important; transform: none !important; filter: none !important; }
 }
