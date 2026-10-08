@@ -34,6 +34,7 @@
 npm run typecheck     # dont moduleResolution nodenext sur functions/ et api/
 npm run check:api     # les 11 routes démarrent sous Node
 npm run test:readai   # filtrage, rapprochement, signature, blocs, horodatage
+npm run sim:readai    # parcours complets contre un Notion et un Redis simulés (24 scénarios)
 npm run build && grep -rE "ntn_|SESSION_SECRET|VAPID_PRIVATE|SMTP_APP_PASSWORD|KV_REST_API_TOKEN|READAI_WEBHOOK_SECRET" dist/ ; echo "rien = conforme au principe I"
 ```
 

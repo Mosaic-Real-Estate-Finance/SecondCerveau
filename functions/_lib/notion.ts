@@ -30,6 +30,21 @@ export type Env = {
   ENTRA_API_CLIENT_ID?: string;
   ENTRA_TENANT_IDS?: string;
   INTERNAL_DOMAINS?: string;
+  // The Read AI sync and the PWA session (feature 002).
+  READAI_WEBHOOK_SECRET?: string;
+  GENERIC_EMAIL_DOMAINS?: string;
+  NOTES_SOURCE_READAI?: string;
+  KV_REST_API_URL?: string;
+  KV_REST_API_TOKEN?: string;
+  UPSTASH_REDIS_REST_URL?: string;
+  UPSTASH_REDIS_REST_TOKEN?: string;
+  SESSION_SECRET?: string;
+  SMTP_USER?: string;
+  SMTP_APP_PASSWORD?: string;
+  SMTP_FROM?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_SUBJECT?: string;
 };
 
 export type Handler = (context: { request: Request; env: Env }) => Promise<Response>;
@@ -66,6 +81,9 @@ export const props = (env: Env) => ({
 
 /** The values written in the Source column, one per tool. */
 export const SOURCE = { dictation: "Dictée", email: "Email" } as const;
+
+/** Read AI's value is configurable, and must already be an option of the select. */
+export const readaiSource = (env: Env) => env.NOTES_SOURCE_READAI?.trim() || "ReadAI";
 
 export class NotionError extends Error {
   constructor(
@@ -214,9 +232,9 @@ export function json(body: unknown, status = 200): Response {
   });
 }
 
-// The single door, for every route of both tools. Who may come through is
-// decided in ./auth.ts: the dictation's address header, or a verified
-// Microsoft access token from the Outlook add-in.
+// The single door, for every route of the PWA and the Outlook add-in. Who may
+// come through is decided in ./auth.ts: a session cookie opened with an
+// emailed code, or a verified Microsoft access token from the add-in.
 export async function guard(request: Request, env: Env): Promise<{ user: User } | Response> {
   if (!env.NOTION_TOKEN || !env.NOTION_CONTACTS_DB || !env.NOTION_NOTES_DB) {
     return json({ error: "Configuration serveur incomplète" }, 500);
@@ -226,7 +244,8 @@ export async function guard(request: Request, env: Env): Promise<{ user: User } 
   // code lets the Outlook panel, which does not, write its own sentence
   // instead of matching on this one.
   if ("failure" in identity) {
-    return json({ error: AUTH_MESSAGES[identity.failure], code: identity.failure }, 401);
+    const status = identity.failure === "unavailable" ? 503 : 401;
+    return json({ error: AUTH_MESSAGES[identity.failure], code: identity.failure, retry: status === 503 }, status);
   }
   return { user: identity.user };
 }

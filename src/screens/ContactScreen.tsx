@@ -9,7 +9,7 @@ import { type NoteContact } from "@/lib/notes";
 import { cn } from "@/lib/utils";
 
 // Accent and case insensitive, so "Leonard" finds "Léonard".
-const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+export const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
 // Digits in national form, so "06 12", "+33 6 12" and "0033 6 12" all match.
 // Same rule for Swiss numbers (+41).
@@ -20,12 +20,12 @@ function nationalDigits(value: string) {
   return digits;
 }
 
-type Match = { contact: Contact; phone?: string };
+export type Match = { contact: Contact; phone?: string };
 
 // Name (the page title), company and phone numbers. Every word typed must be
 // found in the name or the company; a query with three digits or more also
 // looks through the numbers.
-function match(contact: Contact, query: string): Match | null {
+export function match(contact: Contact, query: string): Match | null {
   const words = fold(query).split(/\s+/).filter(Boolean);
   const text = fold(`${contact.name} ${contact.company}`);
   if (words.length && words.every((word) => text.includes(word))) return { contact };

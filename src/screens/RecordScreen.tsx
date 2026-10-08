@@ -32,13 +32,20 @@ const PROMPTS = ["Qu'est-ce qu'on note aujourd'hui ?", "Un point à enregistrer 
 export function RecordScreen({
   active,
   firstName,
+  reviewCount,
   onRecorded,
   onOpen,
+  onReview,
+  onSettings,
 }: {
   active: boolean;
   firstName: string;
+  /** Read AI calls waiting for a decision. */
+  reviewCount: number;
   onRecorded: (note: Note) => void;
   onOpen: (note: Note) => void;
+  onReview: () => void;
+  onSettings: () => void;
 }) {
   const recorder = useRecorder();
   const notes = useNotes();
@@ -118,9 +125,37 @@ export function RecordScreen({
 
   return (
     <Screen>
+      {/* Discreet on purpose: the screen is for dictating. The count is the
+          only thing that asks for attention, and only when it is not zero. */}
+      <div className="-mx-1 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={onReview}
+          className="flex h-11 items-center gap-2 rounded-full px-3 text-sm font-medium text-navy"
+          aria-label={reviewCount ? `À valider, ${reviewCount} appel${reviewCount > 1 ? "s" : ""}` : "À valider"}
+        >
+          À valider
+          {reviewCount > 0 && (
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-navy px-1.5 text-2xs text-white">
+              {reviewCount}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={onSettings}
+          aria-label="Réglages"
+          className="flex h-11 w-11 items-center justify-center rounded-full text-navy"
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+          </svg>
+        </button>
+      </div>
       {/* The greeting sits in the upper part; the button holds the middle of
           the screen, in the layer below. */}
-      <div className="flex flex-col items-center pt-[9vh] text-center">
+      <div className="flex flex-col items-center pt-[5vh] text-center">
         <Symbol className="h-16 text-midnight-blue" />
         <h1 className="mt-8 text-balance font-serif text-2xl">
           Bonjour {firstName},

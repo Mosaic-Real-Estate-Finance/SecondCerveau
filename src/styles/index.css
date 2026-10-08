@@ -166,6 +166,25 @@ a {
   filter: blur(0);
   transition-delay: var(--page-stagger);
 }
+/* Pages 4 (« À valider ») and 5 (réglages) are reached from the home screen
+   and come in from the right, like the others; whatever page is left behind
+   goes out to the left. */
+.t-page-slide .t-page[data-page-id="4"],
+.t-page-slide .t-page[data-page-id="5"] {
+  --t-page-from-x: var(--page-slide-distance);
+}
+.t-page-slide[data-page="4"] .t-page[data-page-id="1"],
+.t-page-slide[data-page="5"] .t-page[data-page-id="1"] {
+  --t-page-from-x: calc(var(--page-slide-distance) * -1);
+}
+.t-page-slide[data-page="4"] .t-page[data-page-id="4"],
+.t-page-slide[data-page="5"] .t-page[data-page-id="5"] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+  filter: blur(0);
+  transition-delay: var(--page-stagger);
+}
 /* The side by side snippet parks the pages it is not showing 8px to the
    side; clip that, or the document is wider than the screen. `clip` rather
    than `hidden` so the pages keep their own vertical scrolling. */
@@ -342,6 +361,12 @@ a {
     left var(--morph-open-dur) var(--morph-ease),
     background var(--morph-open-dur) var(--morph-ease),
     border-radius var(--morph-open-dur) var(--morph-ease);
+}
+/* Several panels on one screen (« À valider » has two per person): the open
+   one covers the closed buttons of its neighbours, which are fixed boxes in
+   <body> too and would otherwise float over it in document order. */
+.morph-panel.t-morph[data-open="true"]:not(.is-nested) {
+  z-index: 41;
 }
 /* Before the first measurement the insets are 0, which would flash a
    full-screen panel; the same class hides a closed button whose row has

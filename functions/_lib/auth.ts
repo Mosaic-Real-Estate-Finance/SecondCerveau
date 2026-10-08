@@ -1,17 +1,19 @@
 import { createRemoteJWKSet, decodeJwt, errors as joseErrors, jwtVerify } from "jose";
 import { findUser, type User } from "./users.js";
+import { readSession } from "./session.js";
 import type { Env } from "./notion.js";
 
-// Who is calling, for every route of both tools.
+// Who is calling, for every route of the PWA and of the Outlook add-in. (The
+// Read AI webhook is a server and proves itself by its signature instead.)
 //
-// Two paths, and they are not equals:
+// Two paths, and both are proof (constitution 2.0.0, principle IV):
 //
-//  - The dictation sends `x-user-email`. An address on the allowlist is enough
-//    to get in, which names the author of a note but proves nothing. It is
-//    what the PWA has always done, and it keeps working.
+//  - The PWA carries a session cookie, opened with a code received by email
+//    (./session.ts). The `x-user-email` header it used to send named a person
+//    and proved nothing; it is no longer read at all.
 //
-//  - The Outlook add-in sends a Microsoft access token. That one is proof: the
-//    signature, the issuer, the audience and the tenant are all checked here.
+//  - The Outlook add-in sends a Microsoft access token. The signature, the
+//    issuer, the audience and the tenant are all checked here.
 //
 // The add-in has no choice in the matter. The legacy Exchange identity and
 // callback tokens it would otherwise have used were turned off across every
@@ -63,7 +65,7 @@ export const bearerPathEnabled = (env: Env) => Boolean(env.ENTRA_API_CLIENT_ID) 
 const audiencesOf = (env: Env) => [env.ENTRA_API_CLIENT_ID!, `api://${env.ENTRA_API_CLIENT_ID}`];
 
 /** Why a bearer was refused, so the caller can say something useful in French. */
-export type AuthFailure = "token" | "tenant" | "expired" | "user";
+export type AuthFailure = "token" | "tenant" | "expired" | "user" | "session" | "unavailable";
 
 export type Identity = { user: User } | { failure: AuthFailure };
 
@@ -126,9 +128,8 @@ async function fromBearer(token: string, env: Env): Promise<Identity> {
 /**
  * The caller, or why they were refused.
  *
- * A bearer that is present but invalid is never rescued by the header path.
- * Otherwise sending a forged bearer alongside an `x-user-email` would skip the
- * whole verification, which is worse than having no verification at all.
+ * A bearer that is present but invalid is never rescued by the cookie path:
+ * one forged credential must not be excused by another being present.
  */
 export async function identify(request: Request, env: Env): Promise<Identity> {
   const header = request.headers.get("authorization") ?? "";
@@ -139,7 +140,18 @@ export async function identify(request: Request, env: Env): Promise<Identity> {
     return fromBearer(bearer, env);
   }
 
-  const user = findUser(request.headers.get("x-user-email"));
+  let session;
+  try {
+    session = await readSession(env, request);
+  } catch {
+    // The store that holds revocations is unreachable, or the server has no
+    // SESSION_SECRET. Not the caller's fault, and not a reason to sign every
+    // phone out: the guard answers 503, which the app retries.
+    return { failure: "unavailable" };
+  }
+  if (!session) return { failure: "session" };
+  // Still on the list: removing someone from users.ts closes their sessions.
+  const user = findUser(session.email);
   return user ? { user } : { failure: "user" };
 }
 
@@ -148,6 +160,8 @@ export const AUTH_MESSAGES: Record<AuthFailure, string> = {
   expired: "Session Microsoft expirée, reconnectez-vous.",
   tenant: "Ce compte n'appartient pas à une organisation autorisée.",
   user: "Adresse non autorisée",
+  session: "Session expirée, reconnectez-vous.",
+  unavailable: "Service momentanément indisponible, réessayez.",
 };
 
 /** The domains whose addresses are Mosaic's own, and never attached to a note. */

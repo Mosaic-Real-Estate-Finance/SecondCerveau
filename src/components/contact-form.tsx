@@ -3,7 +3,15 @@ import { CountryPicker } from "@/components/country-picker";
 import { MorphPanel } from "@/components/morph-panel";
 import { PhoneNumberInput } from "@/components/phone-input";
 import { PrimaryButton, TextButton } from "@/components/screen";
-import { createCompany, createContact, fetchCompanies, type Company, type Contact } from "@/lib/api";
+import {
+  createCompany,
+  createContact,
+  fetchCompanies,
+  type Company,
+  type CompanyRef,
+  type Contact,
+  type NewContact,
+} from "@/lib/api";
 import { dialOf, fold } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 
@@ -47,22 +55,33 @@ const plusIcon = (
   </svg>
 );
 
+const asCompany = (ref: CompanyRef): Company => ({ id: ref.id, name: ref.name, type: "" });
+
 export function ContactForm({
   typeOptions = [],
   initialName,
   onCancel,
   onCreated,
+  email,
+  companyChoices = [],
+  submit: deliver,
 }: {
   typeOptions: string[];
   initialName: string;
   onCancel: () => void;
   onCreated: (contact: Contact) => void;
+  /** Shown, not editable: the address the contact is created for (« À valider »). */
+  email?: string;
+  /** Companies suggested by the address's domain; the first is preselected. */
+  companyChoices?: CompanyRef[];
+  /** Where the contact goes. By default the dictation's own route. */
+  submit?: (contact: NewContact) => Promise<Contact>;
 }) {
   const [name, setName] = useState(initialName);
   const [role, setRole] = useState("");
   const [phones, setPhones] = useState<Phone[]>([{ country: "FR", number: "" }]);
   const [types, setTypes] = useState<string[]>([]);
-  const [company, setCompany] = useState<Company | null>(null);
+  const [company, setCompany] = useState<Company | null>(companyChoices[0] ? asCompany(companyChoices[0]) : null);
   const [companyQuery, setCompanyQuery] = useState("");
   const [creatingCompany, setCreatingCompany] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -95,7 +114,7 @@ export function ContactForm({
     setBusy(true);
     setError("");
     try {
-      const { contact } = await createContact({
+      const draft: NewContact = {
         name: name.trim(),
         role: role.trim(),
         phones: phones
@@ -103,8 +122,8 @@ export function ContactForm({
           .map((phone) => ({ ...phone, dial: dialOf(phone.country) })),
         types,
         companyId: company?.id,
-      });
-      onCreated(contact);
+      };
+      onCreated(deliver ? await deliver(draft) : (await createContact(draft)).contact);
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -134,6 +153,12 @@ export function ContactForm({
             placeholder="Prénom Nom"
           />
         </Field>
+
+        {email && (
+          <Field label="Email">
+            <input value={email} readOnly className={cn(inputClass, "text-[color:var(--muted)]")} />
+          </Field>
+        )}
 
         <Field label="Fonction">
           <input
@@ -205,6 +230,20 @@ export function ContactForm({
 
         <div>
           <span className="mb-1.5 block text-xs font-medium text-[color:var(--muted)]">Société</span>
+          {companyChoices.length > 1 && (
+            // Several companies share the domain (a holding and its
+            // subsidiary): each is one tap away, and the user picks.
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {companyChoices.map((choice) => (
+                <Chip
+                  key={choice.id}
+                  label={choice.name || "Société sans nom"}
+                  on={company?.id === choice.id}
+                  onToggle={() => setCompany(company?.id === choice.id ? null : asCompany(choice))}
+                />
+              ))}
+            </div>
+          )}
           {company ? (
             // Chosen: the rest of the base is out of the way.
             <div className="flex min-h-12 items-center justify-between gap-2 rounded-2xl bg-white-smoke px-4">

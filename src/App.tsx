@@ -3,9 +3,11 @@ import { AccessGate } from "@/screens/AccessGate";
 import { ContactScreen } from "@/screens/ContactScreen";
 import { RecordScreen } from "@/screens/RecordScreen";
 import { AttachScreen } from "@/screens/AttachScreen";
+import { ReviewScreen } from "@/screens/ReviewScreen";
+import { SettingsScreen } from "@/screens/SettingsScreen";
 import { InstallInvite } from "@/components/install-invite";
 import { ToastProvider } from "@/components/toast";
-import { ApiError, fetchContacts, session, type Contact, type Session } from "@/lib/api";
+import { ApiError, fetchContacts, fetchReviewCount, fetchSession, session, type Contact, type Session } from "@/lib/api";
 import { persistStorage, updateNote, type Note, type NoteContact } from "@/lib/notes";
 import { resumePending, transcribeNote } from "@/lib/pipeline";
 import { afterTransition } from "@/lib/schedule";
@@ -19,11 +21,20 @@ export type ContactsState = {
   error?: string;
 };
 
-type Page = 1 | 2 | 3;
+type Page = 1 | 2 | 3 | 4 | 5;
+
+// A notification opens /?valider=<id>: the « À valider » screen, on that call.
+function linkedReview(): string | null {
+  const id = new URLSearchParams(window.location.search).get("valider");
+  if (id !== null) window.history.replaceState(null, "", window.location.pathname);
+  return id;
+}
 
 export default function App() {
   const [user, setUser] = useState<Session | null>(session.get());
-  const [page, setPage] = useState<Page>(1);
+  const [focusId, setFocusId] = useState<string | null>(linkedReview);
+  const [page, setPage] = useState<Page>(focusId !== null ? 4 : 1);
+  const [reviewCount, setReviewCount] = useState(0);
   const [noteId, setNoteId] = useState<string | null>(null);
   const noteIdRef = useRef(noteId);
   noteIdRef.current = noteId;
@@ -40,6 +51,53 @@ export default function App() {
   const signOut = useCallback(() => {
     session.clear();
     setUser(null);
+    setPage(1);
+  }, []);
+
+  // The session lives in an HttpOnly cookie this code cannot see. It is read
+  // back at every launch — which also extends it for 90 days — and an app
+  // installed before the sign-in by code meets the access screen once.
+  useEffect(() => {
+    if (!user) return;
+    fetchSession()
+      .then((current) => {
+        session.set(current);
+        if (current.firstName !== user.firstName) setUser(current);
+      })
+      .catch((error) => {
+        if (error instanceof ApiError && error.status === 401) signOut();
+      });
+    // Once per sign-in, not on every change of the greeting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.email, signOut]);
+
+  // The count on the home screen, read when the app comes back to the front.
+  useEffect(() => {
+    if (!user) return;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      fetchReviewCount()
+        .then(({ count }) => setReviewCount(count))
+        .catch(() => undefined);
+    };
+    refresh();
+    document.addEventListener("visibilitychange", refresh);
+    return () => document.removeEventListener("visibilitychange", refresh);
+  }, [user]);
+
+  // A notification clicked while the app is already open: the service worker
+  // sends the address instead of opening a second window.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      const url = typeof event.data?.open === "string" ? new URL(event.data.open, location.origin) : null;
+      const id = url?.searchParams.get("valider");
+      if (id === null || id === undefined) return;
+      setFocusId(id);
+      setPage(4);
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
   }, []);
 
   const loadContacts = useCallback(async () => {
@@ -108,7 +166,15 @@ export default function App() {
       <InstallInvite />
       <div className="t-page-slide mx-auto h-full max-w-[480px]" data-page={page}>
         <section className="t-page" data-page-id="1" inert={page !== 1}>
-          <RecordScreen active={page === 1} firstName={user.firstName} onRecorded={recorded} onOpen={openNote} />
+          <RecordScreen
+            active={page === 1}
+            firstName={user.firstName}
+            reviewCount={reviewCount}
+            onRecorded={recorded}
+            onOpen={openNote}
+            onReview={() => setPage(4)}
+            onSettings={() => setPage(5)}
+          />
         </section>
         <section className="t-page" data-page-id="2" inert={page !== 2}>
           <ContactScreen
@@ -129,6 +195,23 @@ export default function App() {
             onDone={done}
             onUnauthorized={signOut}
           />
+        </section>
+        <section className="t-page" data-page-id="4" inert={page !== 4}>
+          <ReviewScreen
+            active={page === 4}
+            contacts={contacts}
+            focusId={focusId}
+            onBack={() => {
+              setFocusId(null);
+              setPage(1);
+            }}
+            onCount={setReviewCount}
+            onContactCreated={addContact}
+            onUnauthorized={signOut}
+          />
+        </section>
+        <section className="t-page" data-page-id="5" inert={page !== 5}>
+          <SettingsScreen active={page === 5} email={user.email} onBack={() => setPage(1)} onSignedOut={signOut} />
         </section>
       </div>
     </ToastProvider>

@@ -26,7 +26,7 @@ const out = mkdtempSync(join(tmpdir(), "mosaic-api-"));
 
 // Each route, with the handlers Vercel will look for on it.
 const ROUTES = {
-  "api/session.js": ["POST"],
+  "api/session.js": ["GET", "POST"],
   "api/contacts.js": ["GET", "POST"],
   "api/companies.js": ["GET", "POST"],
   "api/notes.js": ["POST"],
@@ -34,6 +34,9 @@ const ROUTES = {
   "api/outlook/notes.js": ["GET", "POST", "PATCH"],
   "api/outlook/contacts/index.js": ["POST"],
   "api/outlook/contacts/match.js": ["POST"],
+  "api/readai/webhook.js": ["POST"],
+  "api/readai/[action].js": ["GET", "POST", "DELETE"],
+  "api/auth/[action].js": ["POST"],
 };
 
 try {

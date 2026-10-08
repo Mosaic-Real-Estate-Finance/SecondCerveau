@@ -68,7 +68,7 @@ quelques heures.
 | **II. Notion est la source de vérité** | Redis ne porte que la liste autorisée par II ; l'appel en attente ne garde que les champs de `Meeting` ; supprimé à la clôture ; « note créée » se lit dans Notion. | ✅ |
 | **III. Une seule base Notes** | Notes, `Source = ReadAI`. | ✅ |
 | **IV. Toute route est authentifiée** | Webhook : HMAC à temps constant. PWA : cookie de session signé, révocable. Complément : jeton Microsoft inchangé. `x-user-email` n'est plus lu par `identify()`. | ✅ |
-| **V. Écritures idempotentes** | `request_id` (30 j), verrou par réunion, `ID client` = clé de réunion vérifiée avant création ; contact créé une fois par décision (`decision.contactId`), sous verrou d'élément. | ✅ |
+| **V. Écritures idempotentes** | `request_id` (30 j), verrou unique `readai:lock` (research C-3), `ID client` = clé de réunion vérifiée avant création ; contact créé une fois par décision (`decision.contactId`), sous verrou d'élément. | ✅ |
 | **VI. Aucune perte silencieuse** | Tout échec après acceptation → élément `error` + notification + « Réessayer » ; page sans corps mise à la corbeille. | ✅ |
 | **VII. Sobriété API** | 1 requête Contacts par rapport, 1 pour les sociétés si besoin, lots de 100 blocs espacés de 350 ms, 429 réessayé. | ✅ |
 | **VIII. Minimisation** | Journaux : identifiants techniques et issues seulement. Notifications : titre, compte, noms des contacts rattachés (pas de contenu). Index de repli en empreintes SHA-256. | ✅ |

@@ -72,8 +72,7 @@ notifications. Toute valeur JSON est sérialisée par le client.
 | Clé | Type | TTL | Contenu |
 | --- | --- | --- | --- |
 | `readai:req:<request_id>` | string | 30 j | `1` — envoi déjà reçu |
-| `readai:lock:<clé réunion>` | string | 120 s | jeton du détenteur |
-| `readai:lock:item:<id>` | string | 120 s | jeton du détenteur (décisions) |
+| `readai:lock` | string | 280 s | jeton du détenteur — verrou unique (research C-3) |
 | `readai:meeting:<clé réunion>` | string | aucun, supprimée avec l'élément | `{ itemId }` de l'élément en attente |
 | `readai:item:<id>` | JSON | aucun | `QueueItem` |
 | `readai:items` | zset | aucun | `id` → score = début de réunion (ms) |

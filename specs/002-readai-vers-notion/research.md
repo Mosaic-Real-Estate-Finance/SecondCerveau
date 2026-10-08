@@ -117,12 +117,25 @@ minuscules), des débuts à moins de 10 minutes et au moins un externe en commun
 - **Alternative écartée** : rapprocher par la seule fenêtre de temps — deux réunions
   successives dans la même salle virtuelle partageraient leurs notes.
 
-### C-3. Verrou
+### C-3. Verrou — **un seul, pas un par clé** (écart assumé au brief §6)
 
-`SET readai:lock:<clé> NX EX 120` avant toute lecture d'état. Un second rapport qui trouve le
-verrou pris attend (sondage toutes les 500 ms, 90 s au plus) puis relit l'état : il fusionne
-alors au lieu de créer. Le verrou est libéré par `DEL` seulement si sa valeur est toujours la
-sienne.
+Le brief demande un verrou Redis par clé de réunion. À l'implémentation, il ne suffit pas : le
+repli de C-2 peut **réunir deux clés**. Un rapport du robot Zoom (`readai:zoom:…`) et un rapport
+de l'app Read (`readai:session:…`) arrivés ensemble prennent chacun le verrou de leur clé, se
+trouvent l'un l'autre par l'index, et chacun attend la clé de l'autre : interblocage jusqu'au
+TTL, puis deux erreurs.
+
+- **Décision** : un verrou unique `readai:lock` (`SET NX EX 280`, libéré par script seulement
+  par son détenteur), pris pour tout ce qui lit puis écrit l'état d'une réunion : traitement
+  d'un rapport, décision, clôture, ignorer, réessayer. Un second rapport attend jusqu'à 240 s
+  (sondage toutes les 500 ms), une décision jusqu'à 30 s, puis 409 « réessayez ».
+- **Pourquoi c'est acceptable** : quelques réunions par jour, un traitement de quelques
+  secondes (dizaine de secondes pour une transcription de plusieurs heures). Le verrou
+  sérialise aussi les décisions concurrentes sur une même personne, ce qui garantit qu'aucun
+  contact n'est créé deux fois (brief §8.4).
+- **Vérifié** par `npm run sim:readai` : deux rapports de la même réunion lancés en parallèle
+  donnent `queued` + `merged`, un seul élément, trois auteurs ; deux créations simultanées du
+  même contact en donnent une, l'autre reçoit « Déjà traité ».
 
 ### C-4. Note déjà créée
 

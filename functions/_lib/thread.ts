@@ -28,8 +28,12 @@ export type ThreadMessage = {
   copyIds?: string[];
 };
 
-type RichText = { type: "text"; text: { content: string } };
-type Block = Record<string, unknown>;
+export type RichText = {
+  type: "text";
+  text: { content: string };
+  annotations?: { bold?: boolean };
+};
+export type Block = Record<string, unknown>;
 
 const ITEM = 2000;
 /** Blocks per append request. */
@@ -111,10 +115,11 @@ export function richText(text: string): RichText[] {
   return parts.map((content) => ({ type: "text", text: { content } }));
 }
 
-const paragraph = (text: string): Block => ({
+/** A paragraph from plain text, or from rich text already built (bold names). */
+export const paragraph = (text: string | RichText[]): Block => ({
   object: "block",
   type: "paragraph",
-  paragraph: { rich_text: richText(text) },
+  paragraph: { rich_text: typeof text === "string" ? richText(text) : text },
 });
 
 // `icon` here is Notion's own icon set, addressed by name — the same names as
@@ -123,14 +128,18 @@ const paragraph = (text: string): Block => ({
 // external URL to the same file is silently rewritten into it.
 const ICON = { type: "icon", icon: { name: "conversation", color: "gray" } };
 
-const callout = (title: string, children: Block[]): Block => ({
+/**
+ * A grey callout with Notion's own "conversation" icon. The divider under the
+ * title is the mail thread's layout; the Read AI note leaves it out.
+ */
+export const callout = (title: string, children: Block[], { divider = true } = {}): Block => ({
   object: "block",
   type: "callout",
   callout: {
     rich_text: richText(title),
     icon: ICON,
     color: "gray_background",
-    children: [{ object: "block", type: "divider", divider: {} }, ...children],
+    children: divider ? [{ object: "block", type: "divider", divider: {} }, ...children] : children,
   },
 });
 

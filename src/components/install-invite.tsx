@@ -66,6 +66,11 @@ const STEPS = [
   { text: "« Ajouter »", icon: null },
 ];
 
+const OPEN_EVENT = "mosaic:install-invite";
+
+/** Opens the invitation from anywhere in the app. */
+export const openInstallInvite = () => window.dispatchEvent(new Event(OPEN_EVENT));
+
 export function InstallInvite() {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -79,6 +84,19 @@ export function InstallInvite() {
   );
   const ios = platform === "ios-safari";
   const inApp = platform === "ios-inapp" || platform === "android-inapp";
+
+  // The settings screen sends its reader here when notifications need the
+  // installed app: the sheet opens on request, dismissed or not.
+  useEffect(() => {
+    const show = () => {
+      if (isStandalone()) return;
+      setPlatform(detectPlatform());
+      setMounted(true);
+      window.setTimeout(() => setOpen(true), 60);
+    };
+    window.addEventListener(OPEN_EVENT, show);
+    return () => window.removeEventListener(OPEN_EVENT, show);
+  }, []);
 
   useEffect(() => {
     if (isStandalone() || !isMobile() || installPrompt.dismissed()) return;
