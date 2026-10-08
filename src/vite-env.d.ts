@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_ENTRA_API_SCOPE?: string;
   /** The Notion notes database, so the panel can offer a way into it. Public. */
   readonly VITE_NOTION_NOTES_DB?: string;
+  /** Web Push application server key. Public by design. */
+  readonly VITE_VAPID_PUBLIC_KEY?: string;
 }
 
 interface ImportMeta {

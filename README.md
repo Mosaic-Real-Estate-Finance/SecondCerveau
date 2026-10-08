@@ -1,6 +1,6 @@
 # Mosaic Dictée
 
-PWA de dictée vocale vers la base de notes Notion. La transcription se fait sur le téléphone (Whisper small q8, Transformers.js), le texte brut part dans Notion, et Notion AI le met au propre.
+PWA de dictée vocale vers la base de notes Notion — et, depuis la feature 002, l'écran où l'on valide les réunions Read AI avant qu'elles n'entrent dans le CRM. La transcription se fait sur le téléphone (Whisper small q8, Transformers.js), le texte brut part dans Notion, et Notion AI le met au propre.
 
 Trois écrans, dans cet ordre : dicter, choisir le contact, joindre un document
 si besoin. L'envoi part du troisième. Il n'y a pas d'écran de relecture : la
@@ -27,9 +27,28 @@ Le serveur de dev exécute les mêmes Functions que la production (`functions/ap
 4. Noms de colonnes différents : les surcharger dans les variables `*_PROP_*`.
 5. **Notes** : la transcription part dans `Transcription brute`, l'auteur dans `Auteur`, et la page est créée depuis le modèle par défaut de la base (onglet Modèles dans Notion).
 
-## Utilisateurs autorisés
+## Utilisateurs autorisés et connexion
 
-`functions/_lib/users.ts` porte la liste des adresses et l'identifiant Notion associé, utilisé pour la propriété `Auteur`. Pour ajouter quelqu'un, ajouter une ligne avec son identifiant (la commande figure en tête du fichier).
+`functions/_lib/users.ts` porte la liste des adresses et l'identifiant Notion associé, utilisé pour la propriété `Auteur`. Pour ajouter quelqu'un, ajouter une ligne avec son identifiant (la commande figure en tête du fichier). Retirer une ligne ferme aussi les sessions ouvertes de cette adresse.
+
+On entre dans l'app avec un **code à six chiffres reçu par email** (Gmail SMTP, mot de passe d'application). L'écran d'accès répond pareil qu'une adresse soit dans la liste ou non. Un code vaut 10 minutes, sert une fois, supporte 5 essais ; on ne peut en redemander qu'un par minute et cinq par heure. Le bon code ouvre une session dans un cookie `HttpOnly`, valable 90 jours et prolongée à chaque lancement de l'app ; « Se déconnecter », dans les réglages, la révoque. L'ancien en-tête `x-user-email` n'ouvre plus rien : une PWA installée avant ce changement repasse une fois par l'écran d'accès. Le complément Outlook n'est pas concerné : il s'authentifie par son jeton Microsoft. Seul un panneau lancé sans Entra configuré (développement local), qui se rabattait sur l'en-tête, reçoit désormais 401.
+
+## Synchronisation Read AI
+
+Les réunions avec des contacts externes enregistrées par Read AI arrivent seules dans Notes (spec : `specs/002-readai-vers-notion/`).
+
+- Read AI pousse le rapport de chaque réunion terminée vers `POST /api/readai/webhook`, signé (HMAC-SHA256 du corps, clé `READAI_WEBHOOK_SECRET` décodée en base64). La réponse part tout de suite ; le traitement continue après.
+- Les participants internes (`INTERNAL_DOMAINS`) ne sont jamais des contacts ; ceux de `users.ts` deviennent les `Auteur`. Les externes sont rapprochés de Contacts en **une** requête, par email exact.
+- Tous reconnus : la note est créée (titre, date et heure, `Source` = `ReadAI`, contacts, `ID client` = clé de réunion), avec deux encadrés, « Résumé » et « Transcription ».
+- Une personne inconnue : **rien n'est écrit dans Notion**. L'appel attend dans l'écran « À valider » (accès en haut de l'accueil) : rattacher à un contact existant, créer un contact, ou « pas nécessaire ». La note part quand tout le monde est tranché.
+- Deux collaborateurs qui enregistrent la même réunion produisent une seule note.
+- La file d'attente vit dans Upstash Redis (Vercel Marketplace). Un appel en attente y est conservé en entier jusqu'à la décision, puis effacé (constitution 2.0.0, principe II). Aucun contenu de réunion, nom ni email n'est journalisé.
+
+Avant de déployer : `npm run check:readai` (schéma Notion, en lecture seule), `npm run test:readai` (règles de filtrage et de rapprochement), `npm run sim:readai` (parcours complets contre un Notion et un Redis simulés). Les prérequis (webhook Read AI, Upstash, Gmail, clés VAPID) sont dans `specs/002-readai-vers-notion/quickstart.md`.
+
+## Notifications
+
+Dans l'app installée (iOS 16.4 et plus), « Recevoir les notifications » dans les réglages. Elles partent à tous ceux qui les ont activées : réunion ajoutée, personnes à valider, réunion non enregistrée. Jamais de résumé ni de transcription. Le service worker reste généré par `vite-plugin-pwa` ; `public/push-sw.js` lui ajoute les deux écouteurs `push` et `notificationclick` par `importScripts`, sans toucher au cache.
 
 ## Déployer (Cloudflare Pages, gratuit)
 
@@ -51,6 +70,11 @@ Cloudflare plutôt que Vercel : le plan gratuit de Vercel interdit l'usage comme
 | `src/lib/pipeline.ts` | Reprise au lancement, transcription, envoi, wake lock |
 | `src/workers/whisper.worker.ts` | Whisper q8 en WASM, build standard servi depuis `public/ort` (le build asyncify fait planter Safari 26) |
 | `functions/api/*` | Proxy Notion (l'API Notion refuse le CORS, et le token reste serveur) |
+| `functions/api/readai/` | Le webhook Read AI et les routes de l'écran « À valider » (une seule fonction Vercel pour toutes, le plan Hobby s'arrête à 12) |
+| `functions/_lib/readai/` | Signature, répartition des participants, rapprochement, clé de réunion, note, file d'attente |
+| `functions/_lib/session.ts` | Codes de connexion et sessions |
+| `src/screens/ReviewScreen.tsx` | L'écran « À valider » |
+| `src/screens/SettingsScreen.tsx` | Notifications et déconnexion |
 | `src/components/voice-recorder.tsx` | Design Rare UI d'origine, adapté à l'enregistrement |
 | `src/screens/AttachScreen.tsx` | Dernière étape : la pièce jointe, facultative, puis l'envoi — qui attend la transcription si elle tourne encore |
 | `functions/api/files.ts` | Upload d'un document ou d'une photo vers Notion, rattaché à la colonne `Fichiers` de la note |
@@ -254,7 +278,7 @@ Logiques reprises du dépôt Infrastructure et adaptées à Vite :
 | Invitation à installer | `src/components/install-invite.tsx`, `public/pwa-install-animation.html` | Affichée une fois, seulement connecté, sur mobile, hors app installée |
 | Bande lumineuse ancrée à `100lvh` | `src/screens/RecordScreen.tsx` | La page porte `transform`, `filter` et `will-change` pour la transition : elle devient le bloc conteneur de ses enfants `fixed`, et `bottom: 0` tombait sur le bas de la page, pas de l'écran — la lueur flottait au-dessus de la barre Safari au lieu de passer dessous |
 
-Non repris volontairement : `user-scalable=no` (tous nos champs sont déjà en 16 px, donc pas de zoom au focus, et on garde le zoom d'accessibilité), la barre d'état `black-translucent` (illisible sur notre fond blanc), et tout le volet notifications push.
+Non repris volontairement : `user-scalable=no` (tous nos champs sont déjà en 16 px, donc pas de zoom au focus, et on garde le zoom d'accessibilité) et la barre d'état `black-translucent` (illisible sur notre fond blanc). Les notifications push, longtemps écartées, sont arrivées avec la synchronisation Read AI (voir plus haut).
 
 ## Icônes
 

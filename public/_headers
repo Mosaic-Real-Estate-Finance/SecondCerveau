@@ -20,5 +20,8 @@
   Cache-Control: public, max-age=0, must-revalidate
   Service-Worker-Allowed: /
 
+/push-sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+
 /manifest.webmanifest
   Cache-Control: public, max-age=3600, must-revalidate

@@ -1,5 +1,10 @@
-// Client for the Pages Functions in /functions. The address is typed once per
-// device; it names the author of every note that device sends.
+// Client for the functions in /functions.
+//
+// Identity travels in an HttpOnly session cookie, opened with a code received
+// by email (feature 002). The browser sends it on its own with every request
+// to this origin; no script can read it, this one included. What is kept in
+// localStorage below is only the greeting — the first name — and a hint that
+// a session was opened on this device.
 
 export type Contact = {
   id: string;
@@ -22,6 +27,8 @@ export class ApiError extends Error {
     message: string,
     public status: number,
     public retry: boolean,
+    /** The whole error body, for the routes that send more than a sentence. */
+    public data: Record<string, unknown> | null = null,
   ) {
     super(message);
   }
@@ -42,7 +49,6 @@ export const session = {
     } catch {
       // Private mode: the address then lasts for the session only.
     }
-    current = value;
   },
   clear() {
     try {
@@ -50,22 +56,19 @@ export const session = {
     } catch {
       // Nothing stored.
     }
-    current = null;
   },
 };
 
-let current: Session | null = session.get();
-
-async function call<T>(path: string, init: RequestInit = {}, email = current?.email): Promise<T> {
+async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, {
       ...init,
+      credentials: "same-origin",
       headers: {
         // A multipart body carries its own content type, boundary and all,
         // and the runtime is the only thing that knows the boundary.
         ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
-        "x-user-email": email ?? "",
         ...init.headers,
       },
     });
@@ -89,14 +92,30 @@ async function call<T>(path: string, init: RequestInit = {}, email = current?.em
       (data?.error as string) ?? `Erreur ${response.status}`,
       response.status,
       (data?.retry as boolean) ?? response.status >= 500,
+      data,
     );
   }
   if (!data) throw new ApiError("Réponse inattendue du serveur", response.status, true);
   return data as T;
 }
 
-export const openSession = (email: string) =>
-  call<Session>("/api/session", { method: "POST", body: "{}" }, email.trim().toLowerCase());
+// ---- Sign-in ------------------------------------------------------------------
+
+/** Sends a code if the address is allowed. The answer is the same either way. */
+export const requestCode = (email: string) =>
+  call<{ ok: true }>("/api/auth/code", { method: "POST", body: JSON.stringify({ email: email.trim().toLowerCase() }) });
+
+/** A right code opens the session: the cookie comes back with the answer. */
+export const verifyCode = (email: string, code: string) =>
+  call<Session>("/api/auth/verify", {
+    method: "POST",
+    body: JSON.stringify({ email: email.trim().toLowerCase(), code: code.replace(/\s+/g, "") }),
+  });
+
+/** Read at every launch; a valid session comes back extended for 90 days. */
+export const fetchSession = () => call<Session>("/api/session");
+
+export const logout = () => call<{ ok: true }>("/api/auth/logout", { method: "POST", body: "{}" });
 
 export const fetchContacts = () =>
   call<{ contacts: Contact[]; rollup: boolean; typeOptions: string[] }>("/api/contacts");
@@ -163,3 +182,83 @@ export const recentContacts = {
     }
   },
 };
+
+// ---- Read AI : « À valider » ---------------------------------------------------
+
+export type ContactRef = { id: string; name: string; company: string };
+export type CompanyRef = { id: string; name: string };
+
+export type Decision =
+  | { action: "attach" | "create"; contactId: string; name: string; by: string; at: string }
+  | { action: "exclude"; by: string; at: string };
+
+export type PendingPerson = {
+  email: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  companies: CompanyRef[];
+  candidates: ContactRef[];
+  decision?: Decision;
+};
+
+export type ReviewItem = {
+  id: string;
+  key: string;
+  kind: "new" | "complete";
+  status: "pending" | "error";
+  stage?: "process" | "close";
+  error?: string;
+  createdAt: string;
+  noteId?: string;
+  noteUrl?: string;
+  meeting: {
+    sessionId: string;
+    title: string;
+    start: string;
+    end: string | null;
+    owner: { name: string; email: string | null } | null;
+    summary: string;
+    reportUrl: string | null;
+    turns: number;
+  };
+  authors: { email: string; notionUserId: string }[];
+  recognized: ({ email: string } & ContactRef)[];
+  people: PendingPerson[];
+};
+
+export type Closed = { closed: true; noteUrl: string | null };
+
+export const fetchReview = () =>
+  call<{ items: ReviewItem[]; excluded: string[]; count: number }>("/api/readai/items");
+
+export const fetchReviewCount = () => call<{ count: number }>("/api/readai/items?count=1");
+
+export type DecideBody =
+  | { action: "attach"; contactId: string }
+  | { action: "create"; contact: NewContact }
+  | { action: "exclude" };
+
+export const decidePerson = (itemId: string, email: string, decision: DecideBody) =>
+  call<{ item: ReviewItem } | Closed>("/api/readai/decide", {
+    method: "POST",
+    body: JSON.stringify({ itemId, email, ...decision }),
+  });
+
+export const ignoreCall = (itemId: string) =>
+  call<Closed>("/api/readai/ignore", { method: "POST", body: JSON.stringify({ itemId }) });
+
+export const retryCall = (itemId: string) =>
+  call<Closed | { outcome: string }>("/api/readai/retry", { method: "POST", body: JSON.stringify({ itemId }) });
+
+export const removeExcluded = (email: string) =>
+  call<{ excluded: string[] }>("/api/readai/excluded", {
+    method: "POST",
+    body: JSON.stringify({ email, action: "remove" }),
+  });
+
+export const savePushSubscription = (subscription: PushSubscriptionJSON) =>
+  call<{ ok: true }>("/api/readai/push", { method: "POST", body: JSON.stringify({ subscription }) });
+
+export const deletePushSubscription = (endpoint: string) =>
+  call<{ ok: true }>("/api/readai/push", { method: "DELETE", body: JSON.stringify({ endpoint }) });

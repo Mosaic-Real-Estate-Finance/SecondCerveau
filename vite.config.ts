@@ -125,6 +125,18 @@ function pagesFunctions(env: Record<string, string>): Plugin {
     "GET /api/outlook/notes": { file: "/functions/api/outlook/notes.ts", name: "onRequestGet" },
     "POST /api/outlook/notes": { file: "/functions/api/outlook/notes.ts", name: "onRequestPost" },
     "PATCH /api/outlook/notes": { file: "/functions/api/outlook/notes.ts", name: "onRequestPatch" },
+    "GET /api/session": { file: "/functions/api/session.ts", name: "onRequestGet" },
+    "POST /api/readai/webhook": { file: "/functions/api/readai/webhook.ts", name: "onRequestPost" },
+    "GET /api/readai/items": { file: "/functions/api/readai/screen.ts", name: "onRequestGet" },
+    "POST /api/readai/decide": { file: "/functions/api/readai/screen.ts", name: "onRequestPost" },
+    "POST /api/readai/ignore": { file: "/functions/api/readai/screen.ts", name: "onRequestPost" },
+    "POST /api/readai/retry": { file: "/functions/api/readai/screen.ts", name: "onRequestPost" },
+    "POST /api/readai/excluded": { file: "/functions/api/readai/screen.ts", name: "onRequestPost" },
+    "POST /api/readai/push": { file: "/functions/api/readai/screen.ts", name: "onRequestPost" },
+    "DELETE /api/readai/push": { file: "/functions/api/readai/screen.ts", name: "onRequestDelete" },
+    "POST /api/auth/code": { file: "/functions/api/auth.ts", name: "onRequestPost" },
+    "POST /api/auth/verify": { file: "/functions/api/auth.ts", name: "onRequestPost" },
+    "POST /api/auth/logout": { file: "/functions/api/auth.ts", name: "onRequestPost" },
   };
   return {
     name: "pages-functions",
@@ -155,7 +167,11 @@ function pagesFunctions(env: Record<string, string>): Plugin {
           const module = await server.ssrLoadModule(route.file);
           const response: Response = await module[route.name]({ request, env });
           res.statusCode = response.status;
-          response.headers.forEach((value, key) => res.setHeader(key, value));
+          response.headers.forEach((value, key) => {
+            if (key !== "set-cookie") res.setHeader(key, value);
+          });
+          const cookies = response.headers.getSetCookie();
+          if (cookies.length) res.setHeader("Set-Cookie", cookies);
           res.end(Buffer.from(await response.arrayBuffer()));
         } catch (error) {
           server.config.logger.error(`[api] ${(error as Error).message}`);
@@ -265,6 +281,10 @@ export default defineConfig(async ({ mode }) => {
           ],
         },
         workbox: {
+          // The push and notification click listeners (feature 002). Added
+          // to the generated worker rather than switching to injectManifest,
+          // so every caching rule below stays exactly as it was.
+          importScripts: ["push-sw.js"],
           globPatterns: ["**/*.{js,css,html,svg,png,webp,woff2}"],
           // The ONNX Runtime binary is cached on first use instead (below),
           // and the launch screens are only read by iOS, never by the app.

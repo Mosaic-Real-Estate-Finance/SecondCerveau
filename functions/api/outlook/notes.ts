@@ -1,3 +1,4 @@
+import { contactProperty, propertyItems } from "../../_lib/notes-db.js";
 import { batches, blocksFor, type ThreadMessage } from "../../_lib/thread.js";
 import {
   dataSourceId,
@@ -33,18 +34,6 @@ const text = (content: string) => ({ rich_text: [{ type: "text", text: { content
 
 const plainOf = (property: any) =>
   (property?.rich_text ?? []).map((part: { plain_text?: string }) => part.plain_text ?? "").join("");
-
-/** The relation of the notes base that points at Contacts, whatever its name. */
-async function contactProperty(env: Env, schema: Schema): Promise<string> {
-  const named = props(env).noteContact;
-  if (named) return named;
-  const contactsSource = await dataSourceId(env, env.NOTION_CONTACTS_DB);
-  const found = Object.values(schema).find(
-    (property) => property.type === "relation" && property.relation?.data_source_id === contactsSource,
-  );
-  if (!found) throw new Error("Aucune relation vers Contacts dans la base de notes");
-  return found.name;
-}
 
 type Found = { id: string; url: string; lastMessageId: string | null };
 
@@ -98,30 +87,6 @@ async function appendThread(env: Env, pageId: string, messages: ThreadMessage[])
   for (const group of batches(blocksFor(messages))) {
     await notion(env, `/blocks/${pageId}/children`, { method: "PATCH", body: { children: group } });
   }
-}
-
-/** Every id of a paginated property, which the page object truncates at 25. */
-async function propertyItems(env: Env, pageId: string, propertyId: string): Promise<any[]> {
-  const items: any[] = [];
-  let cursor: string | undefined;
-  do {
-    const page = await notion<{
-      results?: { type: string; relation?: { id: string }; people?: { id: string } }[];
-      has_more?: boolean;
-      next_cursor?: string | null;
-      type?: string;
-      relation?: unknown;
-      people?: unknown;
-    }>(
-      env,
-      `/pages/${pageId}/properties/${propertyId}${cursor ? `?start_cursor=${cursor}` : ""}`,
-    );
-    // A short property comes back whole; a long one comes back as a list.
-    if (Array.isArray(page.results)) items.push(...page.results);
-    else if (page.relation || page.people) items.push(page);
-    cursor = page.has_more ? (page.next_cursor ?? undefined) : undefined;
-  } while (cursor);
-  return items;
 }
 
 const lastOf = (messages: ThreadMessage[]) => messages[messages.length - 1];
