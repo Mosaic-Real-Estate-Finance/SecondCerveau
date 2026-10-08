@@ -81,13 +81,12 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
     <Screen className="mx-auto max-w-[480px] justify-center">
       <Symbol className="mx-auto h-16 text-midnight-blue" />
       {step === "email" ? (
-        <h1 className="mt-12 font-serif text-2xl">Qui se connecte ?</h1>
+        <h1 className="mt-12 text-center font-serif text-2xl">Qui se connecte ?</h1>
       ) : (
         <>
-          <h1 className="mt-12 font-serif text-2xl">Votre code</h1>
+          <h1 className="mt-12 font-serif text-2xl">Quel est votre code de connexion ?</h1>
           <p className="mt-2 text-base text-[color:var(--muted)]">
-            Si {email.trim().toLowerCase()} a accès à l'application, un code à six chiffres vient d'y être envoyé. Il
-            est valable 10 minutes.
+            Si {email.trim().toLowerCase()} est autorisé, un code valable 10 minutes a été envoyé par mail.
           </p>
         </>
       )}
@@ -123,7 +122,7 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
               status={status}
               role="group"
               aria-label="Code à six chiffres"
-              className="flex justify-center"
+              fluid
               onChange={(digits) => {
                 setCode(digits);
                 clearError();

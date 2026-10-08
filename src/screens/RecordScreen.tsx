@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { VoiceBeam } from "voice-glow";
+import { Icon } from "@/components/icon";
 import { Symbol } from "@/components/logo";
 import { noteDate, Screen, statusLabel, TextButton } from "@/components/screen";
 import { useToast } from "@/components/toast";
@@ -131,18 +132,10 @@ export function RecordScreen({
         <button
           type="button"
           onClick={onReview}
-          className="relative flex h-11 w-11 items-center justify-center rounded-full text-navy"
+          className="flex h-11 w-11 items-center justify-center rounded-full text-navy"
           aria-label={reviewCount ? `À valider, ${reviewCount} appel${reviewCount > 1 ? "s" : ""}` : "À valider"}
         >
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-          </svg>
-          {reviewCount > 0 && (
-            <span className="absolute right-1 top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-navy px-1 text-2xs font-semibold leading-none text-white ring-2 ring-white">
-              {reviewCount}
-            </span>
-          )}
+          <Icon name={reviewCount > 0 ? "bell.badge" : "bell"} className="h-[22px]" />
         </button>
         <button
           type="button"
@@ -150,10 +143,7 @@ export function RecordScreen({
           aria-label="Réglages"
           className="flex h-11 w-11 items-center justify-center rounded-full text-navy"
         >
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-          </svg>
+          <Icon name="gear" className="h-[22px]" />
         </button>
       </div>
       {/* The greeting sits in the upper part; the button holds the middle of
@@ -252,20 +242,7 @@ export function RecordScreen({
             onClick={openPanel}
             tabIndex={open ? -1 : 0}
           >
-            <svg
-              viewBox="0 0 24 24"
-              width="40"
-              height="40"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <rect x="9" y="3" width="6" height="11" rx="3" />
-              <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
-            </svg>
+            <Icon name="microphone" className="h-9" />
           </button>
         </div>
       </div>
