@@ -4,8 +4,9 @@
 @import "./transitions/_root.css";
 @import "./transitions/snippets.css";
 
-/* Light theme only: dark: variants in vendored components never fire. */
-@custom-variant dark (&:where(.dark, .dark *));
+/* Dark follows the resolved theme on <html> (see index.html and
+   lib/theme.ts), not the media query: the user can pin one in Réglages. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* Mosaic palette: two blues on two neutrals, nothing else. The two blues are
    indistinguishable from each other (1.21:1), so hierarchy comes from size,
@@ -39,9 +40,13 @@
 
 /* Theme hooks the transitions ask to be tuned in app rules. */
 :root {
-  --shimmer-base: rgb(2 3 66 / 0.45);
-  --shimmer-highlight: #020342;
-  --muted: rgb(2 3 66 / 0.62);
+  --shimmer-base: color-mix(in srgb, var(--color-midnight-blue) 45%, transparent);
+  --shimmer-highlight: var(--color-midnight-blue);
+  --muted: color-mix(in srgb, var(--color-midnight-blue) 62%, transparent);
+  /* Shadows and scrims: the ink in light, plain black in dark, where a
+     shadow tinted with the (now pale) ink would read as a glow. */
+  --shadow-ink: #020342;
+  --scrim: rgb(2 3 66 / 0.18);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
   color-scheme: light;
@@ -59,6 +64,22 @@
      curve, and the duration of a sheet presentation. */
   --sheet-dur: 500ms;
   --sheet-ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ---- Dark theme ------------------------------------------------------
+   Same four roles, values swapped: `white` stays the surface and the ink on
+   the accent, `midnight-blue` the text, `navy` the accent. The navy itself
+   would vanish on a dark surface, so the accent becomes a pale tint of the
+   same hue, and the "white" text on it becomes the dark surface: the filled
+   buttons keep their contrast (about 8:1 both ways) without a fifth colour. */
+:root[data-theme="dark"] {
+  --color-midnight-blue: #e6e7f5;
+  --color-navy: #a3a8ff;
+  --color-white: #0b0c22;
+  --color-white-smoke: #181a36;
+  --shadow-ink: #000000;
+  --scrim: rgb(0 0 0 / 0.5);
+  color-scheme: dark;
 }
 
 html,
@@ -238,7 +259,7 @@ a {
 .sheet-scrim {
   position: absolute;
   inset: 0;
-  background: rgb(2 3 66 / 0.18);
+  background: var(--scrim);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   opacity: 0;
@@ -259,7 +280,7 @@ a {
   flex-direction: column;
   background: var(--color-white);
   border-radius: 28px 28px 0 0;
-  box-shadow: 0 -8px 40px rgb(2 3 66 / 0.12);
+  box-shadow: 0 -8px 40px color-mix(in srgb, var(--shadow-ink) 12%, transparent);
   padding-bottom: var(--safe-bottom);
   transform: translateY(100%);
   transition: transform var(--sheet-dur) var(--sheet-ease);
@@ -286,7 +307,7 @@ a {
   width: 36px;
   height: 5px;
   border-radius: 3px;
-  background: rgb(2 3 66 / 0.18);
+  background: color-mix(in srgb, var(--color-midnight-blue) 18%, transparent);
 }
 .sheet-body {
   flex: 1;
@@ -373,7 +394,7 @@ a {
   color: var(--color-midnight-blue);
 }
 .voice-note-mosaic [data-slot="voice-note-track"] > div:first-child > span {
-  background: rgb(2 3 66 / 0.3);
+  background: color-mix(in srgb, var(--color-midnight-blue) 30%, transparent);
 }
 .voice-note-mosaic [data-slot="voice-note-track"] > div:last-child span {
   background: var(--color-midnight-blue);
@@ -419,7 +440,7 @@ a {
      still clears the 32px iOS calls for on a chip. */
   padding: 6px 12px;
   border-radius: 100px;
-  border: 1px solid rgb(2 3 66 / 0.18);
+  border: 1px solid color-mix(in srgb, var(--color-midnight-blue) 18%, transparent);
   color: var(--muted);
   font-size: 13px;
   line-height: 1.4;
@@ -492,7 +513,7 @@ a {
   left: 0;
   right: 0;
   height: 3px;
-  background: rgb(0 0 130 / 0.1);
+  background: color-mix(in srgb, var(--color-navy) 10%, transparent);
 }
 .close-countdown-bar {
   height: 100%;
@@ -529,6 +550,6 @@ a {
   padding: 14px 14px 14px 16px;
   border-radius: 20px;
   background: var(--color-white);
-  box-shadow: 0 8px 32px rgb(2 3 66 / 0.14), 0 0 0 1px rgb(2 3 66 / 0.06);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--shadow-ink) 14%, transparent), 0 0 0 1px color-mix(in srgb, var(--color-midnight-blue) 6%, transparent);
   pointer-events: auto;
 }

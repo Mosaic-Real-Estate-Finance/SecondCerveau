@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import App from "./App";
 import { guardSafeTop } from "@/lib/safe-area";
+import "@/lib/theme";
 import "./styles/index.css";
 
 registerSW({ immediate: true });

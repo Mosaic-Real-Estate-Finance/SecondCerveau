@@ -25,7 +25,7 @@ export function SuccessCheck({ show }: { show: boolean }) {
     <span ref={wrap} className="t-success-check text-navy" data-state="out" aria-hidden>
       <svg viewBox="0 0 48 48" width="56" height="56" fill="none">
         <circle cx="24" cy="24" r="22" fill="currentColor" />
-        <path d="M14 24.5l6.5 6.5L34 17.5" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M14 24.5l6.5 6.5L34 17.5" style={{ stroke: "var(--color-white)" }} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </span>
   );

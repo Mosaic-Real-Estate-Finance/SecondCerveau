@@ -58,7 +58,6 @@ export function SearchField({
   function buildGlow(text: string) {
     const canvas = document.createElement("canvas").getContext("2d")!;
     canvas.font = getComputedStyle(input.current!).font;
-    const rgb = "2,3,66";
     const w = wrap.current!.clientWidth || 280;
     const padLeft = parseFloat(getComputedStyle(input.current!).paddingLeft) || 12;
     const spread = num("--glow-spread", 1.5);
@@ -73,7 +72,7 @@ export function SearchField({
           ([dx, rwm, rh, a]) => {
             const lx = (((cx + dx) / w) * 100).toFixed(2);
             layers.push(
-              `radial-gradient(ellipse ${Math.max(hw * rwm, 2).toFixed(1)}px ${rh}px at ${lx}% 100%, rgba(${rgb},${a}), transparent)`,
+              `radial-gradient(ellipse ${Math.max(hw * rwm, 2).toFixed(1)}px ${rh}px at ${lx}% 100%, color-mix(in srgb, var(--color-midnight-blue) ${a * 100}%, transparent), transparent)`,
             );
           },
         );

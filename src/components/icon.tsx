@@ -6,8 +6,13 @@ import { cn } from "@/lib/utils";
 
 // The SF Symbols exports, kept byte for byte in src/assets/icons. They paint in
 // white; inlined, that white becomes currentColor so each button gives the
-// icon its own colour. The badge dot keeps the colour it was drawn with.
-const inline = (svg: string) => svg.slice(svg.indexOf("<svg")).replace(/fill="white"/g, 'fill="currentColor"');
+// icon its own colour. The badge dot, drawn in a dark navy, takes the ink of
+// the theme instead: drawn as is, it would disappear on the dark one.
+const inline = (svg: string) =>
+  svg
+    .slice(svg.indexOf("<svg"))
+    .replace(/fill="white"/g, 'fill="currentColor"')
+    .replace(/fill="#002060"/g, 'style="fill: var(--color-midnight-blue)"');
 
 const ICONS = {
   bell: inline(bell),

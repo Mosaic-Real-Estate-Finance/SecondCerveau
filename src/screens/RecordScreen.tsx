@@ -8,16 +8,21 @@ import { useToast } from "@/components/toast";
 import { formatTime, VoiceRecorder } from "@/components/voice-recorder";
 import { storageIsDurable, useNotes, type Note } from "@/lib/notes";
 import { pageSlideMs } from "@/lib/schedule";
+import { useTheme } from "@/lib/theme";
 import { coolMicrophone, useMeter, useRecorder, warmMicrophone } from "@/lib/use-recorder";
 
 // The glow stays in the Mosaic blues: navy at the centre, lighter tints of the
 // same hue outward, no hue drift.
 const BEAM_COLORS = ["#000082", "#1f1fb0", "#3d3dd6", "#020342", "#5b5be8", "#1f1fb0", "#3d3dd6"];
 const BEAM_BAND = { core: "#000082", above: "#3d3dd6", mid: "#1f1fb0", below: "#020342" };
+// On the dark theme the same hue, lifted: the navy and midnight of the light
+// glow would be darker than the screen they light.
+const BEAM_COLORS_DARK = ["#5b5be8", "#7a7cf0", "#a3a8ff", "#3d3dd6", "#c4c7ff", "#7a7cf0", "#a3a8ff"];
+const BEAM_BAND_DARK = { core: "#7a7cf0", above: "#c4c7ff", mid: "#a3a8ff", below: "#3d3dd6" };
 
 // Multipliers on the light theme's own (stroke 1.2, inner 0.85, bloom 0.5),
 // plus a little more colour and a little more gain.
-const BEAM_DENSITY = {
+const BEAM_DENSITY_LIGHT = {
   strokeOpacity: 1.3,
   innerOpacity: 1.9,
   bloomOpacity: 2.4,
@@ -27,6 +32,9 @@ const BEAM_DENSITY = {
   // Breathing between words, so the screen never looks dead mid sentence.
   idle: 0.26,
 } as const;
+// The dark theme's own levels are made for a dark screen: only the gain and
+// the breathing carry over.
+const BEAM_DENSITY_DARK = { sensitivity: BEAM_DENSITY_LIGHT.sensitivity, idle: BEAM_DENSITY_LIGHT.idle } as const;
 
 const PROMPTS = ["Qu'est-ce qu'on note aujourd'hui ?", "Un point à enregistrer ?", "Une info à enregistrer ?"];
 
@@ -273,13 +281,15 @@ const BEAM_HEIGHT = "min(56dvh, 460px)";
 // around — the browser refuses to render fixed content below its floating
 // controls, so the glow always ends on that line and used to be sliced
 // across its brightest part. Fading it out over its last tenth means it
-// arrives there already white, the same white the canvas shows underneath,
+// arrives there already gone, showing the same canvas as underneath,
 // and the light reads as coming from beyond the edge instead of stopping at
 // one. In an installed app there is no bar and no line, and the same fade
 // simply softens the very bottom of the glow.
 const BEAM_MASK = "linear-gradient(to bottom, transparent 0%, #000 34%, #000 90%, transparent 100%)";
 
 function Beam({ stream, paused }: { stream: MediaStream | null; paused: boolean }) {
+  const theme = useTheme();
+  const dark = theme === "dark";
   return createPortal(
     <div
       aria-hidden
@@ -292,12 +302,12 @@ function Beam({ stream, paused }: { stream: MediaStream | null; paused: boolean 
     >
       <VoiceBeam
         type="mobile"
-        theme="light"
+        theme={theme}
         // On hold the glow fades out rather than following the room.
         active={!paused}
         stream={stream}
-        colors={BEAM_COLORS}
-        bandColors={BEAM_BAND}
+        colors={dark ? BEAM_COLORS_DARK : BEAM_COLORS}
+        bandColors={dark ? BEAM_BAND_DARK : BEAM_BAND}
         staticColors
         // Denser than the library's light theme, which is tuned for a glow
         // under a chat input rather than one that has a whole phone screen
@@ -305,7 +315,7 @@ function Beam({ stream, paused }: { stream: MediaStream | null; paused: boolean 
         // shape does not change — only how much of it there is — and the
         // microphone runs with automatic gain, so the level that reaches the
         // analyser is flatter than the room and needs a little more gain.
-        {...BEAM_DENSITY}
+        {...(dark ? BEAM_DENSITY_DARK : BEAM_DENSITY_LIGHT)}
         // The two per-frame effects a phone cannot afford: an SVG turbulence
         // filter recomputed every frame, and the band line, whose clip-paths
         // repaint the blurred layers under it.

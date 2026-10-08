@@ -6,8 +6,15 @@ import { openInstallInvite } from "@/components/install-invite";
 import { logout } from "@/lib/api";
 import { currentSubscription, disablePush, enablePush, pushSupported } from "@/lib/push";
 import { isStandalone } from "@/lib/standalone";
+import { setThemePreference, useThemePreference, type ThemePreference } from "@/lib/theme";
 
-// Two settings: notifications, and signing out.
+// Three settings: notifications, appearance, and signing out.
+
+const THEMES: { value: ThemePreference; label: string }[] = [
+  { value: "auto", label: "Automatique" },
+  { value: "light", label: "Clair" },
+  { value: "dark", label: "Sombre" },
+];
 
 export function SettingsScreen({
   active,
@@ -24,6 +31,7 @@ export function SettingsScreen({
   const [push, setPush] = useState<"unknown" | "on" | "off">("unknown");
   const [busy, setBusy] = useState(false);
   const installed = isStandalone();
+  const theme = useThemePreference();
 
   useEffect(() => {
     if (!active || !installed) return;
@@ -111,6 +119,25 @@ export function SettingsScreen({
             </TextButton>
           </>
         )}
+      </section>
+
+      <section className="mt-4 rounded-2xl bg-white-smoke p-4">
+        <h2 className="text-base font-medium">Apparence</h2>
+        <p className="mt-1 text-xs text-[color:var(--muted)]">Automatique suit le réglage de l'iPhone.</p>
+        <div role="radiogroup" aria-label="Apparence" className="mt-3 flex flex-wrap gap-2">
+          {THEMES.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={theme === value}
+              onClick={() => setThemePreference(value)}
+              className={theme === value ? "chip on" : "chip"}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="mt-4 rounded-2xl bg-white-smoke p-4">

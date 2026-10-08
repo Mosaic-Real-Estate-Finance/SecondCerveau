@@ -15,8 +15,9 @@ const RING = {
   error: "ring-2 ring-[#FF3B30]/70 delay-150",
 } as const;
 
-// Midnight blue, the app's ink, rather than the original green.
-const SUCCESS = "#020342";
+// Midnight blue, the app's ink, rather than the original green. A variable,
+// so it follows the theme; set through `style`, as SVG attributes take no var().
+const SUCCESS = "var(--color-midnight-blue)";
 
 const SIZES = {
   sm: { box: "size-10 rounded-lg", text: "text-base", caret: "h-5", gap: "gap-1.5", px: 40, radius: 8 },
@@ -25,7 +26,7 @@ const SIZES = {
 } as const;
 
 const SLOT_CLASS =
-  "bg-[#F4F4F9] dark:bg-[#262626] text-center font-medium text-transparent caret-transparent outline-none transition-shadow duration-200 selection:bg-transparent disabled:cursor-not-allowed disabled:opacity-50";
+  "bg-white-smoke text-center font-medium text-transparent caret-transparent outline-none transition-shadow duration-200 selection:bg-transparent disabled:cursor-not-allowed disabled:opacity-50";
 
 const ROLL_SPRING = { type: "spring", stiffness: 500, damping: 34 } as const;
 const CARET_SPRING = { type: "spring", stiffness: 500, damping: 40 } as const;
@@ -260,7 +261,7 @@ export function OtpInput({
                     height={scale.px - 2}
                     rx={scale.radius - 1}
                     fill="none"
-                    stroke={SUCCESS}
+                    style={{ stroke: SUCCESS }}
                     strokeWidth={2}
                     initial={reduceMotion ? false : { pathLength: 0 }}
                     animate={{ pathLength: 1 }}
