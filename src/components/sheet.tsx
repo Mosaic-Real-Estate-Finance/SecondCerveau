@@ -1,4 +1,5 @@
-import { useEffect, useReducer, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useReducer, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useReducedMotion } from "motion/react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
@@ -58,6 +59,32 @@ export function Sheet({
   }, [open, onClose]);
 
   const sheet = useRef<HTMLDivElement>(null);
+
+  // A change of detent or of content — the settings opening their list of
+  // excluded contacts — grows or shrinks the sheet rather than jumping. The
+  // height is measured where the CSS puts it, then played from the last one.
+  const reduceMotion = useReducedMotion();
+  const lastHeight = useRef(0);
+  useLayoutEffect(() => {
+    const node = sheet.current;
+    if (!node) return;
+    node.style.height = "";
+    const to = node.getBoundingClientRect().height;
+    const from = lastHeight.current;
+    lastHeight.current = to;
+    if (!open || reduceMotion || !from || Math.abs(from - to) < 2) return;
+    node.style.height = `${from}px`;
+    void node.offsetHeight;
+    node.style.height = `${to}px`;
+    const done = (event: TransitionEvent) => {
+      if (event.target !== node || event.propertyName !== "height") return;
+      node.style.height = "";
+      node.removeEventListener("transitionend", done);
+    };
+    node.addEventListener("transitionend", done);
+    return () => node.removeEventListener("transitionend", done);
+  });
+
   const drag = useRef<{ id: number; y: number; t: number; dy: number } | null>(null);
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {

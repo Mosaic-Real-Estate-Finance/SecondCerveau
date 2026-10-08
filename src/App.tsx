@@ -38,6 +38,7 @@ export default function App() {
   const [page, setPage] = useState<Page>(focusId !== null ? 4 : 1);
   const [reviewCount, setReviewCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [noteId, setNoteId] = useState<string | null>(null);
   const noteIdRef = useRef(noteId);
   noteIdRef.current = noteId;
@@ -51,7 +52,10 @@ export default function App() {
     void resumePending();
   }, []);
 
-  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+    setSettingsExpanded(false);
+  }, []);
 
   const signOut = useCallback(() => {
     session.clear();
@@ -221,8 +225,14 @@ export default function App() {
       {/* The settings rise over the home screen in a sheet rather than
           sliding in as a page. */}
       <PushBanner visible={page === 1 && !settingsOpen} />
-      <Sheet open={settingsOpen} onClose={closeSettings} label="Réglages">
-        <SettingsScreen active={settingsOpen} email={user.email} onBack={closeSettings} onSignedOut={signOut} />
+      <Sheet open={settingsOpen} onClose={closeSettings} label="Réglages" full={settingsExpanded}>
+        <SettingsScreen
+          active={settingsOpen}
+          email={user.email}
+          onBack={closeSettings}
+          onSignedOut={signOut}
+          onExpand={setSettingsExpanded}
+        />
       </Sheet>
     </ToastProvider>
   );
