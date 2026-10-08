@@ -12,7 +12,8 @@ const HANDLE_PX = 64;
 
 // A sheet in the manner of UISheetPresentationController: it rises from the
 // bottom with its content fully drawn, stops at three quarters of the screen
-// at most, and the page behind it blurs. It is never faded: the sheet itself
+// at most (a form takes the large detent instead), and the page behind it
+// blurs. It is never faded: the sheet itself
 // slides over the content as it opens and closes. Pulling it down from its
 // top, tapping the blurred page or pressing Escape closes it.
 //
@@ -29,7 +30,7 @@ export function Sheet({
   open: boolean;
   onClose: () => void;
   label: string;
-  /** Always three quarters of the screen, for a form with its own scroller. */
+  /** The large detent: nearly the whole screen, for a form with its own scroller. */
   full?: boolean;
   /** A sheet opened from a sheet sits above it. */
   level?: number;
