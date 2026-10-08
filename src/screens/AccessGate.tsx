@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { Logo } from "@/components/logo";
+import { useRef, useState } from "react";
+import { Symbol } from "@/components/logo";
 import { PrimaryButton, Screen, TextButton } from "@/components/screen";
+import { OtpInput, otpSuccessDuration, type OtpStatus } from "@/components/ui/otp-input";
 import { ApiError, requestCode, verifyCode, type Session } from "@/lib/api";
 
 // Two steps: the address, then the six digit code sent to it. The answer to
@@ -13,26 +14,23 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
   const [code, setCode] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<OtpStatus>("idle");
   const wrap = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLDivElement>(null);
-  const codeInput = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (step === "code") codeInput.current?.focus({ preventScroll: true });
-  }, [step]);
 
   const clearError = () => {
     setMessage("");
+    setStatus("idle");
     wrap.current?.classList.remove("is-error");
     field.current?.classList.remove("is-error");
   };
 
-  // transitions.dev 12, error state shake.
+  // transitions.dev 12, error state shake. The code slots shake on their own.
   const showError = (text: string) => {
     setMessage(text);
-    const w = wrap.current, f = field.current;
-    if (!w || !f) return;
-    w.classList.add("is-error");
+    wrap.current?.classList.add("is-error");
+    const f = field.current;
+    if (!f) return;
     f.classList.add("is-error");
     f.classList.remove("is-shaking");
     void f.offsetWidth;
@@ -59,8 +57,13 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
     if (value.length !== 6 || busy) return;
     setBusy(true);
     try {
-      onValid(await verifyCode(email, value));
+      const session = await verifyCode(email, value);
+      // The ring draws around every slot before the app takes over.
+      setStatus("success");
+      await new Promise((resolve) => setTimeout(resolve, otpSuccessDuration()));
+      onValid(session);
     } catch (error) {
+      setStatus("error");
       showError(
         error instanceof ApiError && error.status === 401 ? "Code incorrect ou expiré." : (error as Error).message,
       );
@@ -76,14 +79,9 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
 
   return (
     <Screen className="mx-auto max-w-[480px] justify-center">
-      <Logo className="h-24 text-midnight-blue" />
+      <Symbol className="mx-auto h-16 text-midnight-blue" />
       {step === "email" ? (
-        <>
-          <h1 className="mt-12 font-serif text-2xl">Votre adresse</h1>
-          <p className="mt-2 text-base text-[color:var(--muted)]">
-            Un code de connexion vous y sera envoyé. Il n'est demandé qu'une fois sur cet appareil.
-          </p>
-        </>
+        <h1 className="mt-12 font-serif text-2xl">Qui se connecte ?</h1>
       ) : (
         <>
           <h1 className="mt-12 font-serif text-2xl">Votre code</h1>
@@ -95,11 +93,11 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
       )}
       <form onSubmit={submit} className="mt-8">
         <div ref={wrap} className="t-input-wrap">
-          <div
-            ref={field}
-            className="t-input rounded-2xl border-2 border-transparent bg-white-smoke [&.is-error]:border-midnight-blue"
-          >
-            {step === "email" ? (
+          {step === "email" ? (
+            <div
+              ref={field}
+              className="t-input rounded-2xl border-2 border-transparent bg-white-smoke [&.is-error]:border-midnight-blue"
+            >
               <input
                 type="email"
                 inputMode="email"
@@ -115,32 +113,26 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
                   setEmail(event.target.value);
                   clearError();
                 }}
-                className="h-14 w-full bg-transparent px-4 text-base outline-none placeholder:text-[color:var(--muted)]"
+                className="h-14 w-full rounded-2xl bg-transparent px-4 text-base outline-none placeholder:text-[color:var(--muted)]"
               />
-            ) : (
-              <input
-                ref={codeInput}
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="[0-9]*"
-                maxLength={6}
-                enterKeyHint="go"
-                aria-label="Code à six chiffres"
-                placeholder="000000"
-                value={code}
-                onChange={(event) => {
-                  const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
-                  setCode(digits);
-                  clearError();
-                  // iOS fills the code from the mail in one go: check it at once.
-                  if (digits.length === 6) void check(digits);
-                }}
-                className="h-14 w-full bg-transparent px-4 text-center font-mono text-2xl tracking-[0.4em] outline-none placeholder:text-[color:var(--muted)]"
-              />
-            )}
-          </div>
-          <p className="t-error-msg mt-2 text-xs" role="alert">
+            </div>
+          ) : (
+            <OtpInput
+              autoFocus
+              value={code}
+              status={status}
+              role="group"
+              aria-label="Code à six chiffres"
+              className="flex justify-center"
+              onChange={(digits) => {
+                setCode(digits);
+                clearError();
+              }}
+              // iOS fills the code from the mail in one go: check it at once.
+              onComplete={(digits) => void check(digits)}
+            />
+          )}
+          <p className={`t-error-msg mt-2 text-xs ${step === "code" ? "text-center" : ""}`} role="alert">
             {message}
           </p>
         </div>

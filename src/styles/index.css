@@ -146,6 +146,11 @@ button {
   outline-offset: 2px;
 }
 
+/* The code slots draw their own focus ring and caret. */
+[data-slot="otp-input-slot"]:focus-visible {
+  outline: none;
+}
+
 a {
   font-weight: 600;
 }

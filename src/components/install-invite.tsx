@@ -221,7 +221,7 @@ export function InstallInvite() {
           >
             {inApp
               ? "Ouvrez ce lien dans Safari"
-              : "Installez Dictée sur votre iPhone"}
+              : "Installez Mosaic sur votre iPhone"}
           </h2>
 
           {inApp ? (
@@ -259,7 +259,7 @@ export function InstallInvite() {
               ) : (
                 <p className="mt-3 text-base text-[color:var(--muted)]">
                   {installable
-                    ? "Ajoutez Dictée à votre écran d'accueil : elle s'ouvre comme une app et démarre plus vite."
+                    ? "Ajoutez Mosaic à votre écran d'accueil : elle s'ouvre comme une app et démarre plus vite."
                     : "Utilisez le menu de votre navigateur puis « Installer l'application » ou « Ajouter à l'écran d'accueil »."}
                 </p>
               )}

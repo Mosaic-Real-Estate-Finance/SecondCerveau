@@ -127,16 +127,19 @@ export function RecordScreen({
     <Screen>
       {/* Discreet on purpose: the screen is for dictating. The count is the
           only thing that asks for attention, and only when it is not zero. */}
-      <div className="-mx-1 flex items-center justify-between">
+      <div className="-mx-1 flex items-center justify-end">
         <button
           type="button"
           onClick={onReview}
-          className="flex h-11 items-center gap-2 rounded-full px-3 text-sm font-medium text-navy"
+          className="relative flex h-11 w-11 items-center justify-center rounded-full text-navy"
           aria-label={reviewCount ? `À valider, ${reviewCount} appel${reviewCount > 1 ? "s" : ""}` : "À valider"}
         >
-          À valider
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+          </svg>
           {reviewCount > 0 && (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-navy px-1.5 text-2xs text-white">
+            <span className="absolute right-1 top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-navy px-1 text-2xs font-semibold leading-none text-white ring-2 ring-white">
               {reviewCount}
             </span>
           )}
