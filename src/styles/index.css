@@ -265,8 +265,12 @@ a {
   transition: transform var(--sheet-dur) var(--sheet-ease);
   will-change: transform;
 }
+/* A form is the large detent, as on iOS: the whole screen but a strip
+   under the status bar where the blurred page still shows, so every field
+   fits without scrolling. */
 .sheet.is-full {
-  height: 75dvh;
+  height: calc(100dvh - var(--safe-top) - 12px);
+  max-height: none;
 }
 .sheet-layer[data-open="true"] > .sheet {
   transform: translateY(var(--sheet-drag, 0px));
