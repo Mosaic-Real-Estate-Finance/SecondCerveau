@@ -1,10 +1,11 @@
 // Client for the /api/outlook routes. The shapes here are the contracts in
 // specs/001-outlook-vers-notion/contracts/, and nothing else talks to them.
 //
-// Two identities can authenticate a call. A Microsoft bearer token proves who
-// the caller is; the x-user-email header only names them, and is what the
-// dictation has always used. The bearer is set once authentication lands
-// (phase 7) — until then the header lets the panel be built and tested.
+// A Microsoft bearer token authenticates every call: it proves who the caller
+// is. Without Entra configured (local development), the panel still sends the
+// x-user-email header it used before the bearer existed — but since feature
+// 002 the server no longer reads that header (constitution 2.0.0, IV), so such
+// a panel is answered 401. Configure Entra to test against the API.
 
 export type ThreadMessage = {
   id: string;

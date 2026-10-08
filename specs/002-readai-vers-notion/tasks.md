@@ -150,3 +150,9 @@ l'écran « À valider » exige une session.
 
 MVP = Phases 1 à 3 : une réunion connue arrive dans Notion. Puis US3 avant de montrer quoi
 que ce soit d'une réunion dans la PWA, puis US2, puis le reste.
+
+---
+
+## Phase 10: Convergence
+
+- [X] T050 Corriger le commentaire de `src/outlook/api.ts` et documenter dans `README.md` qu'un complément Outlook sans Entra configuré (développement local) reçoit désormais 401, l'en-tête `x-user-email` n'étant plus lu, sans changer le comportement du complément per FR-034, Constitution IV (partial)
