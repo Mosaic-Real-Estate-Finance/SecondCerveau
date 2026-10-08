@@ -23,7 +23,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-const PROD_HOST = "mosaicref.vercel.app";
+const PROD_HOST = "mosaic.gouman.fr";
 const DEV_ID = "9f2e4c71-5a63-4d8e-b0c4-7e1a9d3f6b28";
 const DEV_NAME = "Save to Notion (dev)";
 
@@ -67,7 +67,9 @@ if (!version) {
 const substance = template
   .replace(/<!--[\s\S]*?-->/g, "")
   .replace(/<Version>[^<]+<\/Version>/, "<Version/>");
-const fingerprint = createHash("sha256").update(substance).digest("hex");
+// The production host is part of it: the template only says {{HOST}}, yet
+// moving the add-in to another domain changes every URL Outlook holds.
+const fingerprint = createHash("sha256").update(`${PROD_HOST}\n${substance}`).digest("hex");
 
 const lock = await readFile(lockPath, "utf8")
   .then(JSON.parse)
