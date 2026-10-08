@@ -44,6 +44,17 @@ export function PrimaryButton({ className, ...props }: React.ComponentProps<"but
   );
 }
 
+/** The round navy button that opens a sheet: create, attach. */
+export function CircleButton({ className, ...props }: React.ComponentProps<"button">) {
+  return (
+    <button
+      type="button"
+      {...props}
+      className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-navy text-white", className)}
+    />
+  );
+}
+
 export function TextButton({ className, ...props }: React.ComponentProps<"button">) {
   return (
     <button

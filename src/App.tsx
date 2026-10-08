@@ -5,8 +5,9 @@ import { RecordScreen } from "@/screens/RecordScreen";
 import { AttachScreen } from "@/screens/AttachScreen";
 import { ReviewScreen } from "@/screens/ReviewScreen";
 import { SettingsScreen } from "@/screens/SettingsScreen";
-import { PanelSheet } from "@/components/panel-sheet";
+import { Sheet } from "@/components/sheet";
 import { InstallInvite } from "@/components/install-invite";
+import { PushBanner } from "@/components/push-banner";
 import { ToastProvider } from "@/components/toast";
 import { ApiError, fetchContacts, fetchReviewCount, fetchSession, session, type Contact, type Session } from "@/lib/api";
 import { persistStorage, updateNote, type Note, type NoteContact } from "@/lib/notes";
@@ -49,6 +50,8 @@ export default function App() {
     void checkModelCached().then(preloadModel);
     void resumePending();
   }, []);
+
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
   const signOut = useCallback(() => {
     session.clear();
@@ -215,16 +218,12 @@ export default function App() {
           />
         </section>
       </div>
-      {/* Panel reveal: the settings rise over the home screen rather than
+      {/* The settings rise over the home screen in a sheet rather than
           sliding in as a page. */}
-      <PanelSheet open={settingsOpen}>
-        <SettingsScreen
-          active={settingsOpen}
-          email={user.email}
-          onBack={() => setSettingsOpen(false)}
-          onSignedOut={signOut}
-        />
-      </PanelSheet>
+      <PushBanner visible={page === 1 && !settingsOpen} />
+      <Sheet open={settingsOpen} onClose={closeSettings} label="Réglages">
+        <SettingsScreen active={settingsOpen} email={user.email} onBack={closeSettings} onSignedOut={signOut} />
+      </Sheet>
     </ToastProvider>
   );
 }

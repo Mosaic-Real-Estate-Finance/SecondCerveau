@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { PrimaryButton, Screen, TextButton, TopBar } from "@/components/screen";
+import { PrimaryButton, TextButton } from "@/components/screen";
+import { Shimmer } from "@/components/shimmer";
 import { useToast } from "@/components/toast";
 import { openInstallInvite } from "@/components/install-invite";
 import { logout } from "@/lib/api";
@@ -36,7 +37,7 @@ export function SettingsScreen({
     setBusy(true);
     try {
       if (push === "on") {
-        await disablePush();
+        await disablePush({ optOut: true });
         setPush("off");
       } else if (await enablePush()) {
         setPush("on");
@@ -67,8 +68,14 @@ export function SettingsScreen({
   };
 
   return (
-    <Screen>
-      <TopBar title="Réglages" onBack={onBack} backLabel="Accueil" />
+    <div>
+      {/* A sheet's header: the title, and the way out on the right. */}
+      <header className="mb-4 flex items-center justify-between">
+        <h1 className="font-serif text-2xl">Réglages</h1>
+        <TextButton onClick={onBack} className="-mr-3">
+          OK
+        </TextButton>
+      </header>
 
       <section className="rounded-2xl bg-white-smoke p-4">
         <h2 className="text-base font-medium">Notifications</h2>
@@ -108,13 +115,14 @@ export function SettingsScreen({
 
       <section className="mt-4 rounded-2xl bg-white-smoke p-4">
         <h2 className="text-base font-medium">Compte</h2>
-        <p className="mt-1 truncate text-xs text-[color:var(--muted)]">{email}</p>
+        <p className="mt-1 truncate text-xs text-[color:var(--muted)]">
+          Vous êtes connecté avec <Shimmer>{email}</Shimmer>
+        </p>
       </section>
 
-      <div className="flex-1" />
       <PrimaryButton onClick={() => void signOut()} disabled={busy} className="mt-6">
         Se déconnecter
       </PrimaryButton>
-    </Screen>
+    </div>
   );
 }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CountryPicker } from "@/components/country-picker";
-import { MorphPanel } from "@/components/morph-panel";
 import { PhoneNumberInput } from "@/components/phone-input";
-import { PrimaryButton, TextButton } from "@/components/screen";
+import { CircleButton, PrimaryButton, TextButton } from "@/components/screen";
+import { Sheet } from "@/components/sheet";
 import {
   createCompany,
   createContact,
@@ -254,8 +254,8 @@ export function ContactForm({
             </div>
           ) : (
             <>
-              {/* Two columns: the search, and the button that grows into the
-                  creation form the same way the contact one does. */}
+              {/* Two columns: the search, and the button that opens the
+                  creation form in a sheet, the same way the contact one does. */}
               <div className="flex items-center gap-2">
                 <input
                   value={companyQuery}
@@ -264,28 +264,33 @@ export function ContactForm({
                   placeholder="Rechercher une société"
                   aria-label="Rechercher une société"
                 />
-                <MorphPanel
-                  nested
-                  open={creatingCompany}
-                  onOpen={() => setCreatingCompany(true)}
-                  onClose={() => setCreatingCompany(false)}
-                  label="Créer une société"
-                  icon={plusIcon}
+                <CircleButton
+                  onClick={() => setCreatingCompany(true)}
+                  aria-label="Créer une société"
+                  aria-expanded={creatingCompany}
                 >
-                  {creatingCompany && (
-                    <CompanyForm
-                      typeOptions={companyTypes}
-                      initialName={companyQuery.trim()}
-                      onCancel={() => setCreatingCompany(false)}
-                      onCreated={(created) => {
-                        setCreatingCompany(false);
-                        setCompanies((list) => [created, ...list]);
-                        setCompany(created);
-                        setCompanyQuery("");
-                      }}
-                    />
-                  )}
-                </MorphPanel>
+                  {plusIcon}
+                </CircleButton>
+                {/* Over the contact sheet, as a second sheet. */}
+                <Sheet
+                  open={creatingCompany}
+                  onClose={() => setCreatingCompany(false)}
+                  label="Nouvelle société"
+                  level={1}
+                  full
+                >
+                  <CompanyForm
+                    typeOptions={companyTypes}
+                    initialName={companyQuery.trim()}
+                    onCancel={() => setCreatingCompany(false)}
+                    onCreated={(created) => {
+                      setCreatingCompany(false);
+                      setCompanies((list) => [created, ...list]);
+                      setCompany(created);
+                      setCompanyQuery("");
+                    }}
+                  />
+                </Sheet>
               </div>
               {matches.length > 0 && (
                 <ul className="mt-2 flex flex-col gap-1">

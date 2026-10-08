@@ -1,8 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ContactsState } from "@/App";
-import { Screen, TextButton, TopBar } from "@/components/screen";
+import { CircleButton, Screen, TextButton, TopBar } from "@/components/screen";
 import { ContactForm } from "@/components/contact-form";
-import { PanelSheet } from "@/components/panel-sheet";
+import { Sheet } from "@/components/sheet";
 import { SearchField } from "@/components/search-field";
 import { recentContacts, type Contact } from "@/lib/api";
 import { type NoteContact } from "@/lib/notes";
@@ -137,33 +137,25 @@ export function ContactScreen({
             label="Rechercher un contact par nom, société ou téléphone"
           />
         </div>
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          aria-label="Créer un contact"
-          aria-expanded={creating}
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-3xl bg-navy text-white"
-        >
+        <CircleButton onClick={() => setCreating(true)} aria-label="Créer un contact" aria-expanded={creating}>
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
             <path d="M12 5v14M5 12h14" />
           </svg>
-        </button>
+        </CircleButton>
       </div>
-      <PanelSheet open={creating}>
-        <div className="panel-sheet-body">
-          <ContactForm
-            typeOptions={contacts.typeOptions}
-            initialName={query.trim()}
-            onCancel={() => setCreating(false)}
-            onCreated={(contact) => {
-              setCreating(false);
-              setQuery("");
-              onCreated(contact);
-              onPick({ id: contact.id, name: contact.name, company: contact.company });
-            }}
-          />
-        </div>
-      </PanelSheet>
+      <Sheet open={creating} onClose={() => setCreating(false)} label="Nouveau contact" full>
+        <ContactForm
+          typeOptions={contacts.typeOptions}
+          initialName={query.trim()}
+          onCancel={() => setCreating(false)}
+          onCreated={(contact) => {
+            setCreating(false);
+            setQuery("");
+            onCreated(contact);
+            onPick({ id: contact.id, name: contact.name, company: contact.company });
+          }}
+        />
+      </Sheet>
 
       <button
         type="button"

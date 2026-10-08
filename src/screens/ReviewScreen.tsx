@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ContactsState } from "@/App";
 import { ContactForm } from "@/components/contact-form";
-import { MorphPanel } from "@/components/morph-panel";
-import { Screen, TextButton, TopBar } from "@/components/screen";
+import { Sheet } from "@/components/sheet";
+import { CircleButton, Screen, TextButton, TopBar } from "@/components/screen";
 import { SearchField } from "@/components/search-field";
 import { useToast } from "@/components/toast";
 import {
@@ -445,47 +445,47 @@ function PersonRow({
       ) : (
         <div className="mt-2 flex items-end gap-3">
           <div className="flex flex-col items-center gap-1">
-            <MorphPanel
-              open={isOpen("attach")}
-              onOpen={() => onPanel({ itemId: item.id, email: person.email, kind: "attach" })}
-              label={`Rattacher ${person.name} à un contact existant`}
-              icon={linkIcon}
+            <CircleButton
+              onClick={() => onPanel({ itemId: item.id, email: person.email, kind: "attach" })}
+              aria-label={`Rattacher ${person.name} à un contact existant`}
+              aria-expanded={isOpen("attach")}
             >
-              {isOpen("attach") && (
-                <ContactPicker
-                  person={person}
-                  contacts={contacts}
-                  busy={busy}
-                  onCancel={() => onPanel(null)}
-                  onPick={(contact) => void onDecide(item, person, { action: "attach", contactId: contact.id })}
-                />
-              )}
-            </MorphPanel>
+              {linkIcon}
+            </CircleButton>
+            <Sheet open={isOpen("attach")} onClose={() => onPanel(null)} label="Rattacher à un contact" full>
+              <ContactPicker
+                person={person}
+                contacts={contacts}
+                busy={busy}
+                onCancel={() => onPanel(null)}
+                onPick={(contact) => void onDecide(item, person, { action: "attach", contactId: contact.id })}
+              />
+            </Sheet>
             <span className="text-2xs text-[color:var(--muted)]">Rattacher</span>
           </div>
           <div className="flex flex-col items-center gap-1">
-            <MorphPanel
-              open={isOpen("create")}
-              onOpen={() => onPanel({ itemId: item.id, email: person.email, kind: "create" })}
-              label={`Créer un contact pour ${person.name}`}
-              icon={plusIcon}
+            <CircleButton
+              onClick={() => onPanel({ itemId: item.id, email: person.email, kind: "create" })}
+              aria-label={`Créer un contact pour ${person.name}`}
+              aria-expanded={isOpen("create")}
             >
-              {isOpen("create") && (
-                <ContactForm
-                  typeOptions={contacts.typeOptions}
-                  initialName={fullName}
-                  email={person.email}
-                  companyChoices={person.companies}
-                  onCancel={() => onPanel(null)}
-                  // The contact is created by the decision itself, under the
-                  // queue's lock: two colleagues cannot create it twice.
-                  submit={(contact) => onCreate(item, person, contact)}
-                  onCreated={(contact) => {
-                    if (contact.id) onContactCreated(contact);
-                  }}
-                />
-              )}
-            </MorphPanel>
+              {plusIcon}
+            </CircleButton>
+            <Sheet open={isOpen("create")} onClose={() => onPanel(null)} label="Nouveau contact" full>
+              <ContactForm
+                typeOptions={contacts.typeOptions}
+                initialName={fullName}
+                email={person.email}
+                companyChoices={person.companies}
+                onCancel={() => onPanel(null)}
+                // The contact is created by the decision itself, under the
+                // queue's lock: two colleagues cannot create it twice.
+                submit={(contact) => onCreate(item, person, contact)}
+                onCreated={(contact) => {
+                  if (contact.id) onContactCreated(contact);
+                }}
+              />
+            </Sheet>
             <span className="text-2xs text-[color:var(--muted)]">Créer</span>
           </div>
           <div className="flex-1" />
