@@ -159,8 +159,8 @@ export function AttachScreen({
           files.flatMap((file) => (file.ref ? [{ id: file.ref.id, name: file.ref.name }] : [])),
         );
         setPageUrl(page.url);
-        // No timer back to the home screen: the user may want to open the
-        // page, and leaves with « Fermer » when they are done.
+        // Back to the home screen on its own after ten seconds, shown by the
+        // bar along the top; « Fermer » leaves sooner.
         setPhase("sent");
       } catch (error) {
         setPhase("idle");
@@ -188,9 +188,10 @@ export function AttachScreen({
   if (phase === "sent") {
     return (
       <Screen className="items-center justify-center text-center">
+        <CloseCountdown onEnd={onDone} />
         <SuccessCheck show />
         <h1 className="mt-6 font-serif text-2xl">Note envoyée</h1>
-        <p className="mt-2 text-base text-[color:var(--muted)]">Notion AI la met au propre dans la base de notes.</p>
+        <p className="mt-2 text-base text-[color:var(--muted)]">Notion AI génère le résumé.</p>
         {pageUrl && (
           <a
             href={pageUrl}
@@ -339,5 +340,26 @@ export function AttachScreen({
         </div>
       </div>
     </Screen>
+  );
+}
+
+// The bar empties over ten seconds and closes the screen when it runs out.
+// It pauses while the app is in the background — opening the note in Notion
+// does not eat the countdown.
+function CloseCountdown({ onEnd }: { onEnd: () => void }) {
+  const [paused, setPaused] = useState(() => document.hidden);
+  useEffect(() => {
+    const sync = () => setPaused(document.hidden);
+    document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
+  return (
+    <div className="close-countdown" aria-hidden>
+      <div
+        className="close-countdown-bar"
+        style={{ animationPlayState: paused ? "paused" : "running" }}
+        onAnimationEnd={onEnd}
+      />
+    </div>
   );
 }

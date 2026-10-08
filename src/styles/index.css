@@ -221,16 +221,32 @@ a {
   }
 }
 
-/* ---- Settings sheet --------------------------------------------------
-   Panel reveal over the home screen instead of a page of its own. */
-.settings-sheet {
+/* ---- Panel sheet ----------------------------------------------------
+   Panel reveal over the current screen: the settings, the contact form.
+   See panel-sheet.tsx. */
+.panel-sheet {
   position: fixed;
   inset: 0;
   z-index: 30;
   margin-inline: auto;
   max-width: 480px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--color-white);
+}
+/* A full-height form in the sheet: the column of the app, clear of the
+   status bar and the home indicator. */
+.panel-sheet-body {
+  height: 100%;
+  margin-inline: auto;
+  max-width: 480px;
+  padding: calc(var(--safe-top) + 16px) 16px calc(var(--safe-bottom) + 16px);
+}
+/* Pinned under the status bar while the contacts scroll. */
+.contact-search {
+  top: var(--safe-top);
+  margin-top: -8px;
+  box-shadow: 0 calc(var(--safe-top) * -1) 0 0 var(--color-white);
 }
 
 /* The side by side snippet parks the pages it is not showing 8px to the
@@ -540,4 +556,25 @@ a {
   .record-morph.t-morph {
     transition: none !important;
   }
+}
+
+/* ---- Countdown after a note is sent ---------------------------------
+   Full width along the top, clear of the status bar; empties in 10 s. */
+.close-countdown {
+  position: fixed;
+  top: var(--safe-top);
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgb(0 0 130 / 0.1);
+}
+.close-countdown-bar {
+  height: 100%;
+  background: var(--color-navy);
+  transform-origin: left;
+  animation: close-countdown 10s linear forwards;
+}
+@keyframes close-countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
 }

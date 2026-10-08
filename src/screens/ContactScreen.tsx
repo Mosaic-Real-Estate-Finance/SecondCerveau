@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ContactsState } from "@/App";
 import { Screen, TextButton, TopBar } from "@/components/screen";
 import { ContactForm } from "@/components/contact-form";
-import { MorphPanel } from "@/components/morph-panel";
+import { PanelSheet } from "@/components/panel-sheet";
 import { SearchField } from "@/components/search-field";
 import { recentContacts, type Contact } from "@/lib/api";
 import { type NoteContact } from "@/lib/notes";
@@ -125,9 +125,10 @@ export function ContactScreen({
           screen asks is whose note it is. */}
       <TopBar title="À quel contact on rattache cette note ?" onBack={onBack} backLabel="Accueil" />
 
-      {/* The search bar keeps the row to itself; the button beside it grows
-          into the creation form and hides the screen as it travels. */}
-      <div className="flex items-center gap-2">
+      {/* The search bar and the creation button stay pinned while the list
+          scrolls under them; the button opens the form in a panel over the
+          screen. */}
+      <div className="contact-search sticky z-10 -mx-4 flex items-center gap-2 bg-white px-4 py-2">
         <div className="min-w-0 flex-1">
           <SearchField
             value={query}
@@ -136,36 +137,38 @@ export function ContactScreen({
             label="Rechercher un contact par nom, société ou téléphone"
           />
         </div>
-        <MorphPanel
-          open={creating}
-          onOpen={() => setCreating(true)}
-          label="Créer un contact"
-          icon={
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          }
+        <button
+          type="button"
+          onClick={() => setCreating(true)}
+          aria-label="Créer un contact"
+          aria-expanded={creating}
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-3xl bg-navy text-white"
         >
-          {creating && (
-            <ContactForm
-              typeOptions={contacts.typeOptions}
-              initialName={query.trim()}
-              onCancel={() => setCreating(false)}
-              onCreated={(contact) => {
-                setCreating(false);
-                setQuery("");
-                onCreated(contact);
-                onPick({ id: contact.id, name: contact.name, company: contact.company });
-              }}
-            />
-          )}
-        </MorphPanel>
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
       </div>
+      <PanelSheet open={creating}>
+        <div className="panel-sheet-body">
+          <ContactForm
+            typeOptions={contacts.typeOptions}
+            initialName={query.trim()}
+            onCancel={() => setCreating(false)}
+            onCreated={(contact) => {
+              setCreating(false);
+              setQuery("");
+              onCreated(contact);
+              onPick({ id: contact.id, name: contact.name, company: contact.company });
+            }}
+          />
+        </div>
+      </PanelSheet>
 
       <button
         type="button"
         onClick={() => pick(null)}
-        className="mt-6 flex min-h-16 w-full flex-col justify-center rounded-2xl bg-white-smoke px-4 py-3 text-left"
+        className="mt-4 flex min-h-16 w-full flex-col justify-center rounded-2xl bg-white-smoke px-4 py-3 text-left"
       >
         <span className="text-base font-medium text-navy">Sans contact</span>
         <span className="text-xs text-[color:var(--muted)]">Envoyer la note sans la rattacher</span>

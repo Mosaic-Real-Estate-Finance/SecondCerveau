@@ -5,6 +5,7 @@ import { RecordScreen } from "@/screens/RecordScreen";
 import { AttachScreen } from "@/screens/AttachScreen";
 import { ReviewScreen } from "@/screens/ReviewScreen";
 import { SettingsScreen } from "@/screens/SettingsScreen";
+import { PanelSheet } from "@/components/panel-sheet";
 import { InstallInvite } from "@/components/install-invite";
 import { ToastProvider } from "@/components/toast";
 import { ApiError, fetchContacts, fetchReviewCount, fetchSession, session, type Contact, type Session } from "@/lib/api";
@@ -216,14 +217,14 @@ export default function App() {
       </div>
       {/* Panel reveal: the settings rise over the home screen rather than
           sliding in as a page. */}
-      <div className="settings-sheet t-panel-slide" data-open={settingsOpen} inert={!settingsOpen}>
+      <PanelSheet open={settingsOpen}>
         <SettingsScreen
           active={settingsOpen}
           email={user.email}
           onBack={() => setSettingsOpen(false)}
           onSignedOut={signOut}
         />
-      </div>
+      </PanelSheet>
     </ToastProvider>
   );
 }
