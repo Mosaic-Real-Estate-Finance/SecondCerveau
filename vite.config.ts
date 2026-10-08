@@ -265,9 +265,9 @@ export default defineConfig(async ({ mode }) => {
         registerType: "autoUpdate",
         includeAssets: ["favicon.svg", "apple-touch-icon.png"],
         manifest: {
-          name: "Mosaic Dictée",
-          short_name: "Dictée",
-          description: "Dictée vocale vers la base de notes Notion.",
+          name: "Mosaic",
+          short_name: "Mosaic",
+          description: "Dictée, réunions et contacts vers Notion.",
           lang: "fr",
           start_url: "/",
           display: "standalone",

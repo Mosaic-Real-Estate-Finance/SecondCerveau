@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Logo } from "@/components/logo";
+import { Symbol } from "@/components/logo";
 import { PrimaryButton, Screen, TextButton } from "@/components/screen";
 import { OtpInput, otpSuccessDuration, type OtpStatus } from "@/components/ui/otp-input";
 import { ApiError, requestCode, verifyCode, type Session } from "@/lib/api";
@@ -79,14 +79,9 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
 
   return (
     <Screen className="mx-auto max-w-[480px] justify-center">
-      <Logo className="h-24 text-midnight-blue" />
+      <Symbol className="mx-auto h-16 text-midnight-blue" />
       {step === "email" ? (
-        <>
-          <h1 className="mt-12 font-serif text-2xl">Votre adresse</h1>
-          <p className="mt-2 text-base text-[color:var(--muted)]">
-            Un code de connexion vous y sera envoyé. Il n'est demandé qu'une fois sur cet appareil.
-          </p>
-        </>
+        <h1 className="mt-12 font-serif text-2xl">Qui se connecte ?</h1>
       ) : (
         <>
           <h1 className="mt-12 font-serif text-2xl">Votre code</h1>
@@ -118,7 +113,7 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
                   setEmail(event.target.value);
                   clearError();
                 }}
-                className="h-14 w-full bg-transparent px-4 text-base outline-none placeholder:text-[color:var(--muted)]"
+                className="h-14 w-full rounded-2xl bg-transparent px-4 text-base outline-none placeholder:text-[color:var(--muted)]"
               />
             </div>
           ) : (
