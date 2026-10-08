@@ -7,8 +7,9 @@ import type { Env } from "./notion.js";
 // sessions, deduplication marks and locks. Anything validated lives in Notion.
 //
 // Upstash over REST, because a function has no connection to keep warm. The
-// Vercel Marketplace integration injects KV_REST_API_*; projects created
-// later get UPSTASH_REDIS_REST_*. Both are read.
+// Vercel Marketplace integration injects KV_REST_API_*, or <prefix>_KV_REST_API_*
+// when a custom prefix was chosen at install; projects created later get
+// UPSTASH_REDIS_REST_*. All are read.
 
 export class StorageUnavailable extends Error {
   constructor() {
@@ -18,10 +19,18 @@ export class StorageUnavailable extends Error {
 
 let client: Redis | null = null;
 
+// The read-only token ends in _KV_REST_API_READ_ONLY_TOKEN, so the suffix
+// never picks it up.
+const prefixed = (env: Env, suffix: string) => {
+  const values = env as unknown as Record<string, string | undefined>;
+  const key = Object.keys(values).find((name) => name.endsWith(suffix) && values[name]);
+  return key ? values[key] : undefined;
+};
+
 export function redis(env: Env): Redis {
   if (client) return client;
-  const url = env.KV_REST_API_URL || env.UPSTASH_REDIS_REST_URL;
-  const token = env.KV_REST_API_TOKEN || env.UPSTASH_REDIS_REST_TOKEN;
+  const url = env.KV_REST_API_URL || env.UPSTASH_REDIS_REST_URL || prefixed(env, "_KV_REST_API_URL");
+  const token = env.KV_REST_API_TOKEN || env.UPSTASH_REDIS_REST_TOKEN || prefixed(env, "_KV_REST_API_TOKEN");
   if (!url || !token) throw new StorageUnavailable();
   client = new Redis({ url, token });
   return client;
