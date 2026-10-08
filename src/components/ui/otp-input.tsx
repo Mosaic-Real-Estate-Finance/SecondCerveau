@@ -15,7 +15,8 @@ const RING = {
   error: "ring-2 ring-[#FF3B30]/70 delay-150",
 } as const;
 
-const SUCCESS = "#34C759";
+// Midnight blue, the app's ink, rather than the original green.
+const SUCCESS = "#020342";
 
 const SIZES = {
   sm: { box: "size-10 rounded-lg", text: "text-base", caret: "h-5", gap: "gap-1.5", px: 40, radius: 8 },
@@ -56,6 +57,8 @@ export type OtpInputProps = Omit<ComponentProps<"div">, "onChange" | "value" | "
   mask?: boolean;
   disabled?: boolean;
   autoFocus?: boolean;
+  /** Spread the slots over the full width, square at any width. */
+  fluid?: boolean;
   slotClassName?: string;
 };
 
@@ -71,6 +74,7 @@ export function OtpInput({
   mask = false,
   disabled,
   autoFocus,
+  fluid = false,
   className,
   slotClassName,
   ...props
@@ -189,7 +193,7 @@ export function OtpInput({
   };
 
   return (
-    <div data-slot="otp-input" data-status={status} className={cn("relative inline-flex", className)} {...props}>
+    <div data-slot="otp-input" data-status={status} className={cn("relative", fluid ? "flex w-full" : "inline-flex", className)} {...props}>
       <motion.div
         onFocus={(event) => {
           const index = inputs.current.indexOf(event.target as HTMLInputElement);
@@ -205,7 +209,7 @@ export function OtpInput({
         animate={{ x: status === "error" && !reduceMotion ? SHAKE : 0 }}
         transition={{ duration: 0.32, ease: "easeOut" }}
         data-slot="otp-input-row"
-        className={cn("relative flex items-center", scale.gap)}
+        className={cn("relative flex items-center", fluid && "w-full", scale.gap)}
       >
         {slots.map((slot, index) => (
           <div
@@ -215,7 +219,7 @@ export function OtpInput({
             }}
             data-slot="otp-input-cell"
             data-filled={Boolean(slot)}
-            className="relative"
+            className={cn("relative", fluid && "min-w-0 flex-1")}
           >
             <input
               ref={(el) => {
@@ -236,7 +240,7 @@ export function OtpInput({
               autoFocus={autoFocus && index === 0}
               disabled={disabled}
               aria-label={`${numeric ? "Chiffre" : "Caractère"} ${index + 1} sur ${length}`}
-              className={cn(SLOT_CLASS, scale.box, scale.text, RING[status], slotClassName)}
+              className={cn(SLOT_CLASS, scale.box, fluid && "aspect-square size-auto w-full", scale.text, RING[status], slotClassName)}
             />
 
             <AnimatePresence>
