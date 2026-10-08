@@ -21,7 +21,7 @@ export type ContactsState = {
   error?: string;
 };
 
-type Page = 1 | 2 | 3 | 4 | 5;
+type Page = 1 | 2 | 3 | 4;
 
 // A notification opens /?valider=<id>: the « À valider » screen, on that call.
 function linkedReview(): string | null {
@@ -35,6 +35,7 @@ export default function App() {
   const [focusId, setFocusId] = useState<string | null>(linkedReview);
   const [page, setPage] = useState<Page>(focusId !== null ? 4 : 1);
   const [reviewCount, setReviewCount] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [noteId, setNoteId] = useState<string | null>(null);
   const noteIdRef = useRef(noteId);
   noteIdRef.current = noteId;
@@ -52,6 +53,7 @@ export default function App() {
     session.clear();
     setUser(null);
     setPage(1);
+    setSettingsOpen(false);
   }, []);
 
   // The session lives in an HttpOnly cookie this code cannot see. It is read
@@ -94,6 +96,7 @@ export default function App() {
       const id = url?.searchParams.get("valider");
       if (id === null || id === undefined) return;
       setFocusId(id);
+      setSettingsOpen(false);
       setPage(4);
     };
     navigator.serviceWorker.addEventListener("message", onMessage);
@@ -165,15 +168,15 @@ export default function App() {
       {/* Only once signed in: the invitation is worth nothing before. */}
       <InstallInvite />
       <div className="t-page-slide mx-auto h-full max-w-[480px]" data-page={page}>
-        <section className="t-page" data-page-id="1" inert={page !== 1}>
+        <section className="t-page" data-page-id="1" inert={page !== 1 || settingsOpen}>
           <RecordScreen
-            active={page === 1}
+            active={page === 1 && !settingsOpen}
             firstName={user.firstName}
             reviewCount={reviewCount}
             onRecorded={recorded}
             onOpen={openNote}
             onReview={() => setPage(4)}
-            onSettings={() => setPage(5)}
+            onSettings={() => setSettingsOpen(true)}
           />
         </section>
         <section className="t-page" data-page-id="2" inert={page !== 2}>
@@ -210,9 +213,16 @@ export default function App() {
             onUnauthorized={signOut}
           />
         </section>
-        <section className="t-page" data-page-id="5" inert={page !== 5}>
-          <SettingsScreen active={page === 5} email={user.email} onBack={() => setPage(1)} onSignedOut={signOut} />
-        </section>
+      </div>
+      {/* Panel reveal: the settings rise over the home screen rather than
+          sliding in as a page. */}
+      <div className="settings-sheet t-panel-slide" data-open={settingsOpen} inert={!settingsOpen}>
+        <SettingsScreen
+          active={settingsOpen}
+          email={user.email}
+          onBack={() => setSettingsOpen(false)}
+          onSignedOut={signOut}
+        />
       </div>
     </ToastProvider>
   );

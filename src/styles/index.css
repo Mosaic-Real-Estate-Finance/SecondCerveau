@@ -46,15 +46,18 @@
   --safe-top: env(safe-area-inset-top, 0px);
   color-scheme: light;
 
-  /* Page side-by-side, tuned through the variable the snippet exposes for
-     it rather than by touching the snippet. At the default of 0 the two
-     pages cross-fade on top of each other and the screen reads as a smear
-     for a moment; the incoming one now waits until the outgoing one is most
-     of the way gone. This is a legibility change, not a speed one: measured
-     at a quarter of the processor speed, the stagger and the blur depth
-     make no difference to the frames. What did was the work that used to
-     run on top of the transition — see schedule.ts. */
-  --page-stagger: 70ms;
+  /* Page side-by-side, tuned through the variables the snippet exposes
+     rather than by touching the snippet. Longer and with a little more
+     travel than the defaults, so the move reads as a glide rather than a
+     jolt; the incoming page waits a beat so the two never smear together. */
+  --page-slide-dur: 420ms;
+  --page-fade-dur: 320ms;
+  --page-slide-distance: 24px;
+  --page-stagger: 40ms;
+
+  /* Panel reveal, for the settings sheet: rises from a third of a short
+     screen's height. */
+  --panel-translate-y: 120px;
 }
 
 html,
@@ -171,25 +174,65 @@ a {
   filter: blur(0);
   transition-delay: var(--page-stagger);
 }
-/* Pages 4 (« À valider ») and 5 (réglages) are reached from the home screen
-   and come in from the right, like the others; whatever page is left behind
-   goes out to the left. */
-.t-page-slide .t-page[data-page-id="4"],
-.t-page-slide .t-page[data-page-id="5"] {
+/* Page 4 (« À valider ») is reached from the home screen and comes in from
+   the right, like the others; the home screen goes out to the left. */
+.t-page-slide .t-page[data-page-id="4"] {
   --t-page-from-x: var(--page-slide-distance);
 }
-.t-page-slide[data-page="4"] .t-page[data-page-id="1"],
-.t-page-slide[data-page="5"] .t-page[data-page-id="1"] {
+.t-page-slide[data-page="4"] .t-page[data-page-id="1"] {
   --t-page-from-x: calc(var(--page-slide-distance) * -1);
 }
-.t-page-slide[data-page="4"] .t-page[data-page-id="4"],
-.t-page-slide[data-page="5"] .t-page[data-page-id="5"] {
+.t-page-slide[data-page="4"] .t-page[data-page-id="4"] {
   opacity: 1;
   pointer-events: auto;
   transform: translateX(0);
   filter: blur(0);
   transition-delay: var(--page-stagger);
 }
+/* Smoothness. A blur animated over a whole screen is what dropped frames on
+   the iPhone: every frame re-rasterises the page through the filter. The
+   pages move on transform and opacity alone, which the compositor runs off
+   the main thread. A page out of view is also taken out of rendering once it
+   has faded, so only the two pages in the exchange cost anything. */
+.t-page-slide .t-page {
+  filter: none;
+  visibility: hidden;
+  will-change: opacity, transform;
+  transition:
+    opacity    var(--page-fade-dur)  var(--page-fade-ease),
+    transform  var(--page-slide-dur) var(--page-slide-ease),
+    visibility 0s linear var(--page-slide-dur);
+}
+.t-page-slide[data-page="1"] .t-page[data-page-id="1"],
+.t-page-slide[data-page="2"] .t-page[data-page-id="2"],
+.t-page-slide[data-page="3"] .t-page[data-page-id="3"],
+.t-page-slide[data-page="4"] .t-page[data-page-id="4"] {
+  filter: none;
+  visibility: visible;
+  transition:
+    opacity    var(--page-fade-dur)  var(--page-fade-ease)  var(--page-stagger),
+    transform  var(--page-slide-dur) var(--page-slide-ease) var(--page-stagger),
+    visibility 0s linear 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-page-slide .t-page,
+  .t-page-slide[data-page] .t-page[data-page-id] {
+    transition: none !important;
+  }
+}
+
+/* ---- Settings sheet --------------------------------------------------
+   Panel reveal over the home screen instead of a page of its own. */
+.settings-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  margin-inline: auto;
+  max-width: 480px;
+  overflow-y: auto;
+  background: var(--color-white);
+}
+
 /* The side by side snippet parks the pages it is not showing 8px to the
    side; clip that, or the document is wider than the screen. `clip` rather
    than `hidden` so the pages keep their own vertical scrolling. */
