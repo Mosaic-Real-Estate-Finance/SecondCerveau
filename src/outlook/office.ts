@@ -25,6 +25,7 @@ type OfficeGlobal = {
   onReady(cb?: () => void): Promise<unknown>;
   context: {
     requirements: { isSetSupported(name: string, version?: string): boolean };
+    diagnostics?: { platform?: string };
     ui?: {
       closeContainer?(): void;
       openBrowserWindow?(url: string): void;
@@ -189,7 +190,11 @@ export function closePanel(): void {
 export function openExternal(url: string): void {
   const http = /^https?:/i.test(url);
   const host = office()?.context?.ui?.openBrowserWindow;
-  if (http && typeof host === "function") {
+  // Asked by requirement set, not by the function's presence: Microsoft only
+  // ships OpenBrowserWindowApi on classic Outlook for Windows and on Mac. On
+  // iOS and Android it is not supported at all (research 003 A-3), and there
+  // the plain window.open below is what takes the link out of the panel.
+  if (http && typeof host === "function" && supports("OpenBrowserWindowApi", "1.1")) {
     try {
       host(url);
       return;
@@ -201,6 +206,29 @@ export function openExternal(url: string): void {
     window.open(url, "_blank", "noopener,noreferrer");
   } catch {
     // Nothing left to try.
+  }
+}
+
+function supports(name: string, version: string): boolean {
+  try {
+    return office()?.context.requirements.isSetSupported(name, version) ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether this is Outlook on a phone or a tablet (feature 003).
+ *
+ * The taskpane is then the whole screen, there is no pinning, and a link has
+ * no desktop app to be handed to.
+ */
+export function isMobile(): boolean {
+  try {
+    const platform = office()?.context?.diagnostics?.platform ?? "";
+    return platform === "iOS" || platform === "Android";
+  } catch {
+    return false;
   }
 }
 

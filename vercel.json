@@ -9,6 +9,9 @@
     },
     "api/readai/[action].ts": {
       "maxDuration": 120
+    },
+    "api/outlook/attachments.ts": {
+      "maxDuration": 300
     }
   },
   "headers": [

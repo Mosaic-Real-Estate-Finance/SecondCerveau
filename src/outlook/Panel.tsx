@@ -10,15 +10,20 @@ import {
   createNote,
   enrichNote,
   findNote,
+  importAttachment,
   listCompanies,
   matchContacts,
   setFallbackEmail,
   setTokenProvider,
+  uploadLimit,
   type Company,
   type ExistingNote,
   type MatchedContact,
+  type SkippedFile,
   type ThreadMessage,
+  type UploadedFile,
 } from "./api";
+import { candidates, chosen as chosenFiles, sizeLabel, type Candidate } from "./attachments";
 import { apiToken, AuthError, configured, graphToken } from "./auth";
 import { NotionButton } from "./NotionButton";
 import { openNotes } from "./notion-link";
@@ -65,6 +70,8 @@ type Loaded = {
   companies: Company[];
   typeOptions: string[];
   ambiguous: string[];
+  /** The attachments of the messages about to be written (feature 003). */
+  files: Candidate[];
 };
 
 type Stage =
@@ -78,11 +85,13 @@ type Stage =
   | { name: "failed"; message: string; retry: boolean }
   | { name: "ready"; data: Loaded }
   | { name: "sending"; data: Loaded; step: string }
-  | { name: "sent"; url: string; added: number; created: boolean };
+  | { name: "sent"; url: string; added: number; created: boolean; imported: number; skipped: SkippedFile[] };
 
+// About 320 px on a desktop taskpane, the whole screen on a phone (feature
+// 003): the cap only stops a tablet from stretching a line across the page.
 const Frame = ({ children }: { children: React.ReactNode }) => (
-  <div className="min-h-screen bg-white px-4 py-5 text-navy" style={{ colorScheme: "light" }}>
-    <div className="mx-auto flex w-full max-w-[320px] flex-col gap-4">{children}</div>
+  <div className="panel-frame min-h-screen bg-white px-4 py-5 text-navy" style={{ colorScheme: "light" }}>
+    <div className="mx-auto flex w-full max-w-[480px] flex-col gap-4">{children}</div>
   </div>
 );
 
@@ -104,6 +113,27 @@ const readable = (message: string) => (EMPTY.includes(message.trim()) ? "Réessa
 
 /** Plural mark, for the many counts this panel reports. */
 const s_ = (count: number) => (count > 1 ? "s" : "");
+
+/** An upload Notion holds for an hour; trusted for less, to leave room for the note. */
+const UPLOAD_FRESH_MS = 45 * 60_000;
+
+/** The files that did not make it, each with its reason. */
+const SkippedList = ({ files }: { files: SkippedFile[] }) =>
+  files.length ? (
+    <div className="rounded-xl bg-white-smoke px-3 py-2.5">
+      <p className="mb-1 text-xs font-medium">{`${files.length} fichier${s_(files.length)} non importé${s_(files.length)}`}</p>
+      <ul className="flex flex-col gap-1">
+        {files.map((file, index) => (
+          <li key={`${file.name}-${index}`} className="text-2xs text-[color:var(--muted)]">
+            <span className="break-all text-navy">{file.name}</span> — {file.reason}
+          </li>
+        ))}
+      </ul>
+    </div>
+  ) : null;
+
+const importedLine = (count: number) =>
+  `${count} fichier${s_(count)} importé${s_(count)} dans la colonne Fichiers.`;
 
 /**
  * A screen that closes the panel once it has nothing left to say.
@@ -164,6 +194,9 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
   // Contacts already created survive a failed send: a retry must not create
   // them a second time, and the route has no unicity key to lean on.
   const created = useRef(new Map<string, MatchedContact>());
+  // Same idea for the files: an upload already in Notion is not sent twice
+  // when the note fails and the user retries. Keyed on the file, not the row.
+  const uploads = useRef(new Map<string, UploadedFile & { at: number }>());
   const drafting = useRef(false);
 
   const load = useCallback(async () => {
@@ -176,6 +209,7 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
 
     setStage({ name: "loading", read: 0 });
     created.current.clear();
+    uploads.current.clear();
 
     // Waited for, not read once: see awaitItem in ./office.
     const mail = await awaitItem();
@@ -196,11 +230,14 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
 
       // Then the reads, together: the thread, the note and the contacts are
       // independent, so the panel waits on the slowest rather than on the sum.
-      const [messages, note, match, companies] = await Promise.all([
+      const [messages, note, match, companies, limit] = await Promise.all([
         fetchThread(graph, mail.conversationId, (read) => setStage({ name: "loading", read })),
         findNote(mail.conversationId),
         matchContacts(outside.map((one) => one.address)),
         listCompanies().catch(() => ({ companies: [], typeOptions: [] })),
+        // Unread, nothing is marked too heavy beforehand: the server checks
+        // the real size anyway, and says so file by file.
+        uploadLimit().catch(() => null),
       ]);
 
       const rows: Row[] = outside.map((participant) => {
@@ -218,9 +255,24 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
         : -1;
       const fresh = note ? messages.length - (at + 1) : messages.length;
 
+      // The files of the messages about to be written, and only those: on an
+      // enrichment, what the note already holds is never offered again.
+      const split = note ? at + 1 : 0;
+      const files = candidates(messages.slice(split), messages.slice(0, split), limit);
+
       setStage({
         name: "ready",
-        data: { mail, rows, messages, note, fresh, companies: companies.companies, typeOptions: match.typeOptions, ambiguous: match.ambiguous ?? [] },
+        data: {
+          mail,
+          rows,
+          messages,
+          note,
+          fresh,
+          companies: companies.companies,
+          typeOptions: match.typeOptions,
+          ambiguous: match.ambiguous ?? [],
+          files,
+        },
       });
     } catch (error) {
       if (error instanceof AuthError) return setStage({ name: "failed", message: error.message, retry: true });
@@ -296,6 +348,37 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
         return setStage({ name: "failed", message: "Aucun interlocuteur à rattacher.", retry: false });
       }
 
+      // The files, one request each, before the note: the note then attaches
+      // them in the same write as its mark, which is what keeps an enrichment
+      // from ever adding the same file twice. A file that fails is reported,
+      // never fatal — the note matters more than any one attachment.
+      const { picked } = chosenFiles(data.files);
+      const uploaded: { id: string; name: string }[] = [];
+      const skipped: SkippedFile[] = data.files
+        .filter((file) => file.state !== "ready")
+        .map((file) => ({ name: file.label, reason: file.reason ?? "Non importable." }));
+      for (const [index, file] of picked.entries()) {
+        setStage({ name: "sending", data, step: `Import des fichiers… ${index + 1}/${picked.length}` });
+        const held = uploads.current.get(file.key);
+        if (held && Date.now() - held.at < UPLOAD_FRESH_MS) {
+          uploaded.push({ id: held.id, name: held.name });
+          continue;
+        }
+        try {
+          // Asked per file rather than once: MSAL answers from its cache, and
+          // a long import must not outlive the token it started with.
+          const result = await importAttachment(file, await graphToken());
+          if ("skipped" in result) {
+            skipped.push({ name: file.label, reason: result.reason });
+          } else {
+            uploads.current.set(file.key, { ...result, at: Date.now() });
+            uploaded.push({ id: result.id, name: result.name });
+          }
+        } catch (error) {
+          skipped.push({ name: file.label, reason: (error as Error)?.message || "Import impossible." });
+        }
+      }
+
       setStage({ name: "sending", data, step: data.note ? "Enrichissement de la note…" : "Création de la note…" });
       const written = data.note
         ? await enrichNote({
@@ -304,17 +387,26 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
             sinceMessageId: data.note.lastMessageId,
             contactIds: ids,
             messages: data.messages,
+            files: uploaded,
           })
         : await createNote({
             conversationId: data.mail.conversationId,
             contactIds: ids,
             messages: data.messages,
+            files: uploaded,
           });
 
       // `templateTimedOut` is deliberately not shown. It only ever meant the
       // Notion template was slow and the blocks landed above it — a cosmetic
       // ordering the reader cannot act on, reported as if it were a defect.
-      setStage({ name: "sent", url: written.url, added: written.messagesAdded, created: !data.note });
+      setStage({
+        name: "sent",
+        url: written.url,
+        added: written.messagesAdded,
+        created: !data.note,
+        imported: written.filesAdded ?? 0,
+        skipped: [...skipped, ...(written.filesSkipped ?? [])],
+      });
     } catch (error) {
       const api = error as ApiError;
       // 409: someone enriched the note in between. Reloading is the only safe
@@ -341,8 +433,9 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
   if (stage.name === "incompatible") {
     return (
       <Said title="Cette version d'Outlook est trop ancienne">
-        La connexion sécurisée au compte Microsoft demande Outlook 2409 ou plus récent pour un abonnement
-        Microsoft 365. Mets Outlook à jour, ou utilise Outlook sur le web.
+        La connexion sécurisée au compte Microsoft demande Outlook 2409 ou plus récent sur ordinateur (abonnement
+        Microsoft 365), ou l'application Outlook 4.2433 ou plus récente sur iPhone et Android. Mets Outlook à jour,
+        ou utilise Outlook sur le web.
       </Said>
     );
   }
@@ -420,9 +513,14 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
     return stage.created ? (
       <Done title="Enregistré dans Notion !" url={stage.url}>
         <Muted>{`${stage.added} message${s_(stage.added)} ${stage.added > 1 ? "ont" : "a"} été centralisé${s_(stage.added)}, Notion AI s'occupe du résumé.`}</Muted>
+        {stage.imported > 0 && <Muted>{importedLine(stage.imported)}</Muted>}
+        <SkippedList files={stage.skipped} />
       </Done>
     ) : (
-      <Done title="La note a été enrichie" url={stage.url} />
+      <Done title="La note a été enrichie" url={stage.url}>
+        {stage.imported > 0 && <Muted>{importedLine(stage.imported)}</Muted>}
+        <SkippedList files={stage.skipped} />
+      </Done>
     );
   }
 
@@ -493,13 +591,15 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
                 );
               return (
                 <li key={row.participant.address} className="rounded-xl bg-white-smoke px-3 py-2.5">
-                  <div className="flex items-start gap-2.5">
+                  {/* The whole row is the target, not the 16 px box: on a phone
+                      the box alone is a third of what a finger needs. */}
+                  <label className="flex min-h-11 cursor-pointer items-start gap-3">
                     <input
                       type="checkbox"
                       checked={row.selected}
                       onChange={toggle}
                       disabled={sending}
-                      className="mt-1 h-4 w-4 shrink-0 accent-[color:var(--color-navy)]"
+                      className="mt-0.5 h-5 w-5 shrink-0 accent-[color:var(--color-navy)]"
                       aria-label={`Rattacher ${row.participant.name || row.participant.address}`}
                     />
                     <span className="min-w-0 flex-1">
@@ -522,7 +622,7 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
                         </span>
                       )}
                     </span>
-                  </div>
+                  </label>
                   {!row.match && row.selected && !sending && row.draft && (
                     <ParticipantForm
                       draft={row.draft}
@@ -537,6 +637,22 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
           </ul>
         </div>
 
+        {data.files.length > 0 && (
+          <FilesBox
+            files={data.files}
+            disabled={sending}
+            onToggle={(key) =>
+              setStage({
+                name: "ready",
+                data: {
+                  ...data,
+                  files: data.files.map((file) => (file.key === key ? { ...file, selected: !file.selected } : file)),
+                },
+              })
+            }
+          />
+        )}
+
         <PrimaryButton disabled={sending || nobody || incomplete} onClick={() => void send(data)}>
           {sending ? stage.step : enriching ? "Enrichir la note" : "Créer la note"}
         </PrimaryButton>
@@ -545,5 +661,57 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
         {!nobody && incomplete && <Muted>Complète les fiches cochées avant d'envoyer.</Muted>}
       </div>
     </Frame>
+  );
+}
+
+/**
+ * The attachments, before the send: how many, how heavy, and a box per file.
+ *
+ * A file that cannot be imported is shown rather than hidden — too heavy for
+ * the workspace, or a link to a file in the cloud — with the reason, and its
+ * box cannot be ticked. Inline images and technical files never appear at all.
+ */
+function FilesBox({
+  files,
+  disabled,
+  onToggle,
+}: {
+  files: Candidate[];
+  disabled: boolean;
+  onToggle: (key: string) => void;
+}) {
+  const { picked, bytes } = chosenFiles(files);
+  const summary = picked.length
+    ? `${picked.length} fichier${s_(picked.length)} · ${sizeLabel(bytes)} ${picked.length > 1 ? "seront joints" : "sera joint"}`
+    : "Aucun fichier ne sera joint";
+  return (
+    <div className="rounded-2xl border border-[color:var(--color-white-smoke)] bg-white p-3">
+      <p className="mb-2.5 text-xs text-[color:var(--muted)]">{summary}</p>
+      <ul className="flex flex-col gap-2">
+        {files.map((file) => {
+          const ready = file.state === "ready";
+          return (
+            <li key={file.key} className="rounded-xl bg-white-smoke px-3 py-2">
+              <label className={cn("flex min-h-11 items-center gap-3", ready && !disabled && "cursor-pointer")}>
+                <input
+                  type="checkbox"
+                  checked={ready && file.selected}
+                  onChange={() => onToggle(file.key)}
+                  disabled={disabled || !ready}
+                  className="h-5 w-5 shrink-0 accent-[color:var(--color-navy)]"
+                  aria-label={`Joindre ${file.label}`}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className={cn("block truncate text-sm", !ready && "text-[color:var(--muted)]")}>{file.label}</span>
+                  <span className="block text-2xs text-[color:var(--muted)]">
+                    {ready ? sizeLabel(file.size) : file.reason}
+                  </span>
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

@@ -46,6 +46,14 @@ Les réunions avec des contacts externes enregistrées par Read AI arrivent seul
 
 Avant de déployer : `npm run check:readai` (schéma Notion, en lecture seule), `npm run test:readai` (règles de filtrage et de rapprochement), `npm run sim:readai` (parcours complets contre un Notion et un Redis simulés). Les prérequis (webhook Read AI, Upstash, Gmail, clés VAPID) sont dans `specs/002-readai-vers-notion/quickstart.md`.
 
+## Complément Outlook : pièces jointes et mobile
+
+Depuis la version 1.4.0.0 du manifeste (feature 003), le complément « Save to Notion » fonctionne aussi dans Outlook sur iPhone et Android (build 4.2433.0 ou plus, compte Microsoft 365), et il importe les pièces jointes du fil dans la colonne `Fichiers` de la note (`NOTES_PROP_FILE`).
+
+Le panneau ne transporte jamais les fichiers : le serveur Vercel n'accepte que 4,5 Mo par requête. Pour chaque fichier coché, le panneau appelle `POST /api/outlook/attachments` avec la référence de la pièce jointe et son jeton Graph délégué (`Mail.Read`, déjà consenti) ; le serveur télécharge le fichier chez Microsoft et l'envoie à Notion, en plusieurs parties au-delà de 20 Mo. Aucune permission ni variable d'environnement nouvelle. Les images intégrées au corps, `winmail.dat` et les invitations `.ics` sont ignorées ; un fichier au-dessus de la limite du workspace Notion est listé comme non importé, sans empêcher la note. À l'enrichissement, seuls les fichiers des nouveaux messages sont ajoutés, dans la même écriture que la marque « Dernier message ».
+
+Avant la mise en production : `node --env-file=.env.local scripts/check-attachments.mjs` vérifie sur la vraie base que Notion conserve les fichiers existants quand la colonne est réécrite. Tests : `npm run test:outlook`. Le manifeste changé doit être redéployé par l'administrateur Microsoft 365 (`https://mosaic.gouman.fr/outlook/manifest.xml`). Détails : `specs/003-outlook-mobile-pieces-jointes/`.
+
 ## Notifications
 
 Dans l'app installée (iOS 16.4 et plus), « Recevoir les notifications » dans les réglages. Elles partent à tous ceux qui les ont activées : réunion ajoutée, personnes à valider, réunion non enregistrée. Jamais de résumé ni de transcription. Le service worker reste généré par `vite-plugin-pwa` ; `public/push-sw.js` lui ajoute les deux écouteurs `push` et `notificationclick` par `importScripts`, sans toucher au cache.
