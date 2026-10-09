@@ -1,4 +1,4 @@
-import { openExternal } from "./office";
+import { isMobile, openExternal } from "./office";
 
 // Opening the Mosaic notes base, from the one screen that cannot write to it.
 //
@@ -34,6 +34,11 @@ const HANDOFF_MS = 700;
  * demonstrably took over.
  */
 export function openNotes(): void {
+  // On a phone the handoff below has nothing to measure: a mobile webview
+  // gives no blur to watch, and the https address already opens the Notion app
+  // when it is installed. Straight to it.
+  if (isMobile()) return openExternal(notesUrl);
+
   let handled = false;
   const took = () => {
     handled = true;

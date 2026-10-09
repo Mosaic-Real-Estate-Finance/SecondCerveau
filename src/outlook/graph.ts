@@ -14,7 +14,7 @@
 // folders included, so one mail can come back several times under several ids.
 // See src/outlook/unique.ts.
 
-import type { ThreadMessage } from "./api";
+import type { AttachmentRef, ThreadMessage } from "./api";
 import { unique } from "./unique";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
@@ -32,8 +32,42 @@ type GraphMessage = {
   uniqueBody?: { content?: string };
   body?: { content?: string };
   hasAttachments?: boolean;
-  attachments?: { name?: string }[];
+  attachments?: GraphAttachment[];
 };
+
+type GraphAttachment = {
+  "@odata.type"?: string;
+  id?: string;
+  name?: string;
+  size?: number;
+  contentType?: string;
+  isInline?: boolean;
+};
+
+// The fields the panel needs to decide what to import (feature 003), asked for
+// in the same expand as the names: still one request for the whole thread.
+const ATTACHMENT_FIELDS = "id,name,size,isInline,contentType";
+
+const kindOf = (attachment: GraphAttachment): AttachmentRef["kind"] => {
+  const type = (attachment["@odata.type"] ?? "").toLowerCase();
+  if (type.endsWith("itemattachment")) return "item";
+  if (type.endsWith("referenceattachment")) return "reference";
+  return "file";
+};
+
+/** Every attachment of a message, tied to the copy that actually carries it. */
+const refsOf = (messageId: string, attachments: GraphAttachment[] | undefined): AttachmentRef[] =>
+  (attachments ?? [])
+    .filter((file) => file.id)
+    .map((file) => ({
+      messageId,
+      id: file.id!,
+      name: file.name ?? "",
+      size: file.size ?? 0,
+      kind: kindOf(file),
+      contentType: file.contentType ?? "",
+      inline: Boolean(file.isInline),
+    }));
 
 /** A message on its way through `unique()`, before the id of a mail is dropped. */
 type Candidate = ThreadMessage & { internetMessageId?: string };
@@ -73,6 +107,7 @@ const convert = (message: GraphMessage): Candidate => ({
   },
   text: tidy(message.uniqueBody?.content ?? message.body?.content ?? ""),
   attachmentNames: namesOf(message),
+  attachments: refsOf(message.id, message.attachments),
 });
 
 /**
@@ -87,11 +122,12 @@ export async function fetchThread(
   onProgress?: (count: number) => void,
 ): Promise<ThreadMessage[]> {
   const select = "id,internetMessageId,isDraft,receivedDateTime,from,sender,uniqueBody,hasAttachments";
-  // Expanding the attachments with only their name costs nothing and spares a
-  // request per message: the files themselves are never downloaded.
+  // Expanding the attachments' metadata costs nothing and spares a request per
+  // message. The files themselves are never downloaded here: the server
+  // fetches the ones the user keeps (feature 003).
   let url =
     `${GRAPH}/me/messages?$filter=conversationId eq '${encodeURIComponent(conversationId)}'` +
-    `&$select=${select}&$expand=attachments($select=name)&$top=${PAGE}`;
+    `&$select=${select}&$expand=attachments($select=${ATTACHMENT_FIELDS})&$top=${PAGE}`;
   const messages: Candidate[] = [];
   const missingNames: string[] = [];
 
@@ -124,9 +160,12 @@ export async function fetchThread(
   }
 
   for (const id of missingNames) {
-    const names = await fetchAttachmentNames(token, id);
+    const attachments = await fetchAttachments(token, id);
     const message = messages.find((one) => one.id === id);
-    if (message) message.attachmentNames = names;
+    if (message) {
+      message.attachmentNames = namesOf({ id, attachments });
+      message.attachments = refsOf(id, attachments);
+    }
   }
 
   // Graph would not sort this query (see the note at the top of the file).
@@ -138,12 +177,12 @@ export async function fetchThread(
   return unique(messages).map(({ internetMessageId: _, ...message }) => message);
 }
 
-/** Names only, for a message whose expand came back without them. */
-export async function fetchAttachmentNames(token: string, messageId: string): Promise<string[]> {
-  const response = await fetch(`${GRAPH}/me/messages/${messageId}/attachments?$select=name`, {
+/** Metadata only, for a message whose expand came back without it. */
+async function fetchAttachments(token: string, messageId: string): Promise<GraphAttachment[]> {
+  const response = await fetch(`${GRAPH}/me/messages/${messageId}/attachments?$select=${ATTACHMENT_FIELDS}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) return [];
-  const page = (await response.json()) as { value?: { name?: string }[] };
-  return (page.value ?? []).map((file) => file.name ?? "").filter(Boolean);
+  const page = (await response.json()) as { value?: GraphAttachment[] };
+  return page.value ?? [];
 }

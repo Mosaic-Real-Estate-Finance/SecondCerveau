@@ -23,6 +23,28 @@ body,
 body {
   overflow: visible;
   overscroll-behavior: auto;
+  /* No 300 ms wait for a double tap that zooms: a tap on a box is a tap. */
+  touch-action: manipulation;
+}
+
+/* Outlook on a phone (feature 003). The taskpane is the whole screen there.
+ *
+ * iOS zooms the page onto any field whose text is under 16 px, and does not
+ * zoom back out; the contact fiche is drawn at 14 px for the narrow desktop
+ * pane. On a touch screen the fields go to 16 px, and nothing else changes.
+ *
+ * The bottom padding keeps the last button above the home indicator. */
+
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+.panel-frame {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
 }
 
 /* The loader leaving, and the content arriving behind it.

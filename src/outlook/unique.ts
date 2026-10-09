@@ -34,6 +34,8 @@ export type Strippable = {
   from: { name: string; address: string };
   text: string;
   attachmentNames: string[];
+  /** The attachments themselves (feature 003). They follow the names. */
+  attachments?: unknown[];
   /** Graph ids of the other copies folded onto this one. See `unique`. */
   copyIds?: string[];
   /** The RFC 5322 Message-ID. Two copies of one mail share it. */
@@ -179,8 +181,11 @@ export function unique<T extends Strippable>(messages: T[]): T[] {
     if (at !== undefined) {
       // Same mail, second copy. Keep the richer of the two bodies in place.
       if (text.length > kept[at].text.length) kept[at] = { ...kept[at], text };
+      // The attachments travel with the names, and each carries the id of
+      // the copy it was read from: that is the copy the server downloads it
+      // from, whatever id the kept message has.
       if (message.attachmentNames.length > kept[at].attachmentNames.length) {
-        kept[at] = { ...kept[at], attachmentNames: message.attachmentNames };
+        kept[at] = { ...kept[at], attachmentNames: message.attachmentNames, attachments: message.attachments };
       }
       alias(at, message.id);
       continue;

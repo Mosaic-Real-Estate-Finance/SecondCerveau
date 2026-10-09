@@ -6,6 +6,7 @@ import {
   guard,
   json,
   notion,
+  NotionError,
   props,
   schemaOf,
   SOURCE,
@@ -28,7 +29,11 @@ type Body = {
   // PATCH only.
   noteId?: string;
   sinceMessageId?: string | null;
+  /** Feature 003: file uploads already sent to Notion by /api/outlook/attachments. */
+  files?: { id: string; name: string }[];
 };
+
+type Skipped = { name: string; reason: string };
 
 const text = (content: string) => ({ rich_text: [{ type: "text", text: { content } }] });
 
@@ -90,6 +95,54 @@ async function appendThread(env: Env, pageId: string, messages: ThreadMessage[])
 }
 
 const lastOf = (messages: ThreadMessage[]) => messages[messages.length - 1];
+
+// ---- Attachments (feature 003) ---------------------------------------------
+// The files of the mail go in the Fichiers column, and always in the same
+// write as the rest of the properties: on a new page, at creation; on an
+// enrichment, in the PATCH that moves the "Dernier message" mark. Either the
+// mark and the files land together or neither does, and that is what makes a
+// duplicate impossible — once the mark has moved, those messages are never
+// "new" again, and neither are their files.
+// See specs/003-outlook-mobile-pieces-jointes/research.md C-1.
+
+/** Notion takes at most 100 elements in any array of a request. */
+const FILES_MAX = 100;
+
+const fileEntry = (file: { id: string; name: string }) => ({
+  type: "file_upload",
+  // Kept short: a file object's name is a label in a cell, and a mail
+  // attachment can carry a name far longer than any cell shows.
+  name: [...file.name.trim()].slice(0, 100).join("") || "fichier",
+  file_upload: { id: file.id },
+});
+
+/** What Notion returns for a file already in the column, in the shape it takes back. */
+function heldEntry(file: any): Record<string, unknown> | null {
+  if (file?.type === "file" && file.file?.url) return { name: file.name, type: "file", file: { url: file.file.url } };
+  if (file?.type === "external" && file.external?.url) {
+    return { name: file.name, type: "external", external: { url: file.external.url } };
+  }
+  return null;
+}
+
+function splitFiles(
+  schema: Schema,
+  column: string,
+  files: { id: string; name: string }[],
+  held: number,
+): { accepted: { id: string; name: string }[]; skipped: Skipped[] } {
+  const valid = files.filter((file) => file?.id?.trim());
+  if (!valid.length) return { accepted: [], skipped: [] };
+  if (schema[column]?.type !== "files") {
+    const reason = `La base de notes n'a pas de colonne fichiers « ${column} ».`;
+    return { accepted: [], skipped: valid.map((file) => ({ name: file.name, reason })) };
+  }
+  const room = Math.max(0, FILES_MAX - held);
+  return {
+    accepted: valid.slice(0, room),
+    skipped: valid.slice(room).map((file) => ({ name: file.name, reason: "Limite de 100 fichiers par note atteinte." })),
+  };
+}
 
 function noteProperties(
   schema: Schema,
@@ -181,6 +234,10 @@ export const onRequestPost: Handler = async ({ request, env }) => {
       [relation]: { relation: contactIds.map((id) => ({ id })) },
       [p.noteClientId]: text(conversationId),
     };
+    // Missing column or too many files: the note is still made. It is worth
+    // more than its attachments, and the panel lists what did not make it.
+    const files = splitFiles(schema, p.noteFile, body.files ?? [], 0);
+    if (files.accepted.length) properties[p.noteFile] = { files: files.accepted.map(fileEntry) };
 
     const templates = await notion<{ templates?: { id: string; is_default?: boolean }[] }>(
       env,
@@ -188,14 +245,30 @@ export const onRequestPost: Handler = async ({ request, env }) => {
     ).catch(() => null);
     const template = (templates?.templates ?? []).find((one) => one.is_default) ?? templates?.templates?.[0];
 
-    const page = await notion<{ id: string; url: string }>(env, "/pages", {
-      method: "POST",
-      body: {
-        parent: { type: "data_source_id", data_source_id: sourceId },
-        properties,
-        ...(template ? { template: { type: "template_id", template_id: template.id } } : {}),
-      },
-    });
+    const create = () =>
+      notion<{ id: string; url: string }>(env, "/pages", {
+        method: "POST",
+        body: {
+          parent: { type: "data_source_id", data_source_id: sourceId },
+          properties,
+          ...(template ? { template: { type: "template_id", template_id: template.id } } : {}),
+        },
+      });
+    let page: { id: string; url: string };
+    try {
+      page = await create();
+    } catch (error) {
+      // An upload Notion no longer recognises (expired, already used) fails
+      // the whole creation. The note matters more: it is made without the
+      // files, and they are reported as not imported.
+      if (!(error instanceof NotionError) || error.status !== 400 || !files.accepted.length) throw error;
+      delete properties[p.noteFile];
+      page = await create();
+      files.skipped.push(
+        ...files.accepted.map((file) => ({ name: file.name, reason: "Notion a refusé l'ajout à la colonne Fichiers." })),
+      );
+      files.accepted = [];
+    }
 
     const templateLanded = template ? await waitForTemplate(env, page.id) : true;
 
@@ -233,6 +306,8 @@ export const onRequestPost: Handler = async ({ request, env }) => {
         url: page.url,
         messagesAdded: messages.length,
         templateTimedOut: !templateLanded,
+        filesAdded: files.accepted.length,
+        filesSkipped: files.skipped,
       },
       201,
     );
@@ -311,9 +386,40 @@ export const onRequestPatch: Handler = async ({ request, env }) => {
       };
     }
 
-    await notion(env, `/pages/${noteId}`, { method: "PATCH", body: { properties } });
+    // The files go in this same PATCH as the mark (see the top of the
+    // attachments section). A files column is replaced, not appended to, so the
+    // ones already there are sent back first — read from the page fetched at
+    // the start of this request, whose file URLs are still fresh.
+    const heldFiles = ((page.properties[p.noteFile]?.files ?? []) as any[]).map(heldEntry).filter(Boolean);
+    const files = splitFiles(schema, p.noteFile, body.files ?? [], heldFiles.length);
+    if (files.accepted.length) {
+      properties[p.noteFile] = { files: [...heldFiles, ...files.accepted.map(fileEntry)] };
+    }
 
-    return json({ id: noteId, url: page.url, messagesAdded: fresh.length });
+    try {
+      await notion(env, `/pages/${noteId}`, { method: "PATCH", body: { properties } });
+    } catch (error) {
+      // Whether Notion takes back the files it handed out is not documented
+      // (research C-2). If this write is refused because of them, it is made
+      // again without the column: the messages and the mark land, the files
+      // already on the note are left untouched, and the new ones are reported
+      // as not imported. Nothing is lost silently, nothing is duplicated.
+      if (!(error instanceof NotionError) || error.status !== 400 || !files.accepted.length) throw error;
+      delete properties[p.noteFile];
+      await notion(env, `/pages/${noteId}`, { method: "PATCH", body: { properties } });
+      files.skipped.push(
+        ...files.accepted.map((file) => ({ name: file.name, reason: "Notion a refusé l'ajout à la colonne Fichiers." })),
+      );
+      files.accepted = [];
+    }
+
+    return json({
+      id: noteId,
+      url: page.url,
+      messagesAdded: fresh.length,
+      filesAdded: files.accepted.length,
+      filesSkipped: files.skipped,
+    });
   } catch (error) {
     return fail(error);
   }

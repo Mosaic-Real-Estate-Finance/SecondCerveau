@@ -26,7 +26,7 @@
   xsi:type="MailApp">
 
   <Id>3cb13804-89bb-40d2-90a9-259435f827e4</Id>
-  <Version>1.3.0.0</Version>
+  <Version>1.4.0.0</Version>
   <ProviderName>Mosaic Real Estate Finance</ProviderName>
   <DefaultLocale>fr-FR</DefaultLocale>
   <DisplayName DefaultValue="Save to Notion" />
@@ -131,7 +131,7 @@
         <bt:String id="buttonLabel" DefaultValue="Save to Notion" />
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="buttonTip" DefaultValue="Rattache cet échange à un contact et l'enregistre dans la base de notes Notion." />
+        <bt:String id="buttonTip" DefaultValue="Enregistre ce fil dans la base de notes Notion et le rattache aux contacts externes qui y participent." />
       </bt:LongStrings>
     </Resources>
 
@@ -175,6 +175,38 @@
               </OfficeTab>
             </ExtensionPoint>
           </DesktopFormFactor>
+
+          <!-- Outlook on iOS and Android (feature 003). Only in this 1.1
+               block: MobileFormFactor does not exist in the 1.0 schema. The
+               same taskpane, full screen; no Supertip and no pinning on a
+               phone, so neither is declared. Sign-in there relies on nested
+               app authentication, which Microsoft ships on both apps from
+               build 4.2433.0 (research 003 A-1). -->
+          <MobileFormFactor>
+            <FunctionFile resid="commandsUrl" />
+            <ExtensionPoint xsi:type="MobileMessageReadCommandSurface">
+              <Group id="mosaicMobileGroup">
+                <Label resid="groupLabel" />
+                <Control xsi:type="MobileButton" id="mosaicToNotionMobile">
+                  <Label resid="buttonLabel" />
+                  <Icon xsi:type="bt:MobileIconList">
+                    <bt:Image size="25" scale="1" resid="mobile25x1" />
+                    <bt:Image size="25" scale="2" resid="mobile25x2" />
+                    <bt:Image size="25" scale="3" resid="mobile25x3" />
+                    <bt:Image size="32" scale="1" resid="mobile32x1" />
+                    <bt:Image size="32" scale="2" resid="mobile32x2" />
+                    <bt:Image size="32" scale="3" resid="mobile32x3" />
+                    <bt:Image size="48" scale="1" resid="mobile48x1" />
+                    <bt:Image size="48" scale="2" resid="mobile48x2" />
+                    <bt:Image size="48" scale="3" resid="mobile48x3" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="taskpaneUrl" />
+                  </Action>
+                </Control>
+              </Group>
+            </ExtensionPoint>
+          </MobileFormFactor>
         </Host>
       </Hosts>
 
@@ -183,6 +215,16 @@
         <bt:Image id="icon16" DefaultValue="https://{{HOST}}/outlook/icon-16.png" />
         <bt:Image id="icon32" DefaultValue="https://{{HOST}}/outlook/icon-32.png" />
         <bt:Image id="icon80" DefaultValue="https://{{HOST}}/outlook/icon-80.png" />
+        <!-- Outlook on iOS and Android: three sizes, each at scales 1, 2 and 3. -->
+        <bt:Image id="mobile25x1" DefaultValue="https://{{HOST}}/outlook/icon-25.png" />
+        <bt:Image id="mobile25x2" DefaultValue="https://{{HOST}}/outlook/icon-25@2x.png" />
+        <bt:Image id="mobile25x3" DefaultValue="https://{{HOST}}/outlook/icon-25@3x.png" />
+        <bt:Image id="mobile32x1" DefaultValue="https://{{HOST}}/outlook/icon-32.png" />
+        <bt:Image id="mobile32x2" DefaultValue="https://{{HOST}}/outlook/icon-32@2x.png" />
+        <bt:Image id="mobile32x3" DefaultValue="https://{{HOST}}/outlook/icon-32@3x.png" />
+        <bt:Image id="mobile48x1" DefaultValue="https://{{HOST}}/outlook/icon-48.png" />
+        <bt:Image id="mobile48x2" DefaultValue="https://{{HOST}}/outlook/icon-48@2x.png" />
+        <bt:Image id="mobile48x3" DefaultValue="https://{{HOST}}/outlook/icon-48@3x.png" />
       </bt:Images>
       <bt:Urls>
         <bt:Url id="taskpaneUrl" DefaultValue="https://{{HOST}}/outlook.html" />
@@ -193,7 +235,7 @@
         <bt:String id="buttonLabel" DefaultValue="Save to Notion" />
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="buttonTip" DefaultValue="Rattache cet échange à un contact et l'enregistre dans la base de notes Notion." />
+        <bt:String id="buttonTip" DefaultValue="Enregistre ce fil dans la base de notes Notion et le rattache aux contacts externes qui y participent." />
       </bt:LongStrings>
     </Resources>
     </VersionOverrides>

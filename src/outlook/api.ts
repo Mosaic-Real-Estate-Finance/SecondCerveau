@@ -13,6 +13,8 @@ export type ThreadMessage = {
   from: { name: string; address: string };
   text: string;
   attachmentNames: string[];
+  /** Panel only: never sent to the server, which lists names from attachmentNames. */
+  attachments?: AttachmentRef[];
   /**
    * The Graph ids of the other copies of this same mail, folded away by
    * `unique()`. Sent so the server can still recognise a « Dernier message »
@@ -20,6 +22,25 @@ export type ThreadMessage = {
    */
   copyIds?: string[];
 };
+
+/** A mail attachment as Graph describes it, before anything is downloaded. */
+export type AttachmentRef = {
+  /** The Graph id of the copy that carries it. */
+  messageId: string;
+  id: string;
+  name: string;
+  /** As Graph announces it, which can exceed the content by a few KB. */
+  size: number;
+  /** A file, a mail attached to the mail, or a link to a file in the cloud. */
+  kind: "file" | "item" | "reference";
+  contentType: string;
+  inline: boolean;
+};
+
+/** A file already handed to Notion, waiting for the note that attaches it. */
+export type UploadedFile = { id: string; name: string; size: number };
+
+export type SkippedFile = { name: string; reason: string };
 
 export type MatchedContact = { id: string; name: string; company: string };
 
@@ -43,6 +64,8 @@ export type NoteWritten = {
   /** True when the blocks had to be appended before the Notion template landed. */
   templateTimedOut?: boolean;
   duplicate?: boolean;
+  filesAdded?: number;
+  filesSkipped?: SkippedFile[];
 };
 
 export type NewContact = {
@@ -164,11 +187,20 @@ export const findNote = (conversationId: string) =>
     `/api/outlook/notes?conversationId=${encodeURIComponent(conversationId)}`,
   ).then((body) => body.note);
 
+// The attachments' metadata stays in the panel: the server writes the names
+// from attachmentNames, and the files arrive separately, already uploaded.
+const bare = (messages: ThreadMessage[]) => messages.map(({ attachments: _, ...message }) => message);
+
 export const createNote = (input: {
   conversationId: string;
   contactIds: string[];
   messages: ThreadMessage[];
-}) => call<NoteWritten>("/api/outlook/notes", { method: "POST", body: JSON.stringify(input) });
+  files?: { id: string; name: string }[];
+}) =>
+  call<NoteWritten>("/api/outlook/notes", {
+    method: "POST",
+    body: JSON.stringify({ ...input, messages: bare(input.messages) }),
+  });
 
 export const enrichNote = (input: {
   noteId: string;
@@ -176,4 +208,29 @@ export const enrichNote = (input: {
   sinceMessageId: string | null;
   contactIds: string[];
   messages: ThreadMessage[];
-}) => call<NoteWritten>("/api/outlook/notes", { method: "PATCH", body: JSON.stringify(input) });
+  files?: { id: string; name: string }[];
+}) =>
+  call<NoteWritten>("/api/outlook/notes", {
+    method: "PATCH",
+    body: JSON.stringify({ ...input, messages: bare(input.messages) }),
+  });
+
+// ---- Attachments (feature 003) ---------------------------------------------
+
+/** The per file limit of the Notion workspace, in bytes. */
+export const uploadLimit = () =>
+  call<{ maxBytes: number }>("/api/outlook/attachments").then((body) => body.maxBytes);
+
+/**
+ * Has the server fetch one attachment from Microsoft and hand it to Notion.
+ *
+ * The file never passes through here: a request body is capped at 4.5 MB on
+ * the server, so what travels is the reference and the Graph token that lets
+ * the server read it. See specs/003-outlook-mobile-pieces-jointes/research.md B.
+ */
+export const importAttachment = (ref: AttachmentRef, graphToken: string) =>
+  call<UploadedFile | { skipped: true; reason: string }>("/api/outlook/attachments", {
+    method: "POST",
+    headers: { "X-Graph-Token": graphToken },
+    body: JSON.stringify({ messageId: ref.messageId, attachmentId: ref.id }),
+  });
