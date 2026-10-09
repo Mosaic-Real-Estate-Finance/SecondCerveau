@@ -115,7 +115,7 @@ export function PushBanner({ visible }: { visible: boolean }) {
           <button
             type="button"
             onClick={() => void ask()}
-            className="shrink-0 rounded-full bg-navy px-4 py-2.5 text-sm font-medium text-white"
+            className="shrink-0 rounded-full bg-navy px-4 py-2.5 text-sm font-medium text-on-accent"
           >
             Activer →
           </button>

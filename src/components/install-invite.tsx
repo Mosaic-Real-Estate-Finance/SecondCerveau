@@ -151,7 +151,7 @@ export function InstallInvite() {
         aria-label="Fermer"
         onClick={close}
         className={cn(
-          "absolute inset-0 bg-midnight-blue/30 transition-opacity duration-300",
+          "absolute inset-0 bg-[color:var(--scrim-strong)] transition-opacity duration-300",
           open ? "opacity-100" : "opacity-0",
         )}
       />
@@ -272,7 +272,7 @@ export function InstallInvite() {
             <button
               type="button"
               onClick={install}
-              className="flex h-12 w-full items-center justify-center rounded-2xl bg-navy px-6 text-base font-medium text-white"
+              className="flex h-12 w-full items-center justify-center rounded-2xl bg-navy px-6 text-base font-medium text-on-accent"
             >
               Installer l'app
             </button>
@@ -284,7 +284,7 @@ export function InstallInvite() {
               "flex h-12 w-full items-center justify-center rounded-2xl px-6 text-base font-medium",
               installable && !ios && !inApp
                 ? "border border-midnight-blue/15 text-midnight-blue"
-                : "bg-navy text-white",
+                : "bg-navy text-on-accent",
             )}
           >
             J'ai compris

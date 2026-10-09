@@ -177,7 +177,7 @@ export function VoiceRecorder({
           whileTap={reduced ? undefined : { scale: 0.9 }}
           transition={reduced ? INSTANT : TAP}
           style={{ width: button, height: button }}
-          className="z-10 flex shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full bg-navy text-white outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy"
+          className="z-10 flex shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-full bg-navy text-on-accent outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy"
         >
           <svg
             viewBox="0 0 24 24"

@@ -23,6 +23,7 @@ export function Icon({ name, className }: { name: IconName; className?: string }
   return (
     <span
       aria-hidden
+      data-icon={name}
       className={cn("inline-block [&>svg]:h-full [&>svg]:w-auto", className)}
       dangerouslySetInnerHTML={{ __html: ICONS[name] }}
     />

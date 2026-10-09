@@ -37,7 +37,7 @@ export function PrimaryButton({ className, ...props }: React.ComponentProps<"but
       type="button"
       {...props}
       className={cn(
-        "flex h-14 w-full items-center justify-center rounded-2xl bg-navy px-5 text-base font-medium text-white transition-opacity disabled:opacity-40",
+        "flex h-14 w-full items-center justify-center rounded-2xl bg-navy px-5 text-base font-medium text-on-accent transition-opacity disabled:opacity-40",
         className,
       )}
     />
@@ -50,7 +50,7 @@ export function CircleButton({ className, ...props }: React.ComponentProps<"butt
     <button
       type="button"
       {...props}
-      className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-navy text-white", className)}
+      className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-navy text-on-accent", className)}
     />
   );
 }
