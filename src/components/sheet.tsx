@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { useReducedMotion } from "motion/react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +9,8 @@ const DISMISS_PX = 120;
 const DISMISS_SPEED = 0.5; // px per ms
 // The top of the sheet is its handle, as on iOS: the grabber and the header.
 const HANDLE_PX = 64;
+// The bottom padding of .sheet-body, below the content.
+const BODY_PAD = 16;
 
 // A sheet in the manner of UISheetPresentationController: it rises from the
 // bottom with its content fully drawn, stops at three quarters of the screen
@@ -60,30 +61,40 @@ export function Sheet({
 
   const sheet = useRef<HTMLDivElement>(null);
 
-  // A change of detent or of content — the settings opening their list of
-  // excluded contacts — grows or shrinks the sheet rather than jumping. The
-  // height is measured where the CSS puts it, then played from the last one.
-  const reduceMotion = useReducedMotion();
-  const lastHeight = useRef(0);
+  // Detents, as on iOS: the sheet is always as tall as the large detent and
+  // is only ever moved, never resized. A smaller detent is the same sheet
+  // pushed down until its content shows and no more (three quarters of the
+  // screen at most). Growing to the large detent or back — the settings
+  // opening their list of excluded contacts — is then one transform on the
+  // compositor, the same motion as the opening, with no layout per frame.
+  const content = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const node = sheet.current;
-    if (!node) return;
-    node.style.height = "";
-    const to = node.getBoundingClientRect().height;
-    const from = lastHeight.current;
-    lastHeight.current = to;
-    if (!open || reduceMotion || !from || Math.abs(from - to) < 2) return;
-    node.style.height = `${from}px`;
-    void node.offsetHeight;
-    node.style.height = `${to}px`;
-    const done = (event: TransitionEvent) => {
-      if (event.target !== node || event.propertyName !== "height") return;
-      node.style.height = "";
-      node.removeEventListener("transitionend", done);
+    const inner = content.current;
+    if (!node || !inner) return;
+    const place = () => {
+      if (full) {
+        node.style.setProperty("--sheet-offset", "0px");
+        node.style.removeProperty("--sheet-visible");
+        return;
+      }
+      const top = node.getBoundingClientRect().top;
+      const bottomPad = parseFloat(getComputedStyle(node).paddingBottom) || 0;
+      const natural = inner.getBoundingClientRect().bottom - top + BODY_PAD + bottomPad;
+      const visible = Math.min(natural, window.innerHeight * 0.75);
+      node.style.setProperty("--sheet-visible", `${visible}px`);
+      node.style.setProperty("--sheet-offset", `${Math.max(0, node.offsetHeight - visible)}px`);
     };
-    node.addEventListener("transitionend", done);
-    return () => node.removeEventListener("transitionend", done);
-  });
+    place();
+    // The content changes height on its own: a list arriving, a row removed.
+    const observer = new ResizeObserver(place);
+    observer.observe(inner);
+    window.addEventListener("resize", place);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", place);
+    };
+  }, [full]);
 
   const drag = useRef<{ id: number; y: number; t: number; dy: number } | null>(null);
 
@@ -137,7 +148,11 @@ export function Sheet({
         onPointerCancel={onPointerUp}
       >
         <div className="sheet-grabber" aria-hidden />
-        <div className="sheet-body">{open ? children : held.current}</div>
+        <div className="sheet-body">
+          <div ref={content} className="sheet-content">
+            {open ? children : held.current}
+          </div>
+        </div>
       </div>
     </div>,
     document.body,

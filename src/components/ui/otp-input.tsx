@@ -15,8 +15,9 @@ const RING = {
   error: "ring-2 ring-[#FF3B30]/70 delay-150",
 } as const;
 
-// Midnight blue, the app's ink, rather than the original green.
-const SUCCESS = "#020342";
+// The app's ink rather than the original green: midnight blue, or its light
+// counterpart in the dark theme.
+const SUCCESS = "currentColor";
 
 const SIZES = {
   sm: { box: "size-10 rounded-lg", text: "text-base", caret: "h-5", gap: "gap-1.5", px: 40, radius: 8 },
@@ -25,7 +26,7 @@ const SIZES = {
 } as const;
 
 const SLOT_CLASS =
-  "bg-[#F4F4F9] dark:bg-[#262626] text-center font-medium text-transparent caret-transparent outline-none transition-shadow duration-200 selection:bg-transparent disabled:cursor-not-allowed disabled:opacity-50";
+  "bg-[#F4F4F9] dark:bg-[#22222E] text-center font-medium text-transparent caret-transparent outline-none transition-shadow duration-200 selection:bg-transparent disabled:cursor-not-allowed disabled:opacity-50";
 
 const ROLL_SPRING = { type: "spring", stiffness: 500, damping: 34 } as const;
 const CARET_SPRING = { type: "spring", stiffness: 500, damping: 40 } as const;
@@ -251,7 +252,7 @@ export function OtpInput({
                   viewBox={`0 0 ${scale.px} ${scale.px}`}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="pointer-events-none absolute inset-0 size-full"
+                  className="pointer-events-none absolute inset-0 size-full text-midnight-blue"
                 >
                   <motion.rect
                     x={1}
@@ -286,7 +287,7 @@ export function OtpInput({
                     exit={reduceMotion ? { opacity: 0 } : "exit"}
                     transition={reduceMotion ? { duration: 0 } : ROLL_SPRING}
                     data-slot="otp-input-char"
-                    className={cn("font-semibold text-black dark:text-white", scale.text)}
+                    className={cn("font-semibold text-midnight-blue", scale.text)}
                   >
                     {mask ? "•" : slot}
                   </motion.span>
@@ -304,7 +305,7 @@ export function OtpInput({
             animate={{ x: caretX - 1, y: "-50%", opacity: [1, 1, 0, 0] }}
             transition={{ x: reduceMotion ? { duration: 0 } : CARET_SPRING, opacity: BLINK }}
             className={cn(
-              "pointer-events-none absolute left-0 top-1/2 w-0.5 rounded-full bg-black dark:bg-white",
+              "pointer-events-none absolute left-0 top-1/2 w-0.5 rounded-full bg-midnight-blue",
               scale.caret,
             )}
           />

@@ -4,8 +4,9 @@
 @import "./transitions/_root.css";
 @import "./transitions/snippets.css";
 
-/* Light theme only: dark: variants in vendored components never fire. */
-@custom-variant dark (&:where(.dark, .dark *));
+/* The theme follows the device: dark: variants in vendored components fire
+   on the system setting, the same signal the tokens below use. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
 
 /* Mosaic palette: two blues on two neutrals, nothing else. The two blues are
    indistinguishable from each other (1.21:1), so hierarchy comes from size,
@@ -16,6 +17,8 @@
   --color-navy: #000082;
   --color-white: #ffffff;
   --color-white-smoke: #f7f7f7;
+  /* Text and icons on the navy accent: white in both themes. */
+  --color-on-accent: #ffffff;
   --color-transparent: transparent;
   --color-current: currentColor;
 
@@ -42,9 +45,17 @@
   --shimmer-base: rgb(2 3 66 / 0.45);
   --shimmer-highlight: #020342;
   --muted: rgb(2 3 66 / 0.62);
+  /* Thin lines, scrims and shadows, in the ink of the theme. */
+  --hairline: rgb(2 3 66 / 0.18);
+  --scrim: rgb(2 3 66 / 0.18);
+  --scrim-strong: rgb(2 3 66 / 0.3);
+  --shadow: rgb(2 3 66 / 0.12);
+  /* Sheets sit on the page's own white; in the dark they are lifted a
+     shade, as iOS raises a presented sheet. */
+  --sheet-bg: var(--color-white);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
-  color-scheme: light;
+  color-scheme: light dark;
 
   /* Page side-by-side, tuned through the variables the snippet exposes
      rather than by touching the snippet. Longer and with a little more
@@ -59,6 +70,34 @@
      curve, and the duration of a sheet presentation. */
   --sheet-dur: 500ms;
   --sheet-ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ---- Dark theme ------------------------------------------------------
+   Picked by the system setting alone, live: prefers-color-scheme is read by
+   the browser on every change, so the app turns with the iPhone at sunset
+   without a reload. The same names carry the dark values — page and cards
+   go dark, the ink goes light, the navy accent lifts to stay legible — so
+   every component follows without a dark rule of its own. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-white: #0d0d14;
+    --color-white-smoke: #22222e;
+    --color-midnight-blue: #ececf6;
+    --color-navy: #6366f1;
+    --muted: rgb(236 236 246 / 0.6);
+    --hairline: rgb(236 236 246 / 0.2);
+    --scrim: rgb(0 0 0 / 0.35);
+    --scrim-strong: rgb(0 0 0 / 0.55);
+    --shadow: rgb(0 0 0 / 0.5);
+    --sheet-bg: #16161f;
+    --shimmer-base: rgb(236 236 246 / 0.45);
+    --shimmer-highlight: #ffffff;
+  }
+  /* The SF Symbol badge is drawn in a dark navy that vanishes on a dark
+     page; it takes the accent instead. */
+  [data-icon] path[fill="#002060"] {
+    fill: var(--color-navy);
+  }
 }
 
 html,
@@ -238,7 +277,7 @@ a {
 .sheet-scrim {
   position: absolute;
   inset: 0;
-  background: rgb(2 3 66 / 0.18);
+  background: var(--scrim);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   opacity: 0;
@@ -247,6 +286,9 @@ a {
 .sheet-layer[data-open="true"] > .sheet-scrim {
   opacity: 1;
 }
+/* Always the large detent's height; a smaller detent is the same sheet
+   pushed down by --sheet-offset (see sheet.tsx). Only transform ever moves,
+   for the opening, a change of detent and a drag alike. */
 .sheet {
   position: absolute;
   left: 0;
@@ -254,28 +296,19 @@ a {
   bottom: 0;
   margin-inline: auto;
   max-width: 480px;
-  max-height: 75dvh;
+  height: calc(100dvh - var(--safe-top) - 12px);
   display: flex;
   flex-direction: column;
-  background: var(--color-white);
   border-radius: 28px 28px 0 0;
-  box-shadow: 0 -8px 40px rgb(2 3 66 / 0.12);
+  background: var(--sheet-bg);
+  box-shadow: 0 -8px 40px var(--shadow);
   padding-bottom: var(--safe-bottom);
   transform: translateY(100%);
-  transition:
-    transform var(--sheet-dur) var(--sheet-ease),
-    height var(--sheet-dur) var(--sheet-ease);
+  transition: transform var(--sheet-dur) var(--sheet-ease);
   will-change: transform;
 }
-/* A form is the large detent, as on iOS: the whole screen but a strip
-   under the status bar where the blurred page still shows, so every field
-   fits without scrolling. */
-.sheet.is-full {
-  height: calc(100dvh - var(--safe-top) - 12px);
-  max-height: none;
-}
 .sheet-layer[data-open="true"] > .sheet {
-  transform: translateY(var(--sheet-drag, 0px));
+  transform: translateY(calc(var(--sheet-offset, 0px) + var(--sheet-drag, 0px)));
 }
 .sheet.is-dragging {
   transition: none;
@@ -292,7 +325,7 @@ a {
   width: 36px;
   height: 5px;
   border-radius: 3px;
-  background: rgb(2 3 66 / 0.18);
+  background: var(--hairline);
 }
 .sheet-body {
   flex: 1;
@@ -301,11 +334,23 @@ a {
   overscroll-behavior: contain;
   padding: 4px 16px 16px;
 }
+/* At a smaller detent the scroller stops where the screen does, so content
+   taller than three quarters of it can still be reached. */
+.sheet:not(.is-full) > .sheet-body {
+  flex: none;
+  max-height: calc(var(--sheet-visible, 75dvh) - 20px - var(--safe-bottom));
+}
 .sheet.is-full > .sheet-body {
   display: flex;
   flex-direction: column;
 }
-.sheet.is-full > .sheet-body > * {
+.sheet.is-full > .sheet-body > .sheet-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.sheet.is-full > .sheet-body > .sheet-content > * {
   flex: 1;
   min-height: 0;
 }
@@ -345,7 +390,7 @@ a {
   width: 96px;
   height: 96px;
   background: var(--color-navy);
-  color: var(--color-white);
+  color: var(--color-on-accent);
   --morph-r-closed: 48px;
   --morph-r-open: 24px;
 }
@@ -379,7 +424,7 @@ a {
   color: var(--color-midnight-blue);
 }
 .voice-note-mosaic [data-slot="voice-note-track"] > div:first-child > span {
-  background: rgb(2 3 66 / 0.3);
+  background: var(--scrim-strong);
 }
 .voice-note-mosaic [data-slot="voice-note-track"] > div:last-child span {
   background: var(--color-midnight-blue);
@@ -425,7 +470,7 @@ a {
      still clears the 32px iOS calls for on a chip. */
   padding: 6px 12px;
   border-radius: 100px;
-  border: 1px solid rgb(2 3 66 / 0.18);
+  border: 1px solid var(--hairline);
   color: var(--muted);
   font-size: 13px;
   line-height: 1.4;
@@ -439,7 +484,7 @@ a {
 }
 .chip.on {
   background: var(--color-navy);
-  color: var(--color-white);
+  color: var(--color-on-accent);
   border-color: var(--color-navy);
 }
 .chip.pop {
@@ -535,6 +580,6 @@ a {
   padding: 14px 14px 14px 16px;
   border-radius: 20px;
   background: var(--color-white);
-  box-shadow: 0 8px 32px rgb(2 3 66 / 0.14), 0 0 0 1px rgb(2 3 66 / 0.06);
+  box-shadow: 0 8px 32px var(--shadow), 0 0 0 1px var(--hairline);
   pointer-events: auto;
 }

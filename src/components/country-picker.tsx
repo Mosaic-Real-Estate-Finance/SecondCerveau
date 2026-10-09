@@ -101,7 +101,7 @@ function CountrySheet({
         aria-label="Fermer"
         onClick={onClose}
         className={cn(
-          "absolute inset-0 bg-midnight-blue/30 transition-opacity duration-200",
+          "absolute inset-0 bg-[color:var(--scrim-strong)] transition-opacity duration-200",
           shown ? "opacity-100" : "opacity-0",
         )}
       />

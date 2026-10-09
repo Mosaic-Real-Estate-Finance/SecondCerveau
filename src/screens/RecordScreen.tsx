@@ -209,7 +209,7 @@ export function RecordScreen({
         <div className="record-morph t-morph pointer-events-auto" data-open={open} data-quiet={quiet || undefined}>
           <div className="t-morph-menu flex flex-col justify-between p-4" aria-hidden={!open}>
             <div className="flex items-center justify-between">
-              <span className="text-base text-white" aria-live="polite">
+              <span className="text-base text-on-accent" aria-live="polite">
                 {recorder.state === "error"
                   ? "Enregistrement impossible"
                   : recorder.paused
@@ -218,12 +218,12 @@ export function RecordScreen({
                       ? "Enregistrement"
                       : "Ouverture du micro"}
               </span>
-              <TextButton onClick={cancel} className="-mr-3 text-white" tabIndex={open ? 0 : -1}>
+              <TextButton onClick={cancel} className="-mr-3 text-on-accent" tabIndex={open ? 0 : -1}>
                 {recorder.state === "error" ? "Fermer" : "Annuler"}
               </TextButton>
             </div>
             {recorder.state === "error" ? (
-              <p className="text-base text-white">{recorder.error}</p>
+              <p className="text-base text-on-accent">{recorder.error}</p>
             ) : (
               <LiveRecorder
                 recording={recorder.state === "recording"}
