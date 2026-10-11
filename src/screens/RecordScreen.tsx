@@ -212,13 +212,15 @@ export function RecordScreen({
               <span className="text-base text-on-accent" aria-live="polite">
                 {recorder.state === "error"
                   ? "Enregistrement impossible"
-                  : recorder.hold
-                    ? "En pause, connexion perdue"
-                    : recorder.paused
-                      ? "En pause"
-                      : recorder.state === "recording"
-                        ? "Enregistrement"
-                        : "Ouverture du micro"}
+                  : recorder.unavailable
+                    ? "Transcription indisponible"
+                    : recorder.hold
+                      ? "En pause, connexion perdue"
+                      : recorder.paused
+                        ? "En pause"
+                        : recorder.state === "recording"
+                          ? "Enregistrement"
+                          : "Ouverture du micro"}
               </span>
               <TextButton onClick={cancel} className="-mr-3 text-on-accent" tabIndex={open ? 0 : -1}>
                 {recorder.state === "error" ? "Fermer" : "Annuler"}
@@ -227,7 +229,7 @@ export function RecordScreen({
             {recorder.state === "error" ? (
               <p className="text-base text-on-accent">{recorder.error}</p>
             ) : (
-              <LiveText noteId={recorder.noteId} hold={recorder.hold} />
+              <LiveText noteId={recorder.noteId} hold={recorder.hold} unavailable={recorder.unavailable} />
             )}
             {recorder.state !== "error" && (
               <LiveRecorder
@@ -364,8 +366,18 @@ const HOLD_TEXT: Record<NonNullable<Hold>, string> = {
   background: "Reprise de l'enregistrement…",
 };
 
-function LiveText({ noteId, hold }: { noteId: string | null; hold: Hold }) {
+function LiveText({ noteId, hold, unavailable }: { noteId: string | null; hold: Hold; unavailable: string | null }) {
   const text = useNote(noteId)?.partial ?? "";
+  if (unavailable) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col justify-end overflow-hidden py-2" aria-live="polite">
+        <p className="text-base leading-snug text-on-accent">
+          {unavailable.charAt(0).toUpperCase() + unavailable.slice(1)}. L'enregistrement continue : la dictée sera
+          transcrite dès que le service répondra.
+        </p>
+      </div>
+    );
+  }
   return (
     <div
       className="flex min-h-0 flex-1 flex-col justify-end overflow-hidden py-2"

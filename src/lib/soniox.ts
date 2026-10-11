@@ -43,7 +43,12 @@ const BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
 /** Bytes queued in the socket beyond which audio is no longer getting out. */
 const CONGESTED_BYTES = 4 * RATE * 2;
 
-export type StreamState = "connecting" | "live" | "down";
+/**
+ * `down` is a link that will be tried again; `failed` is a refusal no new
+ * attempt can change — the user signed out, the account out of credit — and
+ * must never be shown as a network problem.
+ */
+export type StreamState = "connecting" | "live" | "down" | "failed";
 
 export class SttError extends Error {
   /**
@@ -70,6 +75,8 @@ export type SonioxStream = {
   finish(): Promise<string>;
   abort(): void;
   readonly state: StreamState;
+  /** Why the stream failed, once it has. */
+  readonly error: SttError | null;
   /** False once audio Soniox never confirmed fell out of the buffer. */
   readonly complete: boolean;
 };
@@ -90,6 +97,13 @@ const toInt16 = (pcm: Float32Array) => {
     out[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
   }
   return out;
+};
+
+// Refusals Soniox names by type, said so the reader knows what to do.
+// https://soniox.com/docs/api-reference/errors
+const REFUSALS: Record<string, string> = {
+  organization_balance_exhausted: "le crédit du compte Soniox est épuisé",
+  unauthenticated: "Soniox a refusé la clé",
 };
 
 // Tokens carry their own spacing; only the two markers are not words.
@@ -180,8 +194,9 @@ export function openStream({
 
   const fail = (error: SttError) => {
     fatal = error;
+    console.warn("[soniox]", error.message);
     drop();
-    setState("down");
+    setState("failed");
     settle?.reject(error);
     settle = null;
   };
@@ -222,7 +237,9 @@ export function openStream({
       const retriable =
         message.error_code >= 500 || message.error_code === 408 || message.error_type?.startsWith("temp_api_key");
       if (retriable) return lost();
-      return fail(new SttError(`service de transcription : ${message.error_message ?? message.error_code}`, true));
+      const said =
+        REFUSALS[message.error_type ?? ""] ?? `Soniox : ${message.error_message ?? `erreur ${message.error_code}`}`;
+      return fail(new SttError(said, true));
     }
     let fin = false;
     guess = "";
@@ -354,6 +371,7 @@ export function openStream({
   return {
     push,
     suspend() {
+      if (fatal) return;
       suspended = true;
       clearTimeout(retry);
       if (socket || state !== "down") {
@@ -402,6 +420,9 @@ export function openStream({
     abort: close,
     get state() {
       return state;
+    },
+    get error() {
+      return fatal;
     },
     get complete() {
       return complete;

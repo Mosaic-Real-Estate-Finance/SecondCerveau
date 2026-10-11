@@ -103,7 +103,10 @@ async function streamRecording(id: string, audio: ArrayBuffer) {
   try {
     for (let at = 0; at < pcm.length; at += REPLAY_SAMPLES) {
       // Paused while the link is down, so the buffer never has to hold it.
-      while (stream.state !== "live") await new Promise((resolve) => setTimeout(resolve, 250));
+      while (stream.state !== "live") {
+        if (stream.error) throw stream.error;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
       stream.push(pcm.subarray(at, at + REPLAY_SAMPLES));
       await new Promise((resolve) => setTimeout(resolve, REPLAY_EVERY_MS));
     }

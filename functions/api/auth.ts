@@ -107,7 +107,8 @@ async function sttToken(request: Request, env: Parameters<Handler>[0]["env"]) {
       headers: { Authorization: `Bearer ${env.SONIOX_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({ usage_type: "transcribe_websocket", expires_in_seconds: KEY_SECONDS, single_use: true }),
     });
-  } catch {
+  } catch (error) {
+    console.error(`[stt-token] Soniox injoignable : ${(error as Error).message}`);
     return json({ error: "Service de transcription injoignable", retry: true }, 502);
   }
   const body = (await response.json().catch(() => ({}))) as { api_key?: string; expires_at?: string; message?: string };

@@ -95,6 +95,9 @@ export function useRecorder() {
   const [state, setState] = useState<RecorderState>("idle");
   const [paused, setPaused] = useState(false);
   const [hold, setHold] = useState<Hold>(null);
+  // Set when the transcription refused for good. The recording goes on: it
+  // is kept, and transcribed again once the service answers.
+  const [unavailable, setUnavailable] = useState<string | null>(null);
   const [noteId, setNoteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Shared with the screen glow, which listens to the same microphone.
@@ -141,6 +144,7 @@ export function useRecorder() {
     session.current = null;
     setStream(null);
     setHold(null);
+    setUnavailable(null);
     setNoteId(null);
     wake.release();
   }, []);
@@ -231,7 +235,15 @@ export function useRecorder() {
       const onLink = (link: StreamState) => {
         if (session.current !== current) return;
         clearTimeout(current.holdTimer);
-        if (link === "live") {
+        if (link === "failed") {
+          // Not the network, and nothing a pause would wait out: the
+          // recording carries on and the reason is said as it is.
+          setUnavailable(current.link.error?.message ?? "le service ne répond pas");
+          if (current.hold) {
+            current.hold = null;
+            apply(current);
+          }
+        } else if (link === "live") {
           // Back: a hold for the link ends here; one for the background ends
           // when the app is in front, which it must be for this to happen.
           if (current.hold && document.visibilityState === "visible") {
@@ -412,5 +424,5 @@ export function useRecorder() {
     setState("idle");
   }, [teardown]);
 
-  return { state, paused, hold, noteId, error, stream, start, stop, cancel, togglePause };
+  return { state, paused, hold, unavailable, noteId, error, stream, start, stop, cancel, togglePause };
 }
