@@ -1,6 +1,6 @@
 import { later } from "../_lib/background.js";
 import { mailEnabled, sendCode } from "../_lib/mail.js";
-import { json, type Handler } from "../_lib/notion.js";
+import { guard, json, type Handler } from "../_lib/notion.js";
 import {
   checkCode,
   cleanEmail,
@@ -15,6 +15,8 @@ import { findUser } from "../_lib/users.js";
 
 // /api/auth/code, /api/auth/verify, /api/auth/logout — one function for the
 // three (research E-1: the Hobby plan stops at twelve). contracts/auth.md.
+// /api/auth/stt-token rides on the same function for the same reason: api/
+// already holds twelve files.
 
 const actionOf = (request: Request) => new URL(request.url).pathname.split("/").filter(Boolean).pop() ?? "";
 
@@ -69,6 +71,59 @@ async function logout(request: Request, env: Parameters<Handler>[0]["env"]) {
   return response;
 }
 
+// ---- Real-time transcription key ------------------------------------------
+//
+// The dictation streams its audio straight to Soniox from the phone. The
+// account key cannot ship to a browser, so the browser asks for a temporary
+// one here, signed in like every other route, and opens the WebSocket with it.
+// https://soniox.com/docs/guides/temporary-api-keys
+//
+// The key only has to open the stream: a stream already open outlives it.
+// It is single use and short, and the client asks for a fresh one on every
+// reconnection.
+
+const SONIOX_WS_DEFAULT = "wss://stt-rt.soniox.com/transcribe-websocket";
+const SONIOX_MODEL_DEFAULT = "stt-rt-v5";
+const KEY_SECONDS = 60;
+
+// The region is chosen by the WebSocket URL alone, so moving to the EU is one
+// variable: Soniox names its hosts in pairs, stt-rt.<region>.soniox.com for
+// the stream and api.<region>.soniox.com for the REST API, and a key minted in
+// one region is only valid in that region. https://soniox.com/docs/data-residency
+const restHostOf = (wsUrl: string) => {
+  const host = new URL(wsUrl).host;
+  return host.startsWith("stt-rt.") ? `api.${host.slice("stt-rt.".length)}` : "api.soniox.com";
+};
+
+async function sttToken(request: Request, env: Parameters<Handler>[0]["env"]) {
+  const denied = await guard(request, env);
+  if (denied instanceof Response) return denied;
+  if (!env.SONIOX_API_KEY) return json({ error: "Transcription non configurée sur le serveur" }, 500);
+  const wsUrl = env.SONIOX_WS_URL || SONIOX_WS_DEFAULT;
+  let response: Response;
+  try {
+    response = await fetch(`https://${restHostOf(wsUrl)}/v1/auth/temporary-api-key`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.SONIOX_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ usage_type: "transcribe_websocket", expires_in_seconds: KEY_SECONDS, single_use: true }),
+    });
+  } catch {
+    return json({ error: "Service de transcription injoignable", retry: true }, 502);
+  }
+  const body = (await response.json().catch(() => ({}))) as { api_key?: string; expires_at?: string; message?: string };
+  if (!response.ok || !body.api_key) {
+    // Never the account key, and never Soniox's body as is: only its status.
+    console.error(`[stt-token] Soniox a répondu ${response.status}`);
+    return json({ error: "Clé de transcription refusée", retry: response.status >= 500 }, 502);
+  }
+  return json({
+    apiKey: body.api_key,
+    expiresAt: body.expires_at ?? null,
+    wsUrl,
+    model: env.SONIOX_MODEL || SONIOX_MODEL_DEFAULT,
+  });
+}
+
 export const onRequestPost: Handler = async ({ request, env }) => {
   switch (actionOf(request)) {
     case "code":
@@ -77,6 +132,8 @@ export const onRequestPost: Handler = async ({ request, env }) => {
       return verify(request, env);
     case "logout":
       return logout(request, env);
+    case "stt-token":
+      return sttToken(request, env);
     default:
       return json({ error: "Route inconnue" }, 404);
   }

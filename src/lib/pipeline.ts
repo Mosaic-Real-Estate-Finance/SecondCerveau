@@ -1,14 +1,12 @@
-import { createNotionNote, recentContacts } from "./api";
-import { decodeForWhisper } from "./audio";
-import { guardEnd } from "./engine-guard";
-import { collectLive, onPartial } from "./live-transcript";
+import { ApiError, createNotionNote, recentContacts } from "./api";
+import { decodeTo16k } from "./audio";
 import { getNote, listNotes, ready, removeNote, updateNote } from "./notes";
-import { EngineError, stepOf, transcribe } from "./transcriber";
+import { openStream, SttError, type SonioxStream, type StreamState } from "./soniox";
 
 // ---- Screen wake lock ---------------------------------------------------
 // iOS suspends a tab as soon as the screen locks, which stops both the
-// recorder and Whisper. Holding the lock while either runs avoids most of it;
-// the IndexedDB resume covers the rest.
+// recorder and the stream. Holding the lock while either runs avoids most of
+// it; the stream's replay and the IndexedDB resume cover the rest.
 
 let wakeLock: { release(): Promise<void> } | null = null;
 let holders = 0;
@@ -42,35 +40,83 @@ document.addEventListener("visibilitychange", () => {
 export const wake = { acquire, release };
 
 // ---- Transcription --------------------------------------------------------
+//
+// The dictation is transcribed while it is spoken: the recorder streams it
+// to Soniox (soniox.ts) and the text lands on the note as `partial`. When the
+// user stops, what is left is to finalise the stream — a second or so.
+//
+// The recording itself is still kept until Notion confirms the note. It is
+// what makes a lost stream recoverable: a tab killed mid dictation, a capture
+// that missed part of it, or a buffer that could not cover a long outage all
+// end the same way — the stored audio is streamed again, from the start.
 
-// Engine errors arrive in English and technical; the user needs to know
-// whether the network or the phone is the cause — and, before that, at which
-// of the three steps it stopped. "Erreur inattendue" told them nothing and
-// told us nothing either, which is how a failure can be reported for days
-// without anyone knowing where to look.
-function cause(message: string) {
-  if (/memory|allocation|RangeError/i.test(message)) return "mémoire de l'appareil insuffisante";
-  if (/decod/i.test(message)) return "fichier audio illisible";
-  if (/network|fetch|load failed|réponse \d/i.test(message)) return `réseau — ${message}`;
-  return message;
+/** Live streams, by note. Set when recording starts, taken when it is transcribed. */
+const streams = new Map<string, SonioxStream>();
+
+// Several messages a second come back; the screen needs a few. Memory only,
+// see updateNote.
+const PARTIAL_MS = 150;
+const partialTimers = new Map<string, number>();
+const latest = new Map<string, string>();
+
+function showPartial(id: string, text: string) {
+  latest.set(id, text);
+  if (partialTimers.has(id)) return;
+  partialTimers.set(
+    id,
+    window.setTimeout(() => {
+      partialTimers.delete(id);
+      void updateNote(id, { partial: latest.get(id) }, { durable: false });
+    }, PARTIAL_MS),
+  );
 }
 
-function describe(error: unknown) {
-  if (error instanceof EngineError) return `${stepOf(error.stage)} : ${cause(error.message)}`;
+/** Opens the stream for a recording that has just started. */
+export function startStream(id: string, onState: (state: StreamState) => void) {
+  const stream = openStream({ onText: (text) => showPartial(id, text), onState });
+  streams.set(id, stream);
+  return stream;
+}
+
+/** The live stream will not carry this dictation; the recording will. */
+export function dropStream(id: string) {
+  streams.get(id)?.abort();
+  streams.delete(id);
+}
+
+// What failed, in French, for the line under the send button.
+function reason(error: unknown) {
+  if (error instanceof SttError || error instanceof ApiError) return error.message;
   const message = String((error as Error)?.message ?? error);
-  // Older shape, still produced by the audio decoder on its own path.
-  if (/^fetch: /.test(message)) return `${stepOf("download")} : ${cause(message.replace(/^fetch: /, ""))}`;
-  return cause(message);
+  return /decod|EncodingError/i.test(message) ? "enregistrement illisible" : message;
+}
+
+// Soniox wants audio at about the speed it was spoken. 120 ms every 100 ms
+// keeps a little ahead without being a burst.
+const REPLAY_SAMPLES = 1920;
+const REPLAY_EVERY_MS = 100;
+
+/** The stored recording, streamed again from its first second. */
+async function streamRecording(id: string, audio: ArrayBuffer) {
+  const pcm = await decodeTo16k(audio);
+  const stream = openStream({ onText: (text) => showPartial(id, text) });
+  try {
+    for (let at = 0; at < pcm.length; at += REPLAY_SAMPLES) {
+      // Paused while the link is down, so the buffer never has to hold it.
+      while (stream.state !== "live") await new Promise((resolve) => setTimeout(resolve, 250));
+      stream.push(pcm.subarray(at, at + REPLAY_SAMPLES));
+      await new Promise((resolve) => setTimeout(resolve, REPLAY_EVERY_MS));
+    }
+    return await stream.finish();
+  } catch (error) {
+    stream.abort();
+    throw error;
+  }
 }
 
 const running = new Set<string>();
 
-// Each utterance that comes back while the dictation is still being
-// transcribed lands on the note, so the screen fills in as it goes instead of
-// showing a shimmer until the very end.
-onPartial((id, text) => void updateNote(id, { partial: text }));
-
-export async function transcribeNote(id: string, attempt = 1): Promise<void> {
+export async function transcribeNote(id: string): Promise<void> {
   if (running.has(id)) return;
   const note = await getNote(id);
   if (!note || note.transcript) return;
@@ -79,28 +125,28 @@ export async function transcribeNote(id: string, attempt = 1): Promise<void> {
   await acquire();
   try {
     await updateNote(id, { status: "transcribing", error: undefined });
-    // Most of the dictation has usually been transcribed already, utterance
-    // by utterance, while it was being spoken; this waits for what is left.
-    // Null means that path did not carry all of it, and the recording is
-    // transcribed whole, exactly as it was before.
-    const live = await collectLive(id);
-    const text = live ?? (await transcribe(id, await decodeForWhisper(note.audio))).text;
+    let text: string | null = null;
+    const stream = streams.get(id);
+    streams.delete(id);
+    if (stream) {
+      try {
+        const live = await stream.finish();
+        if (stream.complete) text = live;
+      } catch (error) {
+        // Signed out or misconfigured: streaming the recording again would
+        // meet the same answer.
+        if (error instanceof SttError && error.lasting) throw error;
+      }
+    }
+    if (text === null) text = await streamRecording(id, note.audio);
     if (!text) {
-      await updateNote(id, { status: "transcription-failed", error: "aucune parole détectée" });
+      await updateNote(id, { status: "transcription-failed", error: "aucune parole détectée", partial: undefined });
       return;
     }
     await updateNote(id, { status: "transcribed", transcript: text, partial: undefined });
   } catch (error) {
-    // One silent retry covers a worker killed while the phone was locked.
-    if (attempt < 2) {
-      running.delete(id);
-      release();
-      return transcribeNote(id, attempt + 1);
-    }
-    await updateNote(id, { status: "transcription-failed", error: describe(error) });
+    await updateNote(id, { status: "transcription-failed", error: reason(error), partial: undefined });
   } finally {
-    // The tab survived the whole thing: the breadcrumb comes back up.
-    guardEnd();
     if (running.delete(id)) release();
   }
 }

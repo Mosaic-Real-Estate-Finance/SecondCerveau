@@ -45,6 +45,11 @@ export type Env = {
   VAPID_PRIVATE_KEY?: string;
   VAPID_PUBLIC_KEY?: string;
   VAPID_SUBJECT?: string;
+  // Real-time transcription. The key is a secret; the WebSocket URL decides
+  // the region, and the REST host used to mint keys is derived from it.
+  SONIOX_API_KEY?: string;
+  SONIOX_WS_URL?: string;
+  SONIOX_MODEL?: string;
 };
 
 export type Handler = (context: { request: Request; env: Env }) => Promise<Response>;

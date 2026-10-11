@@ -13,7 +13,6 @@ import { ApiError, fetchContacts, fetchReviewCount, fetchSession, session, type 
 import { persistStorage, updateNote, type Note, type NoteContact } from "@/lib/notes";
 import { resumePending, transcribeNote } from "@/lib/pipeline";
 import { afterTransition } from "@/lib/schedule";
-import { checkModelCached, preloadModel } from "@/lib/transcriber";
 
 export type ContactsState = {
   status: "loading" | "ready" | "error";
@@ -46,9 +45,6 @@ export default function App() {
 
   useEffect(() => {
     void persistStorage();
-    // The model downloads in the background from the first launch: streamed to
-    // the cache, never loaded into memory until a transcription needs it.
-    void checkModelCached().then(preloadModel);
     void resumePending();
   }, []);
 
@@ -160,9 +156,10 @@ export default function App() {
 
   const recorded = (note: Note) => {
     openNote(note);
-    // Decoding the audio and waking the Whisper worker cost tens of
-    // milliseconds of main thread each: started here they would land on the
-    // frames of the page slide. They wait for it to be over.
+    // Finalising the stream is a message and a wait; but if the stream did
+    // not carry the dictation, decoding the recording costs tens of
+    // milliseconds of main thread, which would land on the frames of the
+    // page slide. It waits for the slide to be over.
     afterTransition(() => void transcribeNote(note.id));
   };
 

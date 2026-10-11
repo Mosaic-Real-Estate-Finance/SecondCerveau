@@ -1,13 +1,13 @@
 # Mosaic Dictée
 
-PWA de dictée vocale vers la base de notes Notion — et, depuis la feature 002, l'écran où l'on valide les réunions Read AI avant qu'elles n'entrent dans le CRM. La transcription se fait sur le téléphone (Whisper small q8, Transformers.js), le texte brut part dans Notion, et Notion AI le met au propre.
+PWA de dictée vocale vers la base de notes Notion — et, depuis la feature 002, l'écran où l'on valide les réunions Read AI avant qu'elles n'entrent dans le CRM. La transcription se fait en direct chez Soniox pendant que l'on parle, le texte brut part dans Notion, et Notion AI le met au propre.
 
 Trois écrans, dans cet ordre : dicter, choisir le contact, joindre un document
 si besoin. L'envoi part du troisième. Il n'y a pas d'écran de relecture : la
-dictée n'est ni réécoutée ni relue, et la transcription tourne pendant que
-l'utilisateur choisit son contact et sa pièce jointe — elle est donc prête,
-ou presque, au moment où il envoie. Si elle ne l'est pas, le bouton l'attend
-au lieu de refuser.
+dictée n'est ni réécoutée ni relue. Le texte s'affiche pendant qu'on parle
+et il est arrêté une seconde après « terminer » ; il est donc prêt bien
+avant l'envoi. S'il ne l'est pas — la dictée a dû être retranscrite depuis
+l'enregistrement —, le bouton l'attend au lieu de refuser.
 
 ## Démarrer
 
@@ -58,25 +58,25 @@ Avant la mise en production : `node --env-file=.env.local scripts/check-attachme
 
 Dans l'app installée (iOS 16.4 et plus), « Recevoir les notifications » dans les réglages. Elles partent à tous ceux qui les ont activées : réunion ajoutée, personnes à valider, réunion non enregistrée. Jamais de résumé ni de transcription. Le service worker reste généré par `vite-plugin-pwa` ; `public/push-sw.js` lui ajoute les deux écouteurs `push` et `notificationclick` par `importScripts`, sans toucher au cache.
 
-## Déployer (Cloudflare Pages, gratuit)
+## Déployer (Vercel)
 
-- Build : `npm run build`, dossier `dist`, Functions détectées dans `functions/`.
-- Variables : celles de `.env.example`, `NOTION_TOKEN` en secret.
-- `public/_headers` active l'isolation cross-origin (COOP / COEP), nécessaire au WASM multithread.
-
-Cloudflare plutôt que Vercel : le plan gratuit de Vercel interdit l'usage commercial.
+- Le projet Vercel est relié au dépôt : chaque push sur `main` part en production, chaque autre branche en prévisualisation.
+- Build : `npm run build`, dossier `dist` (déclarés dans `vercel.json`). Les fonctions serveur sont les fichiers de `api/`, de simples enveloppes autour des handlers de `functions/api/`.
+- **`api/` contient douze fichiers, le plafond du plan.** Une route nouvelle se greffe sur une fonction existante — `api/auth/[action].ts` et `api/readai/[action].ts` aiguillent sur le dernier segment du chemin — plutôt que d'ajouter un fichier.
+- Variables : celles de `.env.example`, dans Settings → Environment Variables. `NOTION_TOKEN`, `SONIOX_API_KEY`, `SESSION_SECRET`, les mots de passe et les clés privées en type *Sensitive*. Une variable `VITE_*` est lue au build : la changer demande un redéploiement.
+- En-têtes, durées maximales des fonctions et réécritures : `vercel.json`, et lui seul.
 
 ## Architecture
 
 | Fichier | Rôle |
 | --- | --- |
-| `src/lib/use-recorder.ts` | MediaRecorder + AnalyserNode, sauvegarde partielle toutes les 5 s |
-| `src/lib/audio-capture.ts` | Le PCM 16 kHz pris en direct sur le graphe audio, découpé en énoncés aux silences |
-| `src/lib/live-transcript.ts` | Les énoncés transcrits au fil de la dictée, et le repli si l'un d'eux échoue |
-| `src/lib/engine-guard.ts` | La miette qui détecte un onglet tué par iOS, et fait redescendre le moteur d'un cran |
+| `src/lib/use-recorder.ts` | MediaRecorder + AnalyserNode, sauvegarde partielle toutes les 5 s, mise en pause quand le lien ou l'onglet tombe |
+| `src/lib/audio-capture.ts` | Le PCM 16 kHz pris en direct sur le graphe audio, en flux continu |
+| `src/lib/soniox.ts` | Le WebSocket Soniox : configuration, audio, tokens, tampon des dernières secondes et reconnexion |
+| `src/lib/vocabulary.ts` | Les termes métier envoyés comme contexte à chaque flux |
 | `src/lib/notes.ts` | Cache IndexedDB : l'audio y reste jusqu'à confirmation Notion |
-| `src/lib/pipeline.ts` | Reprise au lancement, transcription, envoi, wake lock |
-| `src/workers/whisper.worker.ts` | Whisper q8 en WASM, build standard servi depuis `public/ort` (le build asyncify fait planter Safari 26) |
+| `src/lib/pipeline.ts` | Reprise au lancement, finalisation du flux ou retranscription de l'enregistrement, envoi, wake lock |
+| `functions/api/auth.ts` | Connexion, et `stt-token` : la clé Soniox temporaire, réservée à un utilisateur connecté |
 | `functions/api/*` | Proxy Notion (l'API Notion refuse le CORS, et le token reste serveur) |
 | `functions/api/readai/` | Le webhook Read AI et les routes de l'écran « À valider » (une seule fonction Vercel pour toutes, le plan Hobby s'arrête à 12) |
 | `functions/_lib/readai/` | Signature, répartition des participants, rapprochement, clé de réunion, note, file d'attente |
@@ -90,7 +90,7 @@ Cloudflare plutôt que Vercel : le plan gratuit de Vercel interdit l'usage comme
 | `public/pwa-install-animation.html` | Animation d'installation du dépôt `La-Releve/Simulateur-Faisabilit-` (commit `2ca074f`), copiée telle quelle. Seul diffère : la couleur de marque, le nom, l'icône, le domaine et les trois contacts de la feuille de partage. Ses images vivent dans `public/pwa-anim/` |
 | `src/components/install-invite.tsx` | Mise en page de `components/simulateur/install-guide.tsx` du même dépôt : animation encastrée en haut de la feuille, bord à bord, puis les étapes numérotées avec les glyphes iOS |
 | `src/lib/phone.ts` | 98 indicatifs et le découpage national de chacun. Les noms de pays viennent d'`Intl.DisplayNames`, donc ils suivent l'orthographe de la plateforme |
-| `src/lib/schedule.ts` | `afterTransition` : ce qui coûte cher (décodage audio, réveil du worker Whisper) attend la fin de la transition de page |
+| `src/lib/schedule.ts` | `afterTransition` : ce qui coûte cher (décodage audio) attend la fin de la transition de page |
 
 ### Le piège WebKit qui faisait perdre des dictées
 
@@ -114,130 +114,107 @@ Deux garde-fous par-dessus :
   20 notes, écrit à chaque lancement). Vérifié : base entièrement supprimée,
   la note et sa transcription sont toujours là.
 
-### Le délai entre le dernier mot et la transcription
+### Le texte pendant la dictée
 
-Le coût est l'inférence, pas le chargement : créer les deux sessions ONNX à
-partir des 406 Mo de poids prend 1,5 à 2 s, une passe sur une fenêtre de 30 s
-en prend 16 sur un seul thread. D'où deux changements.
+La transcription tournait sur le téléphone, avec Whisper en WASM. Sur WebKit
+elle n'avait droit qu'à un seul thread, et il fallait 10 à 20 s entre le
+dernier mot et le texte. Elle part désormais chez Soniox en temps réel : le
+texte s'écrit pendant qu'on parle, et « terminer » ne fait plus qu'arrêter ce
+qui est déjà là.
 
-**1. La dictée est transcrite pendant qu'elle est dite.** Le PCM est pris en
-direct sur le graphe audio (`audio-capture.ts`), coupé en énoncés aux silences
-de plus de 0,6 s — jamais plus court que 12 s, jamais plus long que 27 s, la
-fenêtre de Whisper en faisant 30 — et chaque énoncé part au worker pendant que
-le suivant est prononcé. Les poids sont donc chargés au début de la dictée et
-non à la fin. À l'arrêt il ne reste qu'une passe.
+**Le navigateur ne voit jamais la clé du compte.** Il demande à
+`POST /api/auth/stt-token` une clé temporaire, valable une minute et pour un
+seul flux, que le serveur fabrique chez Soniox avec `SONIOX_API_KEY`. La
+route passe par le même contrôle de session que les autres : seul un
+utilisateur connecté en obtient une. Elle renvoie aussi l'adresse du
+WebSocket et le modèle, si bien qu'on change de région ou de modèle par
+variable d'environnement, sans toucher au front. L'hôte qui fabrique la clé
+se déduit de celui du WebSocket (`stt-rt.eu.soniox.com` → `api.eu.soniox.com`),
+parce qu'une clé n'est valable que dans sa région. Elle voyage dans les
+sous-protocoles du WebSocket : un navigateur ne peut pas y poser d'en-tête, et
+la clé dans le premier message est dépréciée chez Soniox.
 
-C'est une optimisation, jamais l'original. L'audio est stocké comme avant, et
-le chemin est abandonné au moindre doute : une passe qui échoue, un navigateur
-sans AudioWorklet, et surtout une capture qui n'a pas entendu toute la dictée
-— si les secondes captées manquent de plus de 0,8 s à la durée enregistrée,
-le texte en direct est jeté et l'enregistrement entier est transcrit à la fin.
+**Le son est pris sur le graphe audio**, à côté de l'enregistrement mp4 qui,
+lui, est gardé. `audio-capture.ts` en tire du PCM 16 kHz mono, rééchantillonné
+par quarts de seconde, et `soniox.ts` l'envoie en continu. Le flux est
+configuré en français (`language_hints`) avec le glossaire de
+`vocabulary.ts` comme contexte : les noms propres et le jargon sont ce qu'un
+modèle généraliste rate, et quelques centaines de termes ne coûtent rien.
 
-**2. Les threads, partout sauf sur WebKit.** Le budget est la moitié des
-cœurs, quatre au plus, et il est divisé par deux puis retenu dans
-`localStorage` si une session refuse de démarrer. Ils demandent
-`SharedArrayBuffer`, donc l'isolation COOP / COEP de `public/_headers`.
+**Deux sortes de mots reviennent.** Les non-finaux sont une hypothèse qui
+peut encore changer ; les finaux ne sont envoyés qu'une fois et ne bougent
+plus. L'écran montre les finaux suivis de l'hypothèse du moment, reconstruite
+à chaque message, dans le champ `partial` de la note. Ce champ change
+plusieurs fois par seconde : il n'est écrit qu'en mémoire, sans quoi chaque
+mot recopierait dans IndexedDB l'enregistrement entier, qui grossit.
 
-| Moteur | 1 thread | 2 | 3 | 4 |
-| --- | --- | --- | --- | --- |
-| Chromium | 16,4 s | 9,9 s | — | 6,6 s |
-| WebKit | 16,0 s | — | 7,4 s | — |
+**« Terminer »** envoie deux dixièmes de seconde de silence puis la commande
+de finalisation ; Soniox rend alors tout en final et signale la fin par un
+marqueur. Le texte passe dans `transcript`, statut `transcribed`, et le reste
+du parcours ne change pas.
 
-Le gain est réel et on s'en prive quand même sur WebKit : un module WASM en
-mode threadé réserve sa mémoire d'avance, et l'iPhone répond à cette
-réservation en tuant l'onglet dès qu'un enregistrement commence. Le WebKit de
-Playwright l'exécute sans broncher — sur un bureau, avec de la mémoire de
-bureau — ce qui est précisément pourquoi cette mesure-là ne valait rien.
+### Une coupure ne perd pas la dictée
 
-### Un seul moteur, et trois étapes qui se nomment
+Un WebSocket peut rester « ouvert » plusieurs secondes après que plus rien ne
+passe. Et iOS suspend l'onglet quand l'écran se verrouille ou qu'une autre
+app passe devant — le cas de loin le plus fréquent, bien plus qu'une vraie
+coupure réseau. Vus d'ici, les deux se ressemblent, et ils sont traités pareil.
 
-**Le backend est épinglé sur WASM partout**, `device: "wasm"` dans
-`whisper.worker.ts`. Laissé à lui-même, Transformers.js choisit selon
-l'appareil et prendrait WebGPU sur un Chrome de bureau : un second chemin, avec
-ses pannes propres au pilote, pour un modèle déjà assez rapide sur quatre
-threads WASM. Rien ne bascule jamais sur WebGPU, et c'est ce qui permet de
-raisonner sur le comportement de l'iPhone et celui du bureau en même temps.
+**Les dernières secondes de PCM sont gardées.** Chaque mot final porte
+l'instant où son audio se termine : le flux sait toujours jusqu'où Soniox a
+réellement entendu. Soniox ne sait pas reprendre une session ; à la
+reconnexion, une session neuve est ouverte et tout ce qui suit ce point est
+renvoyé. Aucun mot n'est compté deux fois, aucun n'est sauté.
 
-**Trois choses peuvent échouer, et ce ne sont pas le même problème.** Le
-message le dit maintenant, parce qu'« erreur inattendue » n'apprenait rien à
-personne — ni à celui qui dicte, ni à celui qui débogue :
+**Le lien est déclaré mort sans attendre la socket** : rien de reçu depuis
+8 s alors que de l'audio est parti, une file d'envoi qui ne se vide plus, ou
+l'évènement `offline` du téléphone. Une pause ne déclenche rien : elle
+n'envoie que des keepalive, auxquels Soniox ne répond pas. La reconnexion se
+fait avec un délai croissant, de 0,5 à 8 s, et tout de suite quand le réseau
+revient.
 
-| Étape | Message | Où regarder |
-| --- | --- | --- |
-| `download` | « téléchargement du modèle : … » | le réseau, Hugging Face, la place disque |
-| `model` | « chargement du modèle : … » | la mémoire de l'appareil, le runtime ONNX, un cache corrompu |
-| `inference` | « transcription : … » | la passe elle-même |
+**Pendant ce temps l'enregistrement est en pause**, avec un message qui le
+dit, et il reprend seul quand le lien revient. Le tampon n'a donc à couvrir
+que les quelques secondes qu'il a fallu pour s'en apercevoir ; il en garde 30.
+Une reconnexion de moins d'une seconde et demie ne met rien en pause : le
+tampon suffit, et une pause qui clignote n'apprend rien à personne. Quand
+l'app passe en arrière-plan (`visibilitychange`, `pagehide`),
+l'enregistrement est mis en pause et la socket lâchée tout de suite ; au
+retour, le flux se reconnecte, renvoie ce qui n'était pas confirmé, et
+l'enregistrement reprend.
 
-`EngineError` porte l'étape depuis le worker jusqu'à `describe()` dans
-`pipeline.ts`, qui la rend en français devant la cause.
+**Et dessous, l'enregistrement.** Il reste dans IndexedDB jusqu'à ce que
+Notion confirme la note. Si le flux n'a pas porté toute la dictée — un tampon
+débordé, une capture interrompue, un onglet tué en pleine dictée et retrouvé
+au lancement suivant —, le texte en direct est écarté et l'enregistrement est
+renvoyé à Soniox depuis le début. À peu près au rythme où il a été dit, car
+Soniox demande un débit proche du temps réel et coupe les rafales : c'est
+lent, mais c'est un cas rare, et c'est le seul qui sache rendre une dictée
+entière.
 
-**Le worker est relancé s'il s'arrête.** Chaque travail garde une copie de son
-audio — environ 2 Mo pour une fenêtre de 30 s, contre les 406 Mo de poids déjà
-résidents — précisément pour pouvoir être renvoyé à un worker reconstruit. Une
-seule reprise : un second échec est un vrai échec. Un échec de passe garde la
-session en place, un échec de session la reconstruit, parce qu'une
-reconstruction relit les 406 Mo.
-
-**Et s'il s'arrête sans rien dire**, aucun événement ne part et la dictée ne
-revient jamais. Deux chiens de garde l'évitent, parce que les deux phases
-n'ont rien de comparable : `LOAD_MS` 180 s tant que la session n'est pas
-montée, `PASS_MS` 60 s ensuite — le worker annonce `ready` entre les deux, il
-n'y a donc rien à deviner. Un budget unique devrait valoir le plus grand des
-deux, et un moteur coincé resterait muet trois minutes avant de dire quoi que
-ce soit. Mesuré : un chargement à froid à qui on n'accordait que 6 s a échoué
-sur une session qui était seulement lente, ce qui est la pire des deux pannes.
-
-**Vérifié sous Chrome de bureau**, profil neuf, aucune extension, contre la
-production puis contre la version locale : téléchargement des 406 Mo,
-enregistrement, transcription — « Je vous confirme que le dossier de
-financement est signé depuis vendredi dernier. » Puis, panne par panne : worker
-tué en pleine passe → la transcription arrive quand même ; worker arrêté sans
-événement → relancé par le chien de garde, transcription arrivée ; poids en
-cache corrompu → « chargement du modèle : … » ; Hugging Face injoignable →
-« téléchargement du modèle : réseau — … ».
-
-### Trois façons de faire planter un onglet iOS, et le filet dessous
+### Trois façons de faire planter un onglet iOS
 
 Les trois ont été trouvées en une fois, sur le même symptôme : l'onglet meurt
 à l'instant où l'enregistrement démarre et la page se recharge.
 
 - **Un `AudioContext` temps réel forcé à 16 kHz** avec un micro branché
-  dessus. C'était le moyen le plus simple d'obtenir directement le taux
-  d'échantillonnage de Whisper. Le contexte garde maintenant le taux du
-  matériel, et chaque énoncé est rééchantillonné par un
-  `OfflineAudioContext` à 16 kHz — la même mécanique que le décodage d'un
-  enregistrement, donc déjà éprouvée sur l'appareil.
+  dessus. C'était le moyen le plus simple d'obtenir directement les 16 kHz
+  attendus en sortie. Le contexte garde maintenant le taux du matériel, et le
+  son est rééchantillonné par un `OfflineAudioContext` à 16 kHz, un quart de
+  seconde à la fois — la même mécanique que le décodage d'un enregistrement,
+  donc déjà éprouvée sur l'appareil.
 - **Le worklet branché sur la sortie audio.** L'usage veut qu'on relie un
   worklet à `destination` par un gain nul, sinon le moteur risque de ne pas
   l'appeler. Mesuré : il est appelé quand même (326 blocs contre 324 sur
   Chromium, 322 contre 319 sur WebKit). Sur iOS, atteindre la sortie veut
   dire toucher à la session audio du système pendant que le micro est
   ouvert ; on ne la touche plus.
-- **Le pool de threads**, ci-dessus.
+- **Le pool de threads** du moteur WASM de Whisper, qui réservait sa mémoire
+  d'avance. Il est parti avec le moteur.
 
-Et dessous, un filet : iOS ne signale jamais un plantage, il ramène l'onglet.
-`engine-guard.ts` écrit donc une miette dans `localStorage` avant le travail
-à risque et l'efface quand il se termine — ainsi que sur `pagehide` et quand
-la page passe en arrière-plan, qui ne sont pas des plantages. Une miette
-encore là au lancement suivant ne peut vouloir dire qu'une chose : l'onglet
-est mort dessus. Le moteur descend d'un cran, définitivement, et repasse au
-chemin simple.
-
-Mesuré de bout en bout, montre en main entre le bouton « terminer » et le
-texte à l'écran, avec de la vraie parole française injectée dans le micro :
-
-| Durée de la dictée | Avant | Un seul thread (iPhone) | Quatre threads |
-| --- | --- | --- | --- |
-| 8 s | ~10,8 s | ~10 s | **3,7 s** |
-| 12 s | ~11 s | **11 s** | — |
-| 58 s | 38,7 s | **19 à 21 s** | **4,9 s** |
-
-Sur la dictée de 58 s en un seul thread, 130 à 140 des mots sont lisibles à
-l'écran au bout de 9 à 10 s : ils s'affichent au fur et à mesure.
-
-Effet de bord utile : sur la dictée de 58 s, le fichier entier donne 99 mots
-et perd un paragraphe au milieu — le recollement des fenêtres de 30 s de
-Whisper est fragile — là où les énoncés en donnent 154, complets.
+Les deux premières règles restent valables avec Soniox : ne jamais forcer le
+taux d'échantillonnage du contexte, ne jamais relier le worklet à
+`destination`.
 
 ### La bande sous la barre flottante d'iOS 26
 
@@ -278,7 +255,7 @@ Logiques reprises du dépôt Infrastructure et adaptées à Vite :
 | Sujet | Où | Ce que ça règle |
 | --- | --- | --- |
 | Navigation bornée à 3 s dans le service worker | `vite.config.ts` (`networkTimeoutSeconds`) | L'écran blanc au lancement de la PWA iOS quand le réseau traîne : au-delà de 3 s, la coquille en cache s'affiche |
-| `sw.js` jamais mis en cache | `public/_headers` | Une nouvelle version se propage au déploiement suivant, pas des heures après |
+| `sw.js` jamais mis en cache | `vercel.json` | Une nouvelle version se propage au déploiement suivant, pas des heures après |
 | Écrans de lancement iOS | `npm run splash`, `public/splash/` | iOS n'affiche un launch screen que si une image correspond exactement à la résolution du device |
 | Voile de démarrage | `#splash-cover` (`index.html`, `src/main.tsx`) | Pas de flash blanc entre le launch screen natif et l'interface |
 | `100lvh` en mode installé | `src/styles/index.css` | Après la première ouverture du clavier, WebKit rétrécit le viewport et ne le restaure jamais |

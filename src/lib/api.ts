@@ -117,6 +117,13 @@ export const fetchSession = () => call<Session>("/api/session");
 
 export const logout = () => call<{ ok: true }>("/api/auth/logout", { method: "POST", body: "{}" });
 
+// ---- Real-time transcription --------------------------------------------------
+
+/** Everything needed to open one Soniox stream. The key opens one, once. */
+export type SttToken = { apiKey: string; expiresAt: string | null; wsUrl: string; model: string };
+
+export const fetchSttToken = () => call<SttToken>("/api/auth/stt-token", { method: "POST", body: "{}" });
+
 export const fetchContacts = () =>
   call<{ contacts: Contact[]; rollup: boolean; typeOptions: string[] }>("/api/contacts");
 

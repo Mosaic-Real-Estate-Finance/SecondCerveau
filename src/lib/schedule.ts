@@ -1,7 +1,7 @@
 // The page transition is 250 ms of opacity, transform and blur on a
 // full-screen layer. Anything heavy started in the same tick — decoding the
-// audio, waking the Whisper worker — lands on those frames and shows as a
-// stutter. These two helpers keep that work off them.
+// audio, for instance — lands on those frames and shows as a stutter. These
+// two helpers keep that work off them.
 
 const ms = (name: string, fallback: number) => {
   const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();

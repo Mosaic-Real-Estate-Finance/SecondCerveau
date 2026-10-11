@@ -6,9 +6,9 @@ import { Symbol } from "@/components/logo";
 import { noteDate, Screen, statusLabel, TextButton } from "@/components/screen";
 import { useToast } from "@/components/toast";
 import { formatTime, VoiceRecorder } from "@/components/voice-recorder";
-import { storageIsDurable, useNotes, type Note } from "@/lib/notes";
+import { storageIsDurable, useNote, useNotes, type Note } from "@/lib/notes";
 import { pageSlideMs } from "@/lib/schedule";
-import { coolMicrophone, useMeter, useRecorder, warmMicrophone } from "@/lib/use-recorder";
+import { coolMicrophone, useMeter, useRecorder, warmMicrophone, type Hold } from "@/lib/use-recorder";
 
 // The glow stays in the Mosaic blues: navy at the centre, lighter tints of the
 // same hue outward, no hue drift.
@@ -212,11 +212,13 @@ export function RecordScreen({
               <span className="text-base text-on-accent" aria-live="polite">
                 {recorder.state === "error"
                   ? "Enregistrement impossible"
-                  : recorder.paused
-                    ? "En pause"
-                    : recorder.state === "recording"
-                      ? "Enregistrement"
-                      : "Ouverture du micro"}
+                  : recorder.hold
+                    ? "En pause, connexion perdue"
+                    : recorder.paused
+                      ? "En pause"
+                      : recorder.state === "recording"
+                        ? "Enregistrement"
+                        : "Ouverture du micro"}
               </span>
               <TextButton onClick={cancel} className="-mr-3 text-on-accent" tabIndex={open ? 0 : -1}>
                 {recorder.state === "error" ? "Fermer" : "Annuler"}
@@ -225,6 +227,9 @@ export function RecordScreen({
             {recorder.state === "error" ? (
               <p className="text-base text-on-accent">{recorder.error}</p>
             ) : (
+              <LiveText noteId={recorder.noteId} hold={recorder.hold} />
+            )}
+            {recorder.state !== "error" && (
               <LiveRecorder
                 recording={recorder.state === "recording"}
                 paused={recorder.paused}
@@ -345,5 +350,31 @@ function LiveRecorder({
       finishLabel="Terminer l'enregistrement"
       className="w-full"
     />
+  );
+}
+
+// The words as they are recognised, between the status line and the pill.
+// Subscribes to the note on its own, so the text updating several times a
+// second redraws this paragraph alone. Anchored to the bottom and clipped at
+// the top: the newest words are always in view, the oldest fade out above.
+const LIVE_MASK = "linear-gradient(to bottom, transparent 0%, #000 40%)";
+
+const HOLD_TEXT: Record<NonNullable<Hold>, string> = {
+  offline: "La connexion est coupée. L'enregistrement reprendra seul dès qu'elle revient ; rien de ce qui a été dit n'est perdu.",
+  background: "Reprise de l'enregistrement…",
+};
+
+function LiveText({ noteId, hold }: { noteId: string | null; hold: Hold }) {
+  const text = useNote(noteId)?.partial ?? "";
+  return (
+    <div
+      className="flex min-h-0 flex-1 flex-col justify-end overflow-hidden py-2"
+      style={hold ? undefined : { maskImage: LIVE_MASK, WebkitMaskImage: LIVE_MASK }}
+      aria-live="polite"
+    >
+      <p className="text-base leading-snug text-on-accent">
+        {hold ? HOLD_TEXT[hold] : text || <span className="opacity-60">Parlez, le texte s'affiche ici.</span>}
+      </p>
+    </div>
   );
 }

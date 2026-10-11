@@ -396,7 +396,8 @@ a {
 }
 .record-morph.t-morph[data-open="true"] {
   width: min(calc(100vw - 32px), 448px);
-  height: 168px;
+  /* Room for three or four lines of live text between the status and the pill. */
+  height: 236px;
 }
 .record-morph .t-morph-plus {
   inset: auto auto 0 calc(50% - 48px);

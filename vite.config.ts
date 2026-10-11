@@ -6,8 +6,10 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { getHttpsServerOptions } from "office-addin-dev-certs";
 
-// Cross origin isolation unlocks SharedArrayBuffer, which ONNX Runtime needs to
-// run the WASM backend on several threads. Same values as public/_headers.
+// Cross origin isolation. It unlocked SharedArrayBuffer for the multithreaded
+// WASM engine that used to transcribe on the device; nothing needs it since
+// transcription moved to Soniox, and it can go — here and in vercel.json
+// together. Same values as vercel.json.
 const isolation = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -16,7 +18,7 @@ const isolation = {
 // The taskpane is the one place that must NOT be isolated: COEP require-corp
 // blocks office.js, which Microsoft only serves from its own CDN and does not
 // support being bundled, and COOP breaks the sign-in window. In production
-// public/_headers takes the two headers back off for /outlook*; the dev and
+// vercel.json leaves the two headers off /outlook*; the dev and
 // preview servers put them on every path through `server.headers`, so they
 // have to come back off here.
 //
@@ -26,8 +28,8 @@ const isolation = {
 // names are dropped at the source, so whoever writes them later cannot.
 //
 // Deliberately narrow: it only ever touches a /outlook request, and only these
-// two names. The dictation cannot open a microphone or start Whisper without
-// them, so nothing here may be able to reach its responses.
+// two names. The dictation's own responses keep them for as long as they are
+// set, so nothing here may be able to reach those.
 function taskpaneHeaders(): Plugin {
   const banned = Object.keys(isolation).map((name) => name.toLowerCase());
 
@@ -106,8 +108,9 @@ function taskpaneHeaders(): Plugin {
   };
 }
 
-// Runs the Cloudflare Pages Functions in the Vite dev server, so the app talks
-// to the exact same handlers locally and in production.
+// Runs the handlers of functions/api in the Vite dev server, so the app talks
+// to the exact same code locally and in production (where api/ wraps them as
+// Vercel functions).
 function pagesFunctions(env: Record<string, string>): Plugin {
   const routes: Record<string, { file: string; name: string }> = {
     "GET /api/contacts": { file: "/functions/api/contacts.ts", name: "onRequestGet" },
@@ -137,6 +140,7 @@ function pagesFunctions(env: Record<string, string>): Plugin {
     "POST /api/auth/code": { file: "/functions/api/auth.ts", name: "onRequestPost" },
     "POST /api/auth/verify": { file: "/functions/api/auth.ts", name: "onRequestPost" },
     "POST /api/auth/logout": { file: "/functions/api/auth.ts", name: "onRequestPost" },
+    "POST /api/auth/stt-token": { file: "/functions/api/auth.ts", name: "onRequestPost" },
   };
   return {
     name: "pages-functions",
@@ -249,7 +253,6 @@ export default defineConfig(async ({ mode }) => {
         },
       },
     },
-    optimizeDeps: { exclude: ["@huggingface/transformers"] },
     plugins: [
       // `npm run dev:mobile`: HTTPS on the local network with a self-signed
       // certificate, because iOS only opens the microphone on a secure origin.
@@ -286,8 +289,7 @@ export default defineConfig(async ({ mode }) => {
           // so every caching rule below stays exactly as it was.
           importScripts: ["push-sw.js"],
           globPatterns: ["**/*.{js,css,html,svg,png,webp,woff2}"],
-          // The ONNX Runtime binary is cached on first use instead (below),
-          // and the launch screens are only read by iOS, never by the app.
+          // The launch screens are only read by iOS, never by the app.
           //
           // The Outlook taskpane is excluded too, and that one matters: this
           // service worker has scope "/", so it controls /outlook whether the
@@ -295,7 +297,7 @@ export default defineConfig(async ({ mode }) => {
           // served from the dictation's cache — the denylist below only governs
           // the navigation fallback, never an exact precache hit — and the
           // add-in would run on a stale build with no way to notice.
-          globIgnores: ["**/*.wasm", "splash/**", "outlook.html", "outlook/**", "assets/outlook-*.js", "assets/outlook-*.css"],
+          globIgnores: ["splash/**", "outlook.html", "outlook/**", "assets/outlook-*.js", "assets/outlook-*.css"],
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
           navigateFallback: "index.html",
           // The dictation's service worker has scope "/", so without /outlook
@@ -332,14 +334,6 @@ export default defineConfig(async ({ mode }) => {
                 networkTimeoutSeconds: 3,
                 expiration: { maxEntries: 8 },
               },
-            },
-            {
-              // ONNX Runtime binary (about 27 MB), kept out of the precache and
-              // cached on first use. The model weights are cached by
-              // Transformers.js in its own Cache Storage bucket.
-              urlPattern: ({ url }) => url.pathname.endsWith(".wasm"),
-              handler: "CacheFirst",
-              options: { cacheName: "onnxruntime", expiration: { maxEntries: 4 } },
             },
           ],
         },
