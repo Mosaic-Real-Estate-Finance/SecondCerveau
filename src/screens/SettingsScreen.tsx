@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { PrimaryButton, TextButton } from "@/components/screen";
 import { SheetPages } from "@/components/sheet";
+import { cssVar } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 import { Shimmer } from "@/components/shimmer";
 import { useToast } from "@/components/toast";
 import { openInstallInvite } from "@/components/install-invite";
@@ -283,7 +285,9 @@ function PhoneHandoff({ onBack, onUnauthorized }: { onBack: () => void; onUnauth
     setLink(null);
     try {
       const [{ url, expiresIn }, { renderSVG }] = await Promise.all([createHandoff(), import("uqr")]);
-      const svg = renderSVG(url, { ecc: "M", border: 2, blackColor: "#020342", whiteColor: "#ffffff" });
+      // Dark on light in both themes (--qr-* in index.css): scanned inverted,
+      // a code fails on some cameras.
+      const svg = renderSVG(url, { ecc: "M", border: 2, blackColor: cssVar("--qr-ink"), whiteColor: cssVar("--qr-paper") });
       const at = Date.now();
       setNow(at);
       setLink({ svg, until: at + expiresIn * 1000 });
@@ -320,7 +324,13 @@ function PhoneHandoff({ onBack, onUnauthorized }: { onBack: () => void; onUnauth
       </header>
 
       <div className="mt-5 flex justify-center">
-        <div className="relative h-56 w-56 overflow-hidden rounded-2xl bg-white p-2 shadow-[0_0_0_1px_var(--hairline)]">
+        <div
+          className={cn(
+            "relative h-56 w-56 overflow-hidden rounded-2xl p-2 shadow-[0_0_0_1px_var(--hairline)]",
+            // The code's own paper; the messages in its place sit on the page.
+            svg && !expired ? "bg-[color:var(--qr-paper)]" : "bg-white",
+          )}
+        >
           {svg && !expired && (
             <span
               role="img"

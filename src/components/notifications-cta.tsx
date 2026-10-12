@@ -47,7 +47,7 @@ export function NotificationsCta() {
   return (
     <section className="mb-5 rounded-2xl bg-navy p-4 text-on-accent" aria-labelledby="notifications-cta-title">
       <div className="flex items-center gap-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-on-accent/15">
           <Icon name="bell" className="h-4" />
         </span>
         <h2 id="notifications-cta-title" className="text-base font-medium leading-snug">
@@ -67,7 +67,7 @@ export function NotificationsCta() {
           type="button"
           onClick={() => void enable()}
           disabled={busy}
-          className="mt-3 flex h-10 w-full items-center justify-center rounded-xl bg-white font-medium text-navy disabled:opacity-60"
+          className="mt-3 flex h-10 w-full items-center justify-center rounded-xl bg-on-accent font-medium text-navy disabled:opacity-60"
         >
           {busy ? "Activation…" : "Activer les notifications"}
         </button>

@@ -16,6 +16,7 @@ import {
   yourDevice,
   type Platform,
 } from "@/lib/standalone";
+import { cssVar, useColorScheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 // Shown once, a moment after the app opens on a signed in phone that is still
@@ -25,8 +26,9 @@ import { cn } from "@/lib/utils";
 
 const OPEN_DELAY_MS = 2200;
 const CLOSE_MS = 320;
-// The animation paints its own background so the panel reads as one surface.
-const PANEL_BG = "ffffff";
+// The animation paints its own background so the panel reads as one surface:
+// the sheet's own colour (bg-white, the page of the theme), read when it plays.
+const panelBg = () => cssVar("--color-white").replace("#", "");
 
 // The two iOS glyphs the steps point at, from Apple's SF Symbols set:
 // square.and.arrow.up and plus.app, the exact shapes of the Safari toolbar.
@@ -75,6 +77,7 @@ export const openInstallInvite = () => window.dispatchEvent(new Event(OPEN_EVENT
 export function InstallInvite() {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
+  const scheme = useColorScheme();
   const [loaded, setLoaded] = useState(false);
   const [platform, setPlatform] = useState<Platform>("desktop");
   const frame = useRef<HTMLIFrameElement>(null);
@@ -119,10 +122,10 @@ export function InstallInvite() {
   useEffect(() => {
     if (!loaded) return;
     frame.current?.contentWindow?.postMessage(
-      { type: open ? "pwa-anim:play" : "pwa-anim:pause", bg: PANEL_BG },
+      { type: open ? "pwa-anim:play" : "pwa-anim:pause", bg: panelBg() },
       location.origin,
     );
-  }, [open, loaded]);
+  }, [open, loaded, scheme]);
 
   useEffect(() => {
     if (!open) return;

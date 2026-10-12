@@ -9,12 +9,19 @@ import { formatTime, VoiceRecorder } from "@/components/voice-recorder";
 import { useConnectivity, type Connectivity } from "@/lib/connectivity";
 import { storageIsDurable, useNote, useNotes, type Note } from "@/lib/notes";
 import { pageSlideMs } from "@/lib/schedule";
+import { cssVar, useColorScheme } from "@/lib/theme";
 import { coolMicrophone, useMeter, useRecorder, warmMicrophone, type Hold } from "@/lib/use-recorder";
 
 // The glow stays in the Mosaic blues: navy at the centre, lighter tints of the
-// same hue outward, no hue drift.
-const BEAM_COLORS = ["#000082", "#1f1fb0", "#3d3dd6", "#020342", "#5b5be8", "#1f1fb0", "#3d3dd6"];
-const BEAM_BAND = { core: "#000082", above: "#3d3dd6", mid: "#1f1fb0", below: "#020342" };
+// same hue outward, no hue drift. The values are the theme's (--beam-* in
+// index.css), read again when the system turns light or dark.
+const beamPalette = () => {
+  const [core, mid, above, edge, deep] = ["--beam-core", "--beam-mid", "--beam-above", "--beam-edge", "--beam-deep"].map(cssVar);
+  return {
+    colors: [core, mid, above, deep, edge, mid, above],
+    band: { core, above, mid, below: deep },
+  };
+};
 
 // Multipliers on the light theme's own (stroke 1.2, inner 0.85, bloom 0.5),
 // plus a little more colour and a little more gain.
@@ -357,13 +364,16 @@ const BEAM_HEIGHT = "min(56dvh, 460px)";
 // around — the browser refuses to render fixed content below its floating
 // controls, so the glow always ends on that line and used to be sliced
 // across its brightest part. Fading it out over its last tenth means it
-// arrives there already white, the same white the canvas shows underneath,
+// arrives there already faded into the page, whatever the theme,
 // and the light reads as coming from beyond the edge instead of stopping at
 // one. In an installed app there is no bar and no line, and the same fade
 // simply softens the very bottom of the glow.
 const BEAM_MASK = "linear-gradient(to bottom, transparent 0%, #000 34%, #000 90%, transparent 100%)";
 
 function Beam({ stream, paused }: { stream: MediaStream | null; paused: boolean }) {
+  const scheme = useColorScheme();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const palette = useMemo(beamPalette, [scheme]);
   return createPortal(
     <div
       aria-hidden
@@ -376,12 +386,12 @@ function Beam({ stream, paused }: { stream: MediaStream | null; paused: boolean 
     >
       <VoiceBeam
         type="mobile"
-        theme="light"
+        theme={scheme}
         // On hold the glow fades out rather than following the room.
         active={!paused}
         stream={stream}
-        colors={BEAM_COLORS}
-        bandColors={BEAM_BAND}
+        colors={palette.colors}
+        bandColors={palette.band}
         staticColors
         // Denser than the library's light theme, which is tuned for a glow
         // under a chat input rather than one that has a whole phone screen

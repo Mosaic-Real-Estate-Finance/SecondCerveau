@@ -23,6 +23,9 @@
   --color-white-smoke: #f7f7f7;
   /* Text and icons on the navy accent: white in both themes. */
   --color-on-accent: #ffffff;
+  /* Errors only (the code field's ring): the system red, lifted in the dark
+     as iOS does. */
+  --color-danger: #ff3b30;
   --color-transparent: transparent;
   --color-current: currentColor;
 
@@ -57,6 +60,17 @@
   /* Sheets sit on the page's own white; in the dark they are lifted a
      shade, as iOS raises a presented sheet. */
   --sheet-bg: var(--color-white);
+  /* The glow under the microphone, in the Mosaic blues: navy at the core,
+     lighter tints of the same hue outward, the ink at the bottom. */
+  --beam-core: #000082;
+  --beam-mid: #1f1fb0;
+  --beam-above: #3d3dd6;
+  --beam-edge: #5b5be8;
+  --beam-deep: #020342;
+  /* A QR code is scanned dark on light, whatever the theme: some phone
+     cameras do not read one inverted. Its paper and ink stay put. */
+  --qr-paper: #ffffff;
+  --qr-ink: #020342;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
   color-scheme: light dark;
@@ -94,6 +108,13 @@
     --scrim-strong: rgb(0 0 0 / 0.55);
     --shadow: rgb(0 0 0 / 0.5);
     --sheet-bg: #16161f;
+    --color-danger: #ff453a;
+    /* Light on dark, the glow turns to the lifted accent and its tints. */
+    --beam-core: #6366f1;
+    --beam-mid: #4f46e5;
+    --beam-above: #818cf8;
+    --beam-edge: #a5b4fc;
+    --beam-deep: #312e81;
     --shimmer-base: rgb(236 236 246 / 0.45);
     --shimmer-highlight: #ffffff;
   }
@@ -574,7 +595,7 @@ a {
   left: 0;
   right: 0;
   height: 3px;
-  background: rgb(0 0 130 / 0.1);
+  background: color-mix(in srgb, var(--color-navy) 10%, transparent);
 }
 .close-countdown-bar {
   height: 100%;
