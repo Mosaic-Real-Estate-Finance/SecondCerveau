@@ -3,6 +3,7 @@ import {
   type AuthenticationResult,
   type IPublicClientApplication,
 } from "@azure/msal-browser";
+import { authDetail } from "./auth-detail";
 import { chooseEntraConfig, type EntraConfig, type EntraEnv } from "./entra-config";
 
 // Signing in, from inside Outlook.
@@ -64,6 +65,8 @@ export class AuthError extends Error {
     message: string,
     /** True when the host asked the user something and they declined or closed it. */
     public interactionNeeded = false,
+    /** MSAL's own code and message, shown small under the sentence. See ./auth-detail.ts. */
+    public detail: string | null = null,
   ) {
     super(message);
   }
@@ -110,13 +113,17 @@ async function tokenFor(scope: string): Promise<string> {
     return result.accessToken;
   } catch (error) {
     const message = (error as Error)?.message ?? "";
-    // The host's consent window was closed, or a policy refused it. Saying
-    // which is impossible from here; saying that it was asked is not.
+    // The whole error, for whoever opens the console: the sentence below is
+    // for the reader, and the cause is in here.
+    console.error("acquireTokenPopup a échoué", error);
+    // The host's consent window was closed, or a policy refused it. The
+    // sentence stays general; the detail line underneath says which.
     throw new AuthError(
       /user_cancelled|popup_window_error|interaction_required|consent/i.test(message)
         ? "Connexion Microsoft annulée. Réessaye pour autoriser l'accès."
         : "Connexion Microsoft impossible.",
       true,
+      authDetail(error),
     );
   }
 }

@@ -39,6 +39,7 @@ writeFileSync(
       join(root, "functions"),
       join(root, "src/outlook/attachments.ts"),
       join(root, "src/outlook/entra-config.ts"),
+      join(root, "src/outlook/auth-detail.ts"),
     ],
   }),
 );
@@ -58,6 +59,7 @@ const panel = await load("src/outlook/attachments.js");
 const attachments = await load("functions/api/outlook/attachments.js");
 const notes = await load("functions/api/outlook/notes.js");
 const entra = await load("src/outlook/entra-config.js");
+const authDetail = await load("src/outlook/auth-detail.js");
 const auth = await load("functions/_lib/auth.js");
 
 // ---- Identity --------------------------------------------------------------
@@ -531,4 +533,22 @@ test("audience : sans ENTRA_API_CLIENT_ID_TEST, le jeton de test est refusé ; u
   const both = { ...env, ENTRA_API_CLIENT_ID_TEST: TEST_CLIENT };
   const stranger = await tokenFor("api://ffffffff-0000-0000-0000-000000000000");
   assert.equal((await attachments.onRequestGet({ request: limitRequest(stranger), env: both })).status, 401);
+});
+
+// ---- Sign-in failure detail ------------------------------------------------
+
+test("détail de connexion : errorCode et errorMessage, coupé à 200 caractères sur une ligne", () => {
+  const long = `AADSTS50011: The redirect URI\nspecified ${"x".repeat(300)}`;
+  const detail = authDetail.authDetail({ errorCode: "invalid_request", errorMessage: long, message: "ignoré" });
+  assert.ok(detail.startsWith("invalid_request — AADSTS50011: The redirect URI specified x"));
+  assert.equal(detail.length, "invalid_request — ".length + 200);
+  assert.ok(!detail.includes("\n"));
+});
+
+test("détail de connexion : message à défaut d'errorMessage, code seul, rien du tout", () => {
+  assert.equal(authDetail.authDetail(new Error("popup_window_error")), "popup_window_error");
+  assert.equal(authDetail.authDetail({ errorCode: "user_cancelled", errorMessage: "" }), "user_cancelled");
+  assert.equal(authDetail.authDetail({}), null);
+  assert.equal(authDetail.authDetail(null), null);
+  assert.equal(authDetail.authDetail("chaîne"), null);
 });

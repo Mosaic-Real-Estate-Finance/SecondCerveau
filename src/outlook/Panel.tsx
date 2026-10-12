@@ -81,7 +81,7 @@ type Stage =
   | { name: "no-mail" }
   | { name: "protected" }
   | { name: "no-external" }
-  | { name: "failed"; message: string; retry: boolean }
+  | { name: "failed"; message: string; retry: boolean; detail?: string | null }
   | { name: "ready"; data: Loaded }
   | { name: "sending"; data: Loaded; step: string }
   | { name: "sent"; url: string; added: number; created: boolean; imported: number; skipped: SkippedFile[] };
@@ -282,7 +282,9 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
         },
       });
     } catch (error) {
-      if (error instanceof AuthError) return set({ name: "failed", message: error.message, retry: true });
+      if (error instanceof AuthError) {
+        return set({ name: "failed", message: error.message, retry: true, detail: error.detail });
+      }
       if (error instanceof GraphError) return set({ name: "failed", message: error.message, retry: error.status >= 500 });
       const api = error as ApiError;
       set({ name: "failed", message: api.message ?? "Chargement impossible.", retry: api.retry ?? true });
@@ -506,6 +508,13 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
       <Frame>
         <Title>On a eu un petit problème</Title>
         <Muted>{readable(stage.message)}</Muted>
+        {/* The cause, for whoever has to fix it: small, selectable, out of the
+            reader's way. Only sign-in failures carry one. */}
+        {stage.detail && (
+          <p className="select-text break-all font-mono text-2xs leading-snug text-[color:var(--muted)] opacity-80">
+            {stage.detail}
+          </p>
+        )}
         {stage.retry && <PrimaryButton onClick={() => void load()}>Réessayer</PrimaryButton>}
       </Frame>
     );
