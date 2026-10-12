@@ -359,11 +359,56 @@ a {
   flex: 1;
   min-height: 0;
 }
+/* The pages of a sheet (SheetPages in sheet.tsx): one grid cell, so the two
+   pages crossing are drawn over each other, and the same glide as the app's
+   pages, on transform and opacity alone. */
+.sheet-pages {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+.sheet-page {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.sheet-page > * {
+  flex: 1;
+  min-height: 0;
+}
+.sheet-page[data-motion] {
+  will-change: opacity, transform;
+  animation-duration: var(--page-slide-dur), var(--page-fade-dur);
+  animation-timing-function: var(--page-slide-ease), var(--page-fade-ease);
+  animation-fill-mode: both;
+}
+.sheet-page[data-motion^="in"] {
+  animation-name: sheet-page-slide-in, sheet-page-fade-in;
+  animation-delay: var(--page-stagger);
+}
+.sheet-page[data-motion^="out"] {
+  animation-name: sheet-page-slide-out, sheet-page-fade-out;
+  pointer-events: none;
+}
+.sheet-page[data-motion="in-right"] { --sheet-page-x: var(--page-slide-distance); }
+.sheet-page[data-motion="in-left"] { --sheet-page-x: calc(var(--page-slide-distance) * -1); }
+.sheet-page[data-motion="out-left"] { --sheet-page-x: calc(var(--page-slide-distance) * -1); }
+.sheet-page[data-motion="out-right"] { --sheet-page-x: var(--page-slide-distance); }
+@keyframes sheet-page-slide-in { from { transform: translateX(var(--sheet-page-x)); } to { transform: none; } }
+@keyframes sheet-page-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheet-page-slide-out { from { transform: none; } to { transform: translateX(var(--sheet-page-x)); } }
+@keyframes sheet-page-fade-out { from { opacity: 1; } to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .sheet-layer,
   .sheet-scrim,
   .sheet {
     transition: none !important;
+  }
+  .sheet-page[data-motion] {
+    animation: none !important;
+  }
+  .sheet-page[data-motion^="out"] {
+    visibility: hidden;
   }
 }
 

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 
 // Long enough to cover --sheet-dur.
 const CLOSE_MS = 520;
+export const SHEET_CLOSE_MS = CLOSE_MS;
 // Pulled down further than this, or flicked faster, the sheet lets go.
 const DISMISS_PX = 120;
 const DISMISS_SPEED = 0.5; // px per ms
@@ -159,5 +160,49 @@ export function Sheet({
       </div>
     </div>,
     document.body,
+  );
+}
+
+// The pages of one sheet, side by side: a row that opens a second page — the
+// settings' excluded contacts, the QR code — slides it in from the right
+// while the first leaves to the left, and back the other way. The same motion
+// and timing as the app's pages (--page-slide-*), so a sheet's own navigation
+// reads as the rest of the app's.
+//
+// Both pages share one grid cell while they cross, so the sheet measures the
+// taller of the two and never jumps mid-slide; the outgoing one is dropped
+// once its slide is over, and the sheet settles on the new page's height.
+const PAGE_MS = 480;
+
+export function SheetPages({ id, depth, children }: { id: string; depth: number; children: ReactNode }) {
+  const current = useRef({ id, depth, children });
+  const leaving = useRef<{ id: string; children: ReactNode; forward: boolean } | null>(null);
+  const [, redraw] = useReducer((count: number) => count + 1, 0);
+  if (current.current.id !== id) {
+    leaving.current = { id: current.current.id, children: current.current.children, forward: depth > current.current.depth };
+  }
+  current.current = { id, depth, children };
+  const exit = leaving.current;
+
+  useEffect(() => {
+    if (!leaving.current) return;
+    const timer = window.setTimeout(() => {
+      leaving.current = null;
+      redraw();
+    }, PAGE_MS);
+    return () => window.clearTimeout(timer);
+  }, [id]);
+
+  return (
+    <div className="sheet-pages">
+      {exit && (
+        <div key={exit.id} className="sheet-page" data-motion={exit.forward ? "out-left" : "out-right"} inert aria-hidden>
+          {exit.children}
+        </div>
+      )}
+      <div key={id} className="sheet-page" data-motion={exit ? (exit.forward ? "in-right" : "in-left") : undefined}>
+        {children}
+      </div>
+    </div>
   );
 }

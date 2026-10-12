@@ -33,6 +33,17 @@
     <title>Mosaic</title>
   </head>
   <body>
+    <!-- Before anything reads it, the install manifest of a page opened on
+         /?installer=<token> starts there: the app added to an iPhone's home
+         screen signs itself in with it (App.tsx). Here rather than in the
+         bundle, so the manifest is right from the first moment of the page. -->
+    <script>
+      (function () {
+        var token = new URLSearchParams(location.search).get("installer");
+        var link = document.querySelector('link[rel="manifest"]');
+        if (token && /^[A-Za-z0-9_-]{43}$/.test(token) && link) link.href = "/api/auth/manifest?t=" + token;
+      })();
+    </script>
     <!-- Held over the app until React paints, so an installed app goes from
          the native launch screen to the interface without a white flash. -->
     <div id="splash-cover" aria-hidden="true"></div>

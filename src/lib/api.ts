@@ -118,8 +118,8 @@ export const fetchSession = () => call<Session>("/api/session");
 export const logout = () => call<{ ok: true }>("/api/auth/logout", { method: "POST", body: "{}" });
 
 /** A sign-in link for a phone, shown as a QR code on the computer. */
-export const createHandoff = () =>
-  call<{ url: string; expiresIn: number }>("/api/auth/handoff", { method: "POST", body: "{}" });
+export const createHandoff = (options: { install?: boolean } = {}) =>
+  call<{ url: string; expiresIn: number }>("/api/auth/handoff", { method: "POST", body: JSON.stringify(options) });
 
 /** The phone side: the token from that link opens a session here. */
 export const redeemHandoff = (token: string) =>

@@ -7,6 +7,7 @@ import {
   clearedCookie,
   createHandoff,
   handoffShape,
+  type HandoffKind,
   issueSession,
   readSession,
   redeemHandoff,
@@ -130,20 +131,23 @@ async function sttToken(request: Request, env: Parameters<Handler>[0]["env"]) {
 
 // ---- From the computer to the phone -----------------------------------------
 //
-// /handoff: the signed-in computer asks for a sign-in link to show as a QR
-// code. /redeem: the phone that opened it gets its session. GET /manifest:
-// the install manifest, whose start address carries the token, so that the
-// app installed on an iPhone — which does not share Safari's cookies — signs
-// itself in on its first launch. See session.ts.
+// /handoff: a signed-in device asks for a sign-in link — the computer, to show
+// as a QR code; Safari on an iPhone, for the app it is about to install.
+// /redeem: the device that opened it gets its session. GET /manifest: the
+// install manifest, whose start address carries the install token, so that
+// the app installed on an iPhone — which does not share Safari's cookies —
+// signs itself in on its first launch. See session.ts.
 
-const PARAM = "connexion";
+const PARAM: Record<HandoffKind, string> = { qr: "connexion", install: "installer" };
 
 async function handoff(request: Request, env: Parameters<Handler>[0]["env"]) {
   const denied = await guard(request, env);
   if (denied instanceof Response) return denied;
+  const body = (await request.json().catch(() => ({}))) as { install?: unknown };
+  const kind: HandoffKind = body.install === true ? "install" : "qr";
   try {
-    const { token, expiresIn } = await createHandoff(env, denied.user.email);
-    const url = new URL(`/?${PARAM}=${token}`, new URL(request.url).origin).href;
+    const { token, expiresIn } = await createHandoff(env, denied.user.email, kind);
+    const url = new URL(`/?${PARAM[kind]}=${token}`, new URL(request.url).origin).href;
     return json({ url, expiresIn });
   } catch {
     return unavailable();
@@ -153,15 +157,27 @@ async function handoff(request: Request, env: Parameters<Handler>[0]["env"]) {
 async function redeem(request: Request, env: Parameters<Handler>[0]["env"]) {
   const body = (await request.json().catch(() => ({}))) as { token?: unknown };
   if (!handoffShape(body.token)) return json({ error: "Lien de connexion invalide." }, 400);
-  let email: string | null;
+  let held: Awaited<ReturnType<typeof redeemHandoff>>;
   try {
-    email = await redeemHandoff(env, body.token);
+    held = await redeemHandoff(env, body.token);
   } catch {
     return unavailable();
   }
   // Still on the list: a token outlives nothing that users.ts takes away.
-  const user = email ? findUser(email) : undefined;
-  if (!user) return json({ error: "Ce QR code a expiré. Affichez-en un nouveau depuis l'ordinateur." }, 401);
+  const user = held ? findUser(held.email) : undefined;
+  // Which step of the trip from the computer worked, for the logs — never the token.
+  console.info(`handoff redeem: ${held ? held.kind : "spent or expired"}${held && !user ? " (unknown user)" : ""}`);
+  if (!user) {
+    return json(
+      {
+        error:
+          held?.kind === "install" || !held
+            ? "Ce lien de connexion a expiré. Connectez-vous avec un code, ou scannez un nouveau QR code."
+            : "Ce QR code a expiré. Affichez-en un nouveau depuis l'ordinateur.",
+      },
+      401,
+    );
+  }
   const response = json({ email: user.email, firstName: user.firstName });
   response.headers.append("Set-Cookie", await issueSession(env, user.email));
   return response;
@@ -175,7 +191,7 @@ async function manifest(request: Request) {
   if (!base) return json({ error: "Manifeste indisponible" }, 502);
   // Same app, same identity: only where it starts changes. The token is not
   // checked here; it is checked when the app spends it.
-  const start = handoffShape(token) ? `/?${PARAM}=${token}` : "/";
+  const start = handoffShape(token) ? `/?${PARAM.install}=${token}` : "/";
   return new Response(JSON.stringify({ ...base, id: "/", start_url: start }), {
     headers: { "Content-Type": "application/manifest+json", "Cache-Control": "no-store" },
   });

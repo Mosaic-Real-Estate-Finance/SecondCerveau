@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { renderSVG } from "uqr";
 import { PrimaryButton, TextButton } from "@/components/screen";
+import { SHEET_CLOSE_MS, SheetPages } from "@/components/sheet";
 import { Shimmer } from "@/components/shimmer";
 import { useToast } from "@/components/toast";
 import { openInstallInvite } from "@/components/install-invite";
@@ -31,11 +32,13 @@ export function SettingsScreen({
     setView(next);
     onExpand(next === "excluded");
   };
-  // Back to the first view whenever the sheet is opened again.
+  // Back to the first view whenever the sheet is opened again — once it is
+  // out of sight, so the closing sheet does not slide its pages on the way.
   useEffect(() => {
     if (active) return;
-    setView("main");
     onExpand(false);
+    const timer = window.setTimeout(() => setView("main"), SHEET_CLOSE_MS);
+    return () => window.clearTimeout(timer);
   }, [active, onExpand]);
   const [push, setPush] = useState<"unknown" | "on" | "off">("unknown");
   const [busy, setBusy] = useState(false);
@@ -86,77 +89,84 @@ export function SettingsScreen({
     }
   };
 
-  if (view === "excluded") return <ExcludedContacts onBack={() => show("main")} onUnauthorized={onSignedOut} />;
-  if (view === "phone") return <PhoneHandoff onBack={() => show("main")} onUnauthorized={onSignedOut} />;
+  // The second pages slide in beside the first, as every page of the app.
+  const page =
+    view === "excluded" ? (
+      <ExcludedContacts onBack={() => show("main")} onUnauthorized={onSignedOut} />
+    ) : view === "phone" ? (
+      <PhoneHandoff onBack={() => show("main")} onUnauthorized={onSignedOut} />
+    ) : null;
 
   return (
-    <div>
-      {/* A sheet's header: the title, and the way out on the right. */}
-      <header className="mb-4 flex items-center justify-between">
-        <h1 className="font-serif text-2xl">Réglages</h1>
-        <TextButton onClick={onBack} className="-mr-3">
-          OK
-        </TextButton>
-      </header>
+    <SheetPages id={view} depth={page ? 1 : 0}>
+      {page ?? (
+        <div>
+          {/* A sheet's header: the title, and the way out on the right. */}
+          <header className="mb-4 flex items-center justify-between">
+            <h1 className="font-serif text-2xl">Réglages</h1>
+            <TextButton onClick={onBack} className="-mr-3">
+              OK
+            </TextButton>
+          </header>
 
-      {desktop ? (
-        <button
-          type="button"
-          onClick={() => show("phone")}
-          className="flex w-full items-center gap-3 rounded-2xl bg-white-smoke p-4 text-left"
-        >
-          <span className="min-w-0 flex-1">
-            <span className="block text-base font-medium">Installer l'application sur mon téléphone</span>
-            <span className="mt-1 block text-xs text-[color:var(--muted)]">
-              Ajoutez l'app sur votre téléphone pour enregistrer des notes plus facilement.
-            </span>
-          </span>
-          <Chevron />
-        </button>
-      ) : (
-        <section className="rounded-2xl bg-white-smoke p-4">
-          <h2 className="text-base font-medium">Notifications</h2>
-          {installed && pushSupported() ? (
-            <>
-              <p className="mt-1 text-xs text-[color:var(--muted)]">
-                Une réunion ajoutée, des personnes à valider, ou une réunion qui n'a pas pu être enregistrée. Jamais de
-                résumé ni de transcription.
-              </p>
-              {/* The one thing to touch in this card, set apart on its own plate. */}
-              <label className="mt-3 flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
-                <span className="text-base font-medium">Recevoir les notifications</span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  checked={push === "on"}
-                  disabled={busy || push === "unknown"}
-                  onChange={() => void toggle()}
-                  className="h-6 w-6 accent-[color:var(--color-navy)]"
-                />
-              </label>
-            </>
-          ) : installed ? (
-            <p className="mt-1 text-xs text-[color:var(--muted)]">
-              {isIOS()
-                ? `${detectDevice() === "ipad" ? "Cet iPad" : "Cet iPhone"} ne reçoit pas les notifications : iOS 16.4 ou plus récent est requis.`
-                : "Ce navigateur ne reçoit pas les notifications."}
-            </p>
+          {desktop ? (
+            <button
+              type="button"
+              onClick={() => show("phone")}
+              className="flex w-full items-center gap-3 rounded-2xl bg-white-smoke p-4 text-left"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-base font-medium">Installer l'application sur mon téléphone</span>
+                <span className="mt-1 block text-xs text-[color:var(--muted)]">
+                  Ajoutez l'app sur votre téléphone pour enregistrer des notes plus facilement.
+                </span>
+              </span>
+              <Chevron />
+            </button>
           ) : (
-            <>
-              <p className="mt-1 text-xs text-[color:var(--muted)]">
-                Les notifications n'arrivent que dans l'application installée sur l'écran d'accueil.
-              </p>
-              <button
-                type="button"
-                onClick={openInstallInvite}
-                className="mt-3 flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-left text-base font-medium text-navy"
-              >
-                Installer l'application
-                <Chevron />
-              </button>
-            </>
-          )}
-        </section>
+            <section className="rounded-2xl bg-white-smoke p-4">
+              <h2 className="text-base font-medium">Notifications</h2>
+              {installed && pushSupported() ? (
+                <>
+                  <p className="mt-1 text-xs text-[color:var(--muted)]">
+                    Une réunion ajoutée, des personnes à valider, ou une réunion qui n'a pas pu être enregistrée. Jamais de
+                    résumé ni de transcription.
+                  </p>
+                  {/* The one thing to touch in this card, set apart on its own plate. */}
+                  <label className="mt-3 flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
+                    <span className="text-base font-medium">Recevoir les notifications</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={push === "on"}
+                      disabled={busy || push === "unknown"}
+                      onChange={() => void toggle()}
+                      className="h-6 w-6 accent-[color:var(--color-navy)]"
+                    />
+                  </label>
+                </>
+              ) : installed ? (
+                <p className="mt-1 text-xs text-[color:var(--muted)]">
+                  {isIOS()
+                    ? `${detectDevice() === "ipad" ? "Cet iPad" : "Cet iPhone"} ne reçoit pas les notifications : iOS 16.4 ou plus récent est requis.`
+                    : "Ce navigateur ne reçoit pas les notifications."}
+                </p>
+              ) : (
+                <>
+                  <p className="mt-1 text-xs text-[color:var(--muted)]">
+                    Les notifications n'arrivent que dans l'application installée sur l'écran d'accueil.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={openInstallInvite}
+                    className="mt-3 flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-left text-base font-medium text-navy"
+                  >
+                    Installer l'application
+                    <Chevron />
+                  </button>
+                </>
+              )}
+            </section>
       )}
 
       <button
@@ -184,6 +194,8 @@ export function SettingsScreen({
         Se déconnecter
       </PrimaryButton>
     </div>
+      )}
+    </SheetPages>
   );
 }
 

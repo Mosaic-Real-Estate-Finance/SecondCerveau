@@ -91,40 +91,35 @@ export async function checkCode(env: Env, email: string, code: string): Promise<
 //
 // The settings, on a computer, show a QR code: the phone that scans it is
 // signed in as the same person without typing a code. The code carries a
-// token that is long, random, short-lived and good for two sign-ins at most.
+// token that is long, random, short-lived and good for one sign-in.
 //
-// Two, not one, because of iOS: an app installed on the home screen keeps its
-// own cookies, apart from Safari's. Safari signs in with the first use, to
-// show the install guide; the installed app, which starts on an address that
-// carries the same token, signs in with the second. Android shares Chrome's
-// cookies with the installed app and leaves the second unused.
+// iOS needs a second one. An app added to the home screen keeps its own
+// cookies, apart from Safari's: signed in in Safari, it would still ask for a
+// code. So Safari, once signed in, asks for an install token, and reloads on
+// an address that carries it, with a manifest that starts there too: the
+// installed app starts on that address and signs itself in with it on its
+// first launch. It lives longer, the time to read the guide and install.
 //
 // Stored hashed with the server secret, like the codes: a read of the store
-// does not hand anyone a working token.
+// does not hand anyone a working token. Each is spent in one atomic read.
 
-const HANDOFF_TTL = 10 * 60;
-const HANDOFF_USES = 2;
+export type HandoffKind = "qr" | "install";
+const HANDOFF_TTL: Record<HandoffKind, number> = { qr: 10 * 60, install: 30 * 60 };
 
 const handoffHash = (env: Env, token: string) => createHmac("sha256", secret(env)).update(`handoff:${token}`).digest("hex");
 
 export const handoffShape = (token: unknown): token is string => typeof token === "string" && /^[A-Za-z0-9_-]{43}$/.test(token);
 
-/** A fresh token for `email`, valid ten minutes. */
-export async function createHandoff(env: Env, email: string): Promise<{ token: string; expiresIn: number }> {
+/** A fresh single-use token for `email`. */
+export async function createHandoff(env: Env, email: string, kind: HandoffKind): Promise<{ token: string; expiresIn: number }> {
   const token = randomBytes(32).toString("base64url");
-  await redis(env).set(KEYS.handoff(handoffHash(env, token)), { email, uses: 0 }, { ex: HANDOFF_TTL });
-  return { token, expiresIn: HANDOFF_TTL };
+  await redis(env).set(KEYS.handoff(handoffHash(env, token)), { email, kind }, { ex: HANDOFF_TTL[kind] });
+  return { token, expiresIn: HANDOFF_TTL[kind] };
 }
 
-/** The address the token was made for, or null once it is spent or expired. */
-export async function redeemHandoff(env: Env, token: string): Promise<string | null> {
-  const store = redis(env);
-  const key = KEYS.handoff(handoffHash(env, token));
-  const held = await store.get<{ email: string; uses: number }>(key);
-  if (!held || held.uses >= HANDOFF_USES) return null;
-  if (held.uses + 1 >= HANDOFF_USES) await store.del(key);
-  else await store.set(key, { ...held, uses: held.uses + 1 }, { keepTtl: true });
-  return held.email;
+/** What the token was made for, or null once it is spent or expired. */
+export async function redeemHandoff(env: Env, token: string): Promise<{ email: string; kind: HandoffKind } | null> {
+  return (await redis(env).getdel<{ email: string; kind: HandoffKind }>(KEYS.handoff(handoffHash(env, token)))) ?? null;
 }
 
 // ---- Sessions ---------------------------------------------------------------
