@@ -168,9 +168,10 @@ export function Sheet({
 // and timing as the app's pages (--page-slide-*), so a sheet's own navigation
 // reads as the rest of the app's.
 //
-// Both pages share one grid cell while they cross, so the sheet measures the
-// taller of the two and never jumps mid-slide; the outgoing one is dropped
-// once its slide is over, and the sheet settles on the new page's height.
+// The two pages cross in one grid cell, the outgoing one out of the flow
+// (index.css): the sheet takes the incoming page's height as the slide
+// starts, growing or shrinking with it, and the outgoing page is dropped once
+// its slide is over.
 const PAGE_MS = 480;
 
 export function SheetPages({ id, depth, children }: { id: string; depth: number; children: ReactNode }) {
