@@ -28,6 +28,8 @@ export type Env = {
   // The Outlook add-in. Both empty: the Microsoft token path is off and only
   // the dictation's header identifies a caller.
   ENTRA_API_CLIENT_ID?: string;
+  /** The test tenant's registration, accepted alongside the main one. Optional. */
+  ENTRA_API_CLIENT_ID_TEST?: string;
   ENTRA_TENANT_IDS?: string;
   INTERNAL_DOMAINS?: string;
   // The Read AI sync and the PWA session (feature 002).

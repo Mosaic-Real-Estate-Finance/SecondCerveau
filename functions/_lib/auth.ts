@@ -53,7 +53,13 @@ const tenantsOf = (env: Env) =>
     .map((tenant) => tenant.trim())
     .filter(Boolean);
 
-export const bearerPathEnabled = (env: Env) => Boolean(env.ENTRA_API_CLIENT_ID) && tenantsOf(env).length > 0;
+// Two app registrations can issue tokens for this API: Mosaic's, and the one in
+// Théo's test tenant (ENTRA_API_CLIENT_ID_TEST, optional). Each lives in its
+// own tenant; ENTRA_TENANT_IDS lists both tenants.
+const clientIdsOf = (env: Env) =>
+  [env.ENTRA_API_CLIENT_ID, env.ENTRA_API_CLIENT_ID_TEST].map((id) => (id ?? "").trim()).filter(Boolean);
+
+export const bearerPathEnabled = (env: Env) => clientIdsOf(env).length > 0 && tenantsOf(env).length > 0;
 
 // Both spellings of the audience are accepted, and that is not laxity.
 //
@@ -61,8 +67,9 @@ export const bearerPathEnabled = (env: Env) => Boolean(env.ENTRA_API_CLIENT_ID) 
 // `aud`; a v1.0 token carries its Application ID URI, `api://<client-id>`.
 // Which one the app registration issues depends on its
 // `accessTokenAcceptedVersion`, a field nobody looks at until tokens start
-// being rejected. Both forms name the same registration, so both are checked.
-const audiencesOf = (env: Env) => [env.ENTRA_API_CLIENT_ID!, `api://${env.ENTRA_API_CLIENT_ID}`];
+// being rejected. Both forms name the same registration, so both are checked,
+// for each registration.
+export const audiencesOf = (env: Env) => clientIdsOf(env).flatMap((id) => [id, `api://${id}`]);
 
 /** Why a bearer was refused, so the caller can say something useful in French. */
 export type AuthFailure = "token" | "tenant" | "expired" | "user" | "session" | "unavailable";

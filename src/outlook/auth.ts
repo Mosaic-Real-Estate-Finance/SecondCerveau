@@ -3,6 +3,7 @@ import {
   type AuthenticationResult,
   type IPublicClientApplication,
 } from "@azure/msal-browser";
+import { chooseEntraConfig, type EntraConfig, type EntraEnv } from "./entra-config";
 
 // Signing in, from inside Outlook.
 //
@@ -23,13 +24,40 @@ import {
 // to authorize access a security anti-pattern, and it is right: an access
 // token carries the same identity claims and can actually be validated.
 
-const CLIENT_ID = import.meta.env.VITE_ENTRA_CLIENT_ID ?? "";
-const AUTHORITY = import.meta.env.VITE_ENTRA_AUTHORITY ?? "https://login.microsoftonline.com/common";
-const API_SCOPE = import.meta.env.VITE_ENTRA_API_SCOPE ?? "";
 const GRAPH_SCOPE = "https://graph.microsoft.com/Mail.Read";
 
+// Two app registrations, Mosaic's and the test tenant's: which one is decided
+// once per session from the mailbox address, before MSAL exists. See
+// ./entra-config.ts.
+let config: EntraConfig | null = null;
+
+// Named one by one: Vite replaces each with its value at build time, where
+// handing over import.meta.env whole would inline every VITE_ variable.
+const ENV: EntraEnv = {
+  VITE_ENTRA_CLIENT_ID: import.meta.env.VITE_ENTRA_CLIENT_ID,
+  VITE_ENTRA_AUTHORITY: import.meta.env.VITE_ENTRA_AUTHORITY,
+  VITE_ENTRA_API_SCOPE: import.meta.env.VITE_ENTRA_API_SCOPE,
+  VITE_ENTRA_CLIENT_ID_TEST: import.meta.env.VITE_ENTRA_CLIENT_ID_TEST,
+  VITE_ENTRA_AUTHORITY_TEST: import.meta.env.VITE_ENTRA_AUTHORITY_TEST,
+  VITE_ENTRA_API_SCOPE_TEST: import.meta.env.VITE_ENTRA_API_SCOPE_TEST,
+  VITE_ENTRA_TEST_DOMAINS: import.meta.env.VITE_ENTRA_TEST_DOMAINS,
+};
+
+/**
+ * Picks the registration for this mailbox. Called once Office is ready, with
+ * the address Outlook reports (main.tsx). Ignored once MSAL has been created:
+ * a nestable client stays bound to the client id it was built with.
+ */
+export function selectEntraConfig(email: string | null | undefined): EntraConfig {
+  if (!client) config = chooseEntraConfig(email, ENV);
+  return active();
+}
+
+/** The chosen registration; the main one if nothing chose before the first use. */
+const active = () => (config ??= chooseEntraConfig(null, ENV));
+
 /** False when no app registration is configured: the panel then says so and calls nothing. */
-export const configured = () => Boolean(CLIENT_ID && API_SCOPE);
+export const configured = () => Boolean(active().clientId && active().apiScope);
 
 export class AuthError extends Error {
   constructor(
@@ -44,11 +72,16 @@ export class AuthError extends Error {
 let client: Promise<IPublicClientApplication> | null = null;
 
 function app() {
+  const { clientId, authority } = active();
   client ??= createNestablePublicClientApplication({
     // No redirect URI here: with nested app authentication the host brokers
     // the response, and the `brk-multihub://<origin>` SPA redirect declared on
-    // the app registration is what it matches against.
-    auth: { clientId: CLIENT_ID, authority: AUTHORITY },
+    // the app registration is what it matches against. Both registrations
+    // need it.
+    //
+    // The localStorage cache is keyed by client id, so the two registrations
+    // never read each other's tokens.
+    auth: { clientId, authority },
     cache: { cacheLocation: "localStorage" },
   });
   return client;
@@ -89,7 +122,7 @@ async function tokenFor(scope: string): Promise<string> {
 }
 
 /** For our own routes. The server verifies this one. */
-export const apiToken = () => tokenFor(API_SCOPE);
+export const apiToken = () => tokenFor(active().apiScope);
 
 /** For Microsoft Graph, to read the thread. */
 export const graphToken = () => tokenFor(GRAPH_SCOPE);
