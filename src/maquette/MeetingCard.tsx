@@ -606,6 +606,12 @@ function PersonSheet({
   );
 }
 
+const OPTION_ICON_SIZE: Partial<Record<IconName, string>> = {
+  "square.and.pencil": "h-[19px]",
+  "person.line.dotted.person": "h-[15px]",
+  "person.fill.xmark": "h-[15px]",
+};
+
 function Option({
   icon,
   title,
@@ -623,9 +629,12 @@ function Option({
       onClick={onClick}
       className="flex w-full items-center gap-3 rounded-2xl bg-white-smoke p-4 text-left"
     >
-      {/* One frame for every symbol, however wide: each is fitted inside it
-          and the titles line up. */}
-      <Icon name={icon} className="h-5 w-8 shrink-0 text-navy [&>svg]:w-full" />
+      {/* Sized by eye, not by file: the pencil's export carries a margin,
+          the person fills its own, the pair is twice as wide. Each height
+          below draws its glyph about 16px tall, in one 36px column. */}
+      <span className="flex w-9 shrink-0 justify-center text-navy">
+        <Icon name={icon} className={OPTION_ICON_SIZE[icon]} />
+      </span>
       <span className="min-w-0 flex-1">
         <span className="block font-medium">{title}</span>
         <span className="mt-0.5 block text-xs text-[color:var(--muted)]">
