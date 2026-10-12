@@ -97,3 +97,42 @@ export const installPrompt = {
     }
   },
 };
+
+// ---- Saying which device this is -------------------------------------------
+// The team is on iPhone and on Android: a sentence naming « l'iPhone » or its
+// Réglages is only ever shown to an iPhone. Read from the user agent; an iPad
+// on iPadOS 13+ passes for a Mac and is caught by its touch points (isIOS).
+
+export type Device = "iphone" | "ipad" | "android" | "other";
+
+export function detectDevice(): Device {
+  if (typeof navigator === "undefined") return "other";
+  const ua = navigator.userAgent;
+  if (/iPhone|iPod/.test(ua)) return "iphone";
+  if (isIOS()) return "ipad";
+  if (/Android/i.test(ua)) return "android";
+  return "other";
+}
+
+/** « votre iPhone », « votre téléphone »… for the middle of a sentence. */
+export function yourDevice(device = detectDevice()): string {
+  return { iphone: "votre iPhone", ipad: "votre iPad", android: "votre téléphone", other: "cet appareil" }[device];
+}
+
+/** « cet iPhone », « ce téléphone »… */
+export function thisDevice(device = detectDevice()): string {
+  return { iphone: "cet iPhone", ipad: "cet iPad", android: "ce téléphone", other: "cet appareil" }[device];
+}
+
+/** Where notifications are turned back on once refused, on this device. */
+export function notificationSettingsPath(device = detectDevice()): string {
+  switch (device) {
+    case "iphone":
+    case "ipad":
+      return "Réglages › Notifications › Mosaic";
+    case "android":
+      return "Paramètres › Applications › Mosaic › Notifications";
+    default:
+      return "les réglages du navigateur, pour ce site";
+  }
+}

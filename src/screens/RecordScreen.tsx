@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { VoiceBeam } from "voice-glow";
 import { Icon } from "@/components/icon";
@@ -28,6 +28,32 @@ const BEAM_DENSITY = {
   // Breathing between words, so the screen never looks dead mid sentence.
   idle: 0.26,
 } as const;
+
+// The microphone is fixed, so it can grow into the recording panel in place;
+// its centre is computed rather than left to the middle of the window. On a
+// short window — a desktop browser, a phone in landscape — the middle of the
+// window is inside the greeting, and the button covered it.
+const BUTTON = 96;
+/** The open panel's height, as in index.css (.record-morph[data-open]). */
+const PANEL = 236;
+const GAP = 16;
+
+/**
+ * Where the button's centre goes: in the middle of the free band between the
+ * greeting and the pending list (or the bottom of the screen), never over the
+ * greeting, and low enough that the open panel still fits on the screen.
+ */
+function placeButton(greeting: HTMLElement | null, pending: HTMLElement | null): number {
+  const height = window.innerHeight;
+  const top = greeting ? greeting.getBoundingClientRect().bottom + greeting.closest(".t-page")!.scrollTop : 0;
+  const floor = pending ? pending.getBoundingClientRect().top + pending.closest(".t-page")!.scrollTop : height;
+  const highest = top + GAP + BUTTON / 2;
+  const lowest = Math.min(floor - GAP - BUTTON / 2, height - GAP - PANEL / 2);
+  const middle = (top + Math.min(floor, height)) / 2;
+  // No room at all: under the greeting, whatever is below. The list scrolls;
+  // the greeting is what the button must not hide.
+  return Math.max(highest, Math.min(middle, lowest));
+}
 
 const PROMPTS = ["Qu'est-ce qu'on note aujourd'hui ?", "Un point à enregistrer ?", "Une info à enregistrer ?"];
 
@@ -61,6 +87,10 @@ export function RecordScreen({
   // turned into text live, on the network. A dictation already under way is
   // not interrupted by this — it holds and resumes on its own (use-recorder).
   const connectivity = useConnectivity(active);
+
+  const greetingRef = useRef<HTMLDivElement>(null);
+  const pendingRef = useRef<HTMLElement>(null);
+  const [centre, setCentre] = useState<number | null>(null);
   const blocked = !open && !recording && connectivity.status !== "online" && connectivity.status !== "checking";
   // While a bad link is being checked again, the screen stays on what it said.
   const [shownBlocked, setShownBlocked] = useState(false);
@@ -78,6 +108,21 @@ export function RecordScreen({
   // Pointer down, not click: the recording starts as the finger lands, about
   // a tenth of a second before the click would fire. The click stays for
   // keyboards and screen readers.
+  // Measured after layout and again whenever the window, the greeting or the
+  // list changes size.
+  useLayoutEffect(() => {
+    const place = () => setCentre(placeButton(greetingRef.current, pendingRef.current));
+    place();
+    const observer = new ResizeObserver(place);
+    if (greetingRef.current) observer.observe(greetingRef.current);
+    if (pendingRef.current) observer.observe(pendingRef.current);
+    window.addEventListener("resize", place);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", place);
+    };
+  }, [offline, pending.length > 0]);
+
   const openPanel = () => {
     if (open || offline) return;
     setOpen(true);
@@ -170,9 +215,11 @@ export function RecordScreen({
         />
       ) : (
         <>
-          <div className="flex flex-col items-center pt-[5vh] text-center">
-            <Symbol className="h-16 text-midnight-blue" />
-            <h1 className="mt-8 text-balance font-serif text-2xl">
+          {/* On a short window the logo goes first, then the type tightens:
+              the greeting and the button must both fit above the fold. */}
+          <div ref={greetingRef} className="flex flex-col items-center pt-[5vh] text-center">
+            <Symbol className="h-16 text-midnight-blue [@media(max-height:640px)]:hidden" />
+            <h1 className="mt-8 text-balance font-serif text-2xl [@media(max-height:640px)]:mt-0 [@media(max-height:520px)]:text-xl">
               Bonjour {firstName},
               <br />
               {prompt}
@@ -183,7 +230,7 @@ export function RecordScreen({
       )}
 
       {pending.length > 0 && (
-        <section aria-labelledby="pending-title" className="pb-2">
+        <section ref={pendingRef} aria-labelledby="pending-title" className="pb-2">
           <h2 id="pending-title" className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
             En attente
           </h2>
@@ -230,7 +277,8 @@ export function RecordScreen({
 
       {/* Centred on the screen, growing into the recording panel. */}
       <div
-        className="pointer-events-none fixed inset-0 z-20 mx-auto flex max-w-[480px] items-center justify-center px-4"
+        className="pointer-events-none fixed inset-x-0 z-20 mx-auto flex max-w-[480px] items-center justify-center px-4"
+        style={{ top: (centre ?? window.innerHeight / 2) - PANEL, height: PANEL * 2 }}
         hidden={offline}
       >
         <div className="record-morph t-morph pointer-events-auto" data-open={open} data-quiet={quiet || undefined}>

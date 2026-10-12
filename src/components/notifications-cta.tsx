@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/icon";
 import { enablePush, pushOptedOut, pushSupported } from "@/lib/push";
-import { isStandalone } from "@/lib/standalone";
+import { isStandalone, notificationSettingsPath, thisDevice, yourDevice } from "@/lib/standalone";
 
 // At the top of « Notifications » while they are off on this device. This is
 // the screen the notifications lead to, so it is where their absence costs
@@ -45,27 +45,29 @@ export function NotificationsCta() {
   };
 
   return (
-    <section className="mb-6 rounded-3xl bg-navy p-5 text-on-accent" aria-labelledby="notifications-cta-title">
-      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15">
-        <Icon name="bell" className="h-[22px]" />
-      </span>
-      <h2 id="notifications-cta-title" className="mt-4 font-serif text-xl">
-        {state === "denied" ? "Les notifications sont bloquées" : "Ne laissez aucune réunion en attente"}
-      </h2>
-      <p className="mt-2 text-sm leading-snug text-on-accent/80">
+    <section className="mb-5 rounded-2xl bg-navy p-4 text-on-accent" aria-labelledby="notifications-cta-title">
+      <div className="flex items-center gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15">
+          <Icon name="bell" className="h-4" />
+        </span>
+        <h2 id="notifications-cta-title" className="text-base font-medium leading-snug">
+          {state === "denied" ? "Les notifications sont bloquées" : "Ne laissez aucune réunion en attente"}
+        </h2>
+      </div>
+      <p className="mt-2 text-xs leading-snug text-on-accent/80">
         {state === "off" &&
           "Activez les notifications : vous serez prévenu dès qu'une réunion Read AI attend votre décision, et elle ira dans Notion en un geste."}
         {state === "denied" &&
-          "Elles ont été refusées sur cet iPhone. Pour les réactiver : Réglages › Notifications › Mosaic › Autoriser les notifications."}
+          `Elles ont été refusées sur ${thisDevice()}. Pour les réactiver : ${notificationSettingsPath()}.`}
         {state === "browser" &&
-          "Elles n'arrivent que dans l'app installée. Ouvrez Mosaic depuis l'écran d'accueil de votre iPhone pour les activer."}
+          `Elles n'arrivent que dans l'app installée. Ouvrez Mosaic depuis l'écran d'accueil de ${yourDevice()} pour les activer.`}
       </p>
       {state === "off" && (
         <button
           type="button"
           onClick={() => void enable()}
           disabled={busy}
-          className="mt-5 flex h-12 w-full items-center justify-center rounded-2xl bg-white text-base font-medium text-navy disabled:opacity-60"
+          className="mt-3 flex h-10 w-full items-center justify-center rounded-xl bg-white text-sm font-medium text-navy disabled:opacity-60"
         >
           {busy ? "Activation…" : "Activer les notifications"}
         </button>

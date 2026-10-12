@@ -13,6 +13,7 @@ import {
   isStandalone,
   promptInstall,
   subscribeInstall,
+  yourDevice,
   type Platform,
 } from "@/lib/standalone";
 import { cn } from "@/lib/utils";
@@ -221,7 +222,7 @@ export function InstallInvite() {
           >
             {inApp
               ? "Ouvrez ce lien dans Safari"
-              : "Installez Mosaic sur votre iPhone"}
+              : `Installez Mosaic sur ${yourDevice()}`}
           </h2>
 
           {inApp ? (

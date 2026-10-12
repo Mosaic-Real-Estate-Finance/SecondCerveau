@@ -33,7 +33,6 @@ export type Outcome = "ignored" | "noted" | "queued" | "merged" | "error";
 // has one. A meeting already written to Notion has none: the bare parameter
 // still opens the screen rather than the home page.
 const valider = (id = "") => `/?valider=${id}`;
-const plural = (count: number) => `${count} personne${count > 1 ? "s" : ""} à valider`;
 const titleOf = (meeting: Pick<Meeting, "title">) => meeting.title || "Réunion sans titre";
 
 /** What a waiting call keeps: the meeting minus its raw participant list. */
@@ -247,11 +246,25 @@ async function queue(
   return item;
 }
 
+// The meeting's start, as the team reads a clock: Paris time, 14h30.
+const PARIS = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" });
+const hourOf = (iso: string) => {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "" : PARIS.format(date).replace(":", "h");
+};
+
+// One name, never a list: the first person still waiting for a decision —
+// someone the CRM does not know, which is the whole point of asking. With
+// several, the others are decided on the same screen.
 async function notifyQueued(env: Env, item: QueueItem) {
-  const open = item.people.filter((person) => !person.decision).length;
+  const person = item.people.find((candidate) => !candidate.decision) ?? item.people[0];
+  const name = person?.name?.trim() || person?.email || "un participant";
+  const hour = hourOf(item.meeting.start);
   await notifyAll(env, {
-    title: `${plural(open)} — ${titleOf(item.meeting)}`,
-    body: item.kind === "complete" ? "À ajouter à une note existante." : "Rien n'est écrit dans Notion avant votre décision.",
+    title: `On ajoute ${name} au CRM ?`,
+    body: hour
+      ? `Décidez en 1-clic si la réunion de ${hour} doit être dans Notion.`
+      : "Décidez en 1-clic si la réunion doit être dans Notion.",
     url: valider(item.id),
     tag: item.id,
   });

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useToast } from "@/components/toast";
 import { enablePush, pushOptedOut, pushSupported } from "@/lib/push";
-import { isStandalone } from "@/lib/standalone";
+import { isStandalone, notificationSettingsPath } from "@/lib/standalone";
 import { cn } from "@/lib/utils";
 
 // Notifications are what tell the team a Read AI meeting is waiting for a
@@ -29,7 +29,7 @@ export function PushBanner({ visible }: { visible: boolean }) {
   const ask = async () => {
     if (asking.current) return;
     if (Notification.permission === "denied") {
-      toast.show("Notifications refusées : réactivez-les dans Réglages › Notifications › Mosaic.");
+      toast.show(`Notifications refusées : réactivez-les dans ${notificationSettingsPath()}.`);
       return;
     }
     asking.current = true;

@@ -13,9 +13,9 @@ const HANDLE_PX = 64;
 const BODY_PAD = 16;
 
 // A sheet in the manner of UISheetPresentationController: it rises from the
-// bottom with its content fully drawn, stops at three quarters of the screen
-// at most (a form takes the large detent instead), and the page behind it
-// blurs. It is never faded: the sheet itself
+// bottom with its content fully drawn, exactly as tall as that content — up
+// to the large detent, never cut at an arbitrary fraction of the screen — and
+// the page behind it blurs. It is never faded: the sheet itself
 // slides over the content as it opens and closes. Pulling it down from its
 // top, tapping the blurred page or pressing Escape closes it.
 //
@@ -63,8 +63,11 @@ export function Sheet({
 
   // Detents, as on iOS: the sheet is always as tall as the large detent and
   // is only ever moved, never resized. A smaller detent is the same sheet
-  // pushed down until its content shows and no more (three quarters of the
-  // screen at most). Growing to the large detent or back — the settings
+  // pushed down until its content shows and no more. It is measured on every
+  // opening and every resize, against the screen it is on: a short window
+  // gets a taller sheet, so the whole content is always in view and nothing
+  // scrolls inside it. Only content taller than the large detent itself —
+  // more than a screen — can scroll, as it must. Growing to the large detent or back — the settings
   // opening their list of excluded contacts — is then one transform on the
   // compositor, the same motion as the opening, with no layout per frame.
   const content = useRef<HTMLDivElement>(null);
@@ -81,7 +84,7 @@ export function Sheet({
       const top = node.getBoundingClientRect().top;
       const bottomPad = parseFloat(getComputedStyle(node).paddingBottom) || 0;
       const natural = inner.getBoundingClientRect().bottom - top + BODY_PAD + bottomPad;
-      const visible = Math.min(natural, window.innerHeight * 0.75);
+      const visible = Math.min(natural, node.offsetHeight);
       node.style.setProperty("--sheet-visible", `${visible}px`);
       node.style.setProperty("--sheet-offset", `${Math.max(0, node.offsetHeight - visible)}px`);
     };
@@ -94,7 +97,7 @@ export function Sheet({
       observer.disconnect();
       window.removeEventListener("resize", place);
     };
-  }, [full]);
+  }, [full, open]);
 
   const drag = useRef<{ id: number; y: number; t: number; dy: number } | null>(null);
 

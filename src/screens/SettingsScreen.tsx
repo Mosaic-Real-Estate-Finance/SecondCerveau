@@ -5,7 +5,7 @@ import { useToast } from "@/components/toast";
 import { openInstallInvite } from "@/components/install-invite";
 import { ApiError, fetchReview, logout, removeExcluded } from "@/lib/api";
 import { currentSubscription, disablePush, enablePush, pushSupported } from "@/lib/push";
-import { isStandalone } from "@/lib/standalone";
+import { detectDevice, isIOS, isStandalone, notificationSettingsPath } from "@/lib/standalone";
 
 // Notifications, the contacts excluded from Read AI, and signing out. The
 // excluded contacts open in the same sheet, grown to its large detent.
@@ -57,7 +57,7 @@ export function SettingsScreen({
       } else if (await enablePush()) {
         setPush("on");
       } else {
-        toast.show("Notifications refusées : autorisez-les dans les réglages de l'iPhone.");
+        toast.show(`Notifications refusées : autorisez-les dans ${notificationSettingsPath()}.`);
       }
     } catch (error) {
       toast.show((error as Error).message || "Les notifications n'ont pas pu être activées.");
@@ -102,8 +102,9 @@ export function SettingsScreen({
               Une réunion ajoutée, des personnes à valider, ou une réunion qui n'a pas pu être enregistrée. Jamais de
               résumé ni de transcription.
             </p>
-            <label className="mt-3 flex min-h-11 items-center justify-between gap-3">
-              <span className="text-base">Recevoir les notifications</span>
+            {/* The one thing to touch in this card, set apart on its own plate. */}
+            <label className="mt-3 flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
+              <span className="text-base font-medium">Recevoir les notifications</span>
               <input
                 type="checkbox"
                 role="switch"
@@ -116,16 +117,23 @@ export function SettingsScreen({
           </>
         ) : installed ? (
           <p className="mt-1 text-xs text-[color:var(--muted)]">
-            Cet appareil ne reçoit pas les notifications (iOS 16.4 ou plus récent requis).
+            {isIOS()
+              ? `${detectDevice() === "ipad" ? "Cet iPad" : "Cet iPhone"} ne reçoit pas les notifications : iOS 16.4 ou plus récent est requis.`
+              : "Ce navigateur ne reçoit pas les notifications."}
           </p>
         ) : (
           <>
             <p className="mt-1 text-xs text-[color:var(--muted)]">
               Les notifications n'arrivent que dans l'application installée sur l'écran d'accueil.
             </p>
-            <TextButton onClick={openInstallInvite} className="-ml-3 mt-1">
+            <button
+              type="button"
+              onClick={openInstallInvite}
+              className="mt-3 flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-left text-base font-medium text-navy"
+            >
               Installer l'application
-            </TextButton>
+              <Chevron />
+            </button>
           </>
         )}
       </section>

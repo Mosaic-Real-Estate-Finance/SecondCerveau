@@ -331,11 +331,16 @@ a {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Vertical only. With overflow-y set, overflow-x would otherwise become
+     auto too, and the settings' second page, parked beside the first for
+     its slide, made the whole content draggable sideways. */
+  overflow-x: hidden;
+  touch-action: pan-y;
   overscroll-behavior: contain;
   padding: 4px 16px 16px;
 }
-/* At a smaller detent the scroller stops where the screen does, so content
-   taller than three quarters of it can still be reached. */
+/* At a smaller detent the scroller stops where the sheet does: content that
+   fits never scrolls; content taller than the large detent still can. */
 .sheet:not(.is-full) > .sheet-body {
   flex: none;
   max-height: calc(var(--sheet-visible, 75dvh) - 20px - var(--safe-bottom));
