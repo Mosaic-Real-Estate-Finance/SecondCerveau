@@ -657,15 +657,15 @@ a {
 
 /* ---- Sliding tabs, full width --------------------------------------
    The snippet's bar hugs its labels (inline-flex); here it spans the
-   screen and the tabs share it equally, so a count changing never moves
-   the pill. Only the layout changes: the snippet's motion is untouched. */
+   screen. Each tab is as wide as its label and the room left over is
+   shared out equally. Only the layout changes: the snippet's motion is
+   untouched. */
 .sliding-tabs.t-tabs {
   display: flex;
   width: 100%;
 }
 .sliding-tabs > .t-tab {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 1 1 auto;
 }
 
 /* ---- Notifications ---------------------------------------------------

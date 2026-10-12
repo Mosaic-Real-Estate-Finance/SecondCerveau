@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 // transitions.dev, tabs sliding: the active pill slides between the options.
@@ -11,9 +11,22 @@ import { cn } from "@/lib/utils";
 // Nothing else ever touches the pill: a placement without transition at the
 // wrong moment is what cuts a slide short.
 //
-// Full width here: the tabs share the bar equally (.sliding-tabs, index.css).
+// Full width here: each tab is as wide as its label, and the room left over is
+// shared out equally (.sliding-tabs, index.css). A tab may carry a shorter
+// label for when the long ones do not fit the bar together: the long ones are
+// measured, off screen, at every width.
 
-export type Tab<T extends string> = { id: T; label: string; count?: number };
+export type Tab<T extends string> = { id: T; label: string; short?: string; count?: number };
+
+/** What a tab draws: its label and its count. */
+function Content({ label, count }: { label: string; count?: number }) {
+  return (
+    <>
+      {label}
+      {count ? <span className="ml-1.5 tabular-nums opacity-60">{count}</span> : null}
+    </>
+  );
+}
 
 export function SlidingTabs<T extends string>({
   tabs,
@@ -30,6 +43,23 @@ export function SlidingTabs<T extends string>({
 }) {
   const bar = useRef<HTMLDivElement>(null);
   const pill = useRef<HTMLSpanElement>(null);
+  const ruler = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
+
+  // Do the long labels fit side by side? The bar, less its padding and the
+  // gaps, against the labels as a tab draws them (padding included).
+  // Measured on a hidden copy, so the answer never depends on which labels
+  // are on screen at the time.
+  const fit = () => {
+    const node = bar.current;
+    const measures = ruler.current;
+    if (!node || !measures) return;
+    const style = getComputedStyle(node);
+    const inner = node.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const room = inner - parseFloat(style.columnGap || "0") * (tabs.length - 1);
+    const needed = [...measures.children].reduce((sum, child) => sum + (child as HTMLElement).offsetWidth, 0);
+    setCompact(needed > room);
+  };
 
   const moveTo = (animate: boolean) => {
     const node = bar.current;
@@ -52,6 +82,7 @@ export function SlidingTabs<T extends string>({
   // First paint and resize: in place, without a transition. The observer
   // reports once as it starts; that first report is the first paint.
   useLayoutEffect(() => {
+    fit();
     moveTo(false);
     const node = bar.current;
     if (!node) return;
@@ -59,11 +90,24 @@ export function SlidingTabs<T extends string>({
     const observer = new ResizeObserver(() => {
       if (node.offsetWidth === width) return;
       width = node.offsetWidth;
+      fit();
       moveTo(false);
     });
     observer.observe(node);
     return () => observer.disconnect();
     // Once: later moves are the clicks below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A count gaining a digit can tip a long label over: measured again.
+  const counts = tabs.map((tab) => tab.count ?? 0).join();
+  useLayoutEffect(fit, [counts]);
+  // The tabs are as wide as their labels: new labels or counts move the
+  // active one, and the pill follows it in place, without a slide.
+  useLayoutEffect(() => moveTo(false), [counts, compact]);
+  // The webfont landing changes every width.
+  useEffect(() => {
+    void document.fonts?.ready.then(fit);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -92,10 +136,17 @@ export function SlidingTabs<T extends string>({
           onClick={() => onChange(tab.id)}
           className="t-tab whitespace-nowrap text-[14px] font-medium"
         >
-          {tab.label}
-          {tab.count ? <span className="ml-1.5 tabular-nums opacity-60">{tab.count}</span> : null}
+          <Content label={compact && tab.short ? tab.short : tab.label} count={tab.count} />
         </button>
       ))}
+      {/* The long labels, as a tab draws them, out of sight: the ruler of fit(). */}
+      <div ref={ruler} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex w-0 overflow-hidden">
+        {tabs.map((tab) => (
+          <span key={tab.id} className="t-tab inline-flex items-center whitespace-nowrap text-[14px] font-medium">
+            <Content label={tab.label} count={tab.count} />
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

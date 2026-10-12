@@ -129,8 +129,8 @@ export function NotificationsScreen({
 
   const tabs: Tab<View>[] = [
     { id: "all", label: "Tout", count: notes.length + waiting },
-    { id: "notes", label: "Dictées", count: notes.length },
-    { id: "meetings", label: "ReadAI", count: waiting },
+    { id: "notes", label: "Dictées à envoyer", short: "Dictées", count: notes.length },
+    { id: "meetings", label: "Réunions à valider", short: "ReadAI", count: waiting },
   ];
 
   const renderEntry = (entry: Entry) =>
