@@ -203,7 +203,8 @@ html {
 
 body {
   margin: 0;
-  background: var(--color-white);
+  /* No background of its own: html paints the same colour, and the glow
+     under the microphone sits between the two (RecordScreen, Beam). */
   color: var(--color-midnight-blue);
   font-family: var(--font-sans);
   font-size: 16px;
@@ -398,6 +399,7 @@ a {
    pages crossing are drawn over each other, and the same glide as the app's
    pages, on transform and opacity alone. */
 .sheet-pages {
+  position: relative;
   display: grid;
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);
 }
@@ -424,6 +426,13 @@ a {
 .sheet-page[data-motion^="out"] {
   animation-name: sheet-page-slide-out, sheet-page-fade-out;
   pointer-events: none;
+  /* Out of the flow while it fades: the sheet takes the incoming page's
+     height at once, so a sheet going back to a shorter page shrinks with
+     the slide rather than after it. */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
 }
 .sheet-page[data-motion="in-right"] { --sheet-page-x: var(--page-slide-distance); }
 .sheet-page[data-motion="in-left"] { --sheet-page-x: calc(var(--page-slide-distance) * -1); }
@@ -671,9 +680,11 @@ a {
 /* The title and the tabs of « Notifications », over the list: frosted
    glass, so the cards are seen sliding under them, and a soft edge below. */
 .notifications-head {
-  background: color-mix(in srgb, var(--color-white) 78%, transparent);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6);
-  backdrop-filter: blur(20px) saturate(1.6);
+  /* Dense enough that what passes under it is a hint of colour, never
+     words: the blur alone left letters readable through the 10 % let by. */
+  background: color-mix(in srgb, var(--color-white) 96%, transparent);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  backdrop-filter: blur(40px) saturate(1.8);
 }
 .notifications-head::after {
   content: "";
@@ -681,8 +692,12 @@ a {
   top: 100%;
   left: 0;
   right: 0;
-  height: 16px;
-  background: linear-gradient(color-mix(in srgb, var(--color-white) 60%, transparent), transparent);
+  height: 20px;
+  background: linear-gradient(color-mix(in srgb, var(--color-white) 90%, transparent), transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  -webkit-mask-image: linear-gradient(black, transparent);
+  mask-image: linear-gradient(black, transparent);
   pointer-events: none;
 }
 

@@ -46,20 +46,19 @@ const PANEL = 236;
 const GAP = 16;
 
 /**
- * Where the button's centre goes: in the middle of the free band between the
- * greeting and the bottom of the screen, never over the greeting, and low
- * enough that the open panel still fits on the screen.
+ * Where the button's centre goes: the middle of the screen, as long as that
+ * keeps it clear of the greeting and leaves the open panel room to fit.
+ * The middle of the space under the greeting put it far down once that space
+ * ran to the bottom of the screen.
  */
 function placeButton(greeting: HTMLElement | null): number {
   const height = window.innerHeight;
   const top = greeting ? greeting.getBoundingClientRect().bottom + greeting.closest(".t-page")!.scrollTop : 0;
-  const floor = height;
   const highest = top + GAP + BUTTON / 2;
-  const lowest = Math.min(floor - GAP - BUTTON / 2, height - GAP - PANEL / 2);
-  const middle = (top + Math.min(floor, height)) / 2;
-  // No room at all: under the greeting, whatever is below. The list scrolls;
-  // the greeting is what the button must not hide.
-  return Math.max(highest, Math.min(middle, lowest));
+  const lowest = height - GAP - PANEL / 2;
+  // No room at all: under the greeting, whatever is below. The greeting is
+  // what the button must not hide.
+  return Math.max(highest, Math.min(height / 2, lowest));
 }
 
 const PROMPTS = ["Qu'est-ce qu'on note aujourd'hui ?", "Un point à enregistrer ?", "Une info à enregistrer ?"];
@@ -326,7 +325,9 @@ function Beam({ stream, paused }: { stream: MediaStream | null; paused: boolean 
   return createPortal(
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-20"
+      // Under the page: over the screen's colour, behind the microphone and
+      // its panel (html paints the colour, body none; index.css).
+      className="pointer-events-none fixed inset-x-0 bottom-0 -z-10"
       style={{
         height: BEAM_HEIGHT,
         maskImage: BEAM_MASK,

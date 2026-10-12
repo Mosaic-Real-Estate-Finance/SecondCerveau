@@ -260,14 +260,12 @@ export function NotificationsScreen({
           </div>
         </header>
 
+        {/* Room under the last card for the home indicator, Safari's bar and
+            the banner that can rise over it: the last card is read whole. */}
         <div
-          className="px-4 pt-2"
-          style={{ paddingBottom: "calc(var(--safe-bottom) + 24px)" }}
+          className="px-4 pt-3"
+          style={{ paddingBottom: "calc(var(--safe-bottom) + 120px)" }}
         >
-          <p className="mb-4 text-xs text-[color:var(--muted)]">
-            Les dictées pas encore envoyées et les réunions Read AI à valider.
-            Rien n'est écrit dans Notion avant votre décision.
-          </p>
           <NotificationsCta />
 
           <div

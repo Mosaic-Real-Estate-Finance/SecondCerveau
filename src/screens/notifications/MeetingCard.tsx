@@ -37,6 +37,7 @@ type Choice =
 
 type Row = {
   email: string;
+  /** Empty when Read AI gave none: the row then shows the address alone. */
   name: string;
   firstName: string;
   /** In Notion already: recognised by the server. */
@@ -56,10 +57,24 @@ const SETTLE_MS = 700;
 // take it back.
 const UNDO_MS = 5000;
 
+/** A name worth showing: Read AI sometimes has none, or only the address again. */
+const realName = (name: string | undefined) => (name && !name.includes("@") ? name.trim() : "");
+
+/** marie.durand@kandbaz.fr → « Marie Durand »: a start for a contact with no name. */
+const nameFromEmail = (email: string) =>
+  email
+    .split("@")[0]
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
 // First and last names when Read AI gives both; otherwise the name it shows,
-// which is fuller than a first name alone.
+// which is fuller than a first name alone; with none, one read off the address.
 const fullName = (person: PendingPerson) =>
-  person.firstName && person.lastName ? `${person.firstName} ${person.lastName}` : person.name;
+  person.firstName && person.lastName
+    ? `${person.firstName} ${person.lastName}`
+    : realName(person.name) || nameFromEmail(person.email);
 
 /** The contact made when nothing more is said: name, address, the suggested company. */
 const defaultContact = (person: PendingPerson) => ({
@@ -75,8 +90,8 @@ const rowsOf = (item: ReviewItem): Row[] => {
   for (const person of item.people) {
     const row: Row = {
       email: person.email,
-      name: person.name,
-      firstName: person.firstName || person.name.split(" ")[0],
+      name: realName(person.name),
+      firstName: person.firstName || realName(person.name).split(" ")[0] || person.email,
       known: false,
       person,
       settled: person.decision,
@@ -86,8 +101,8 @@ const rowsOf = (item: ReviewItem): Row[] => {
   }
   const known = item.recognized.map<Row>((contact) => ({
     email: contact.email,
-    name: contact.name,
-    firstName: contact.name.split(" ")[0],
+    name: realName(contact.name),
+    firstName: realName(contact.name).split(" ")[0] || contact.email,
     known: true,
     choice: null,
   }));
@@ -211,11 +226,11 @@ export function MeetingCard({
       return;
     }
     // Sent at once: the setting it points to must already list them.
-    setExcludedNames(toCreate.map((row) => row.name));
+    setExcludedNames(toCreate.map((row) => row.name || row.email));
     try {
       await ignoreCall(item.id, toCreate.map((row) => row.email));
       onClosed(item.id);
-      onExcluded(toCreate.map((row) => row.name));
+      onExcluded(toCreate.map((row) => row.name || row.email));
     } catch (cause) {
       setStatus("open");
       setExcludedNames([]);
@@ -440,9 +455,9 @@ function PersonRow({
       <span className="min-w-0 flex-1">
         <span className="block truncate">
           <span className={cn("text-[14px] font-medium", skipped && "text-[color:var(--muted)] line-through")}>
-            {row.name}
+            {row.name || row.email}
           </span>
-          <span className="text-xs text-[color:var(--muted)]">, {row.email}</span>
+          {row.name && <span className="text-xs text-[color:var(--muted)]">, {row.email}</span>}
         </span>
         {note && <span className="block truncate text-xs text-[color:var(--muted)]">{note}</span>}
       </span>
@@ -456,7 +471,7 @@ function PersonRow({
         <button
           type="button"
           onClick={onOpen}
-          aria-label={`${row.name} : options`}
+          aria-label={`${row.name || row.email} : options`}
           className="flex min-h-11 w-full items-center px-3 py-2 text-left"
         >
           {line}
@@ -583,7 +598,7 @@ function RefuseSheet({
   onIgnore: (forever: boolean) => void;
   onCancel: () => void;
 }) {
-  const names = listOf(people.map((person) => person.name));
+  const names = listOf(people.map((person) => person.name || person.email));
   return (
     <div>
       <h2 className="font-serif text-2xl">
@@ -691,11 +706,6 @@ function SummarySheet({ item, onClose }: { item: ReviewItem; onClose: () => void
           </p>
         ))}
       </div>
-      {meeting.reportUrl && (
-        <a href={meeting.reportUrl} target="_blank" rel="noreferrer" className="mt-4 inline-block text-xs text-navy">
-          Ouvrir le rapport Read AI ↗
-        </a>
-      )}
     </div>
   );
 }
@@ -785,8 +795,8 @@ function PersonSheet({
       <div>
         <header className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="truncate font-serif text-2xl">{row.name}</h2>
-            <p className="truncate text-xs text-[color:var(--muted)]">{row.email}</p>
+            <h2 className="truncate font-serif text-2xl">{row.name || row.email}</h2>
+            {row.name && <p className="truncate text-xs text-[color:var(--muted)]">{row.email}</p>}
           </div>
           <TextButton onClick={close} className="-mr-3 shrink-0">
             OK
@@ -818,7 +828,7 @@ function PersonSheet({
     );
 
   return (
-    <Sheet open={open} onClose={close} label={row.name} full={page !== "menu"}>
+    <Sheet open={open} onClose={close} label={row.name || row.email} full={page !== "menu"}>
       <SheetPages id={page} depth={page === "menu" ? 0 : 1}>
         {content}
       </SheetPages>
