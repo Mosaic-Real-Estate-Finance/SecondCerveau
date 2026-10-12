@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ContactsState } from "@/App";
 import { ContactForm } from "@/components/contact-form";
+import { NotificationsCta } from "@/components/notifications-cta";
 import { Sheet } from "@/components/sheet";
 import { CircleButton, Screen, TextButton, TopBar } from "@/components/screen";
 import { SearchField } from "@/components/search-field";
@@ -212,6 +213,7 @@ export function ReviewScreen({
       <p className="-mt-3 mb-6 text-xs text-[color:var(--muted)]">
         Réunions Read AI avec une personne que le CRM ne connaît pas. Rien n'est écrit dans Notion avant votre décision.
       </p>
+      <NotificationsCta />
 
       {status === "loading" && <p className="text-base text-[color:var(--muted)]">Chargement…</p>}
       {status === "error" && (
@@ -224,7 +226,7 @@ export function ReviewScreen({
         </div>
       )}
       {status === "ready" && items.length === 0 && (
-        <p className="py-6 text-base text-[color:var(--muted)]">Rien à valider.</p>
+        <p className="py-6 text-base text-[color:var(--muted)]">Aucune réunion en attente.</p>
       )}
 
       <ul className="flex flex-col gap-4">
