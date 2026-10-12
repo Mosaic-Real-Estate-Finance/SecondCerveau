@@ -1,15 +1,17 @@
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 // transitions.dev, tabs sliding: the active pill slides between the options.
-// The snippet's orchestration, moved into a component: the active tab's
-// offsetLeft / offsetWidth are written onto the pill, and the CSS tweens.
-// On first paint and on any resize — the window, or the labels once the font
-// has loaded — the pill is put in place without a transition, so it never
-// slides in from nowhere.
+// The snippet's orchestration, as it is written there:
+//   - on a click, the active tab's offsetLeft / offsetWidth are written onto
+//     the pill, and the CSS transition tweens between the two positions;
+//   - on first paint and on resize, the same values are written WITHOUT a
+//     transition (suspended, reflowed, restored), so the pill is in place
+//     before any animation can run.
+// Nothing else ever touches the pill: a placement without transition at the
+// wrong moment is what cuts a slide short.
 //
-// The bar scrolls sideways when the labels are wider than the screen; the
-// active tab is brought into view as it is picked.
+// Full width here: the tabs share the bar equally (.sliding-tabs, index.css).
 
 export type Tab<T extends string> = { id: T; label: string; count?: number };
 
@@ -28,67 +30,72 @@ export function SlidingTabs<T extends string>({
 }) {
   const bar = useRef<HTMLDivElement>(null);
   const pill = useRef<HTMLSpanElement>(null);
-  const placed = useRef(false);
 
-  useLayoutEffect(() => {
+  const moveTo = (animate: boolean) => {
     const node = bar.current;
     const marker = pill.current;
-    if (!node || !marker) return;
-    const moveTo = (animate: boolean) => {
-      const tab = node.querySelector<HTMLElement>('[aria-selected="true"]');
-      if (!tab) return;
-      if (!animate) {
-        const previous = marker.style.transition;
-        marker.style.transition = "none";
-        marker.style.transform = `translateX(${tab.offsetLeft}px)`;
-        marker.style.width = `${tab.offsetWidth}px`;
-        void marker.offsetWidth;
-        marker.style.transition = previous;
-      } else {
-        marker.style.transform = `translateX(${tab.offsetLeft}px)`;
-        marker.style.width = `${tab.offsetWidth}px`;
-      }
-      // The bar's own scroller only: scrollIntoView would also move the
-      // pages around it, which slide on transforms.
-      const scroller = node.parentElement!;
-      const start = node.offsetLeft + tab.offsetLeft;
-      const end = start + tab.offsetWidth;
-      const gutter = node.offsetLeft;
-      const left =
-        start - gutter < scroller.scrollLeft
-          ? start - gutter
-          : end + gutter > scroller.scrollLeft + scroller.clientWidth
-            ? end + gutter - scroller.clientWidth
-            : null;
-      if (left !== null) scroller.scrollTo({ left, behavior: animate ? "smooth" : "auto" });
-    };
-    moveTo(placed.current);
-    placed.current = true;
-    const observer = new ResizeObserver(() => moveTo(false));
+    const tab = node?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!marker || !tab) return;
+    if (!animate) {
+      const previous = marker.style.transition;
+      marker.style.transition = "none";
+      marker.style.transform = `translateX(${tab.offsetLeft}px)`;
+      marker.style.width = `${tab.offsetWidth}px`;
+      void marker.offsetWidth;
+      marker.style.transition = previous;
+    } else {
+      marker.style.transform = `translateX(${tab.offsetLeft}px)`;
+      marker.style.width = `${tab.offsetWidth}px`;
+    }
+  };
+
+  // First paint and resize: in place, without a transition. The observer
+  // reports once as it starts; that first report is the first paint.
+  useLayoutEffect(() => {
+    moveTo(false);
+    const node = bar.current;
+    if (!node) return;
+    let width = node.offsetWidth;
+    const observer = new ResizeObserver(() => {
+      if (node.offsetWidth === width) return;
+      width = node.offsetWidth;
+      moveTo(false);
+    });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [value, tabs]);
+    // Once: later moves are the clicks below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A new tab: the pill slides there.
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    moveTo(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   return (
-    <div className={cn("-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", className)}>
-      <div ref={bar} className="t-tabs" role="tablist" aria-label={label}>
-        <span ref={pill} className="t-tabs-pill" aria-hidden="true" />
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            id={`tab-${tab.id}`}
-            aria-selected={tab.id === value}
-            aria-controls={`panel-${tab.id}`}
-            onClick={() => onChange(tab.id)}
-            className="t-tab whitespace-nowrap text-[14px] font-medium"
-          >
-            {tab.label}
-            {tab.count ? <span className="ml-1.5 tabular-nums opacity-60">{tab.count}</span> : null}
-          </button>
-        ))}
-      </div>
+    <div ref={bar} className={cn("t-tabs sliding-tabs", className)} role="tablist" aria-label={label}>
+      <span ref={pill} className="t-tabs-pill" aria-hidden="true" />
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          id={`tab-${tab.id}`}
+          aria-selected={tab.id === value}
+          aria-controls={`panel-${tab.id}`}
+          onClick={() => onChange(tab.id)}
+          className="t-tab whitespace-nowrap text-[14px] font-medium"
+        >
+          {tab.label}
+          {tab.count ? <span className="ml-1.5 tabular-nums opacity-60">{tab.count}</span> : null}
+        </button>
+      ))}
     </div>
   );
 }

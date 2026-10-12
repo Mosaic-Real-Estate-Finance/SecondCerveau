@@ -655,6 +655,19 @@ a {
   pointer-events: auto;
 }
 
+/* ---- Sliding tabs, full width --------------------------------------
+   The snippet's bar hugs its labels (inline-flex); here it spans the
+   screen and the tabs share it equally, so a count changing never moves
+   the pill. Only the layout changes: the snippet's motion is untouched. */
+.sliding-tabs.t-tabs {
+  display: flex;
+  width: 100%;
+}
+.sliding-tabs > .t-tab {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 /* ---- Notifications ---------------------------------------------------
    A card folds away once decided, the rows Notion is writing breathe, a ✕
    turns to ✓, the icons say what they mean on hover, and a long summary
