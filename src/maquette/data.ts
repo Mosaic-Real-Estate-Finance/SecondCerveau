@@ -145,7 +145,8 @@ export const MEETINGS: Meeting[] = [
     at: daysAgo(5, 11, 30),
     organizer: "Philippe Bernieri",
     summary: "",
-    failed: "Notion n'a pas répondu à temps.",
+    failed:
+      "Read AI a bien envoyé le rapport, mais Notion n'a pas répondu (indisponible ou trop lent). Rien n'est perdu : réessayez.",
     people: [],
   },
 ];

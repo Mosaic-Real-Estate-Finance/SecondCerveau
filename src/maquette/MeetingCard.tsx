@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Icon } from "@/components/icon";
+import { Icon, type IconName } from "@/components/icon";
 import { PrimaryButton, TextButton } from "@/components/screen";
 import { CountryPicker } from "@/components/country-picker";
 import { PhoneNumberInput } from "@/components/phone-input";
@@ -501,7 +501,9 @@ function Outcome({
                 ? created
                   ? `${meeting.title} · ${created} contact${created > 1 ? "s" : ""} créé${created > 1 ? "s" : ""}`
                   : meeting.title
-                : "Rien n'a été écrit dans Notion"}
+                : meeting.noteExists
+                  ? "La note existante n'a pas été modifiée"
+                  : "Rien n'a été écrit dans Notion"}
             </span>
           </span>
           {status === "added" ? (
@@ -541,18 +543,16 @@ function RefuseSheet({
     <div>
       <h2 className="font-serif text-2xl">
         {meeting.noteExists
-          ? "Ne pas les ajouter ?"
+          ? `Ne pas ajouter ${names} ?`
           : "Ne pas ajouter cette note ?"}
       </h2>
       <p className="mt-2 text-[color:var(--muted)]">
         {meeting.noteExists
-          ? "La note reste comme elle est, sans ces personnes."
+          ? `La note est déjà dans Notion, enregistrée par un collègue. Elle n'est ni modifiée ni supprimée : aucune fiche n'est créée pour ${names}.`
           : "Rien ne sera écrit dans Notion."}
       </p>
       <PrimaryButton onClick={() => onIgnore(false)} className="mt-6">
-        {meeting.noteExists
-          ? "Laisser la note telle quelle"
-          : "Ignorer cette réunion"}
+        Ignorer cette réunion
       </PrimaryButton>
       {people.length > 0 && (
         <>
@@ -607,10 +607,12 @@ function PersonSheet({
 }
 
 function Option({
+  icon,
   title,
   detail,
   onClick,
 }: {
+  icon: IconName;
   title: string;
   detail: string;
   onClick: () => void;
@@ -621,6 +623,9 @@ function Option({
       onClick={onClick}
       className="flex w-full items-center gap-3 rounded-2xl bg-white-smoke p-4 text-left"
     >
+      {/* One frame for every symbol, however wide: each is fitted inside it
+          and the titles line up. */}
+      <Icon name={icon} className="h-5 w-8 shrink-0 text-navy [&>svg]:w-full" />
       <span className="min-w-0 flex-1">
         <span className="block font-medium">{title}</span>
         <span className="mt-0.5 block text-xs text-[color:var(--muted)]">
@@ -672,17 +677,20 @@ function Menu({
       </header>
       <div className="flex flex-col gap-2">
         <Option
+          icon="square.and.pencil"
           title="Créer le contact"
-          detail="Sa fiche, pré-remplie d'après son adresse, à vérifier ou compléter."
+          detail="Sa fiche, pré-remplie d'après son mail, à vérifier ou compléter."
           onClick={() => onPage("form")}
         />
         <Option
-          title="Associer à un contact déjà existant"
+          icon="person.line.dotted.person"
+          title="Associer à un contact existant"
           detail="Son adresse est ajoutée à sa fiche, rien n'est créé."
           onClick={() => onPage("picker")}
         />
         {!skipped && (
           <Option
+            icon="person.fill.xmark"
             title="Ne pas l'ajouter au CRM"
             detail="La note est ajoutée sans cette personne."
             onClick={() => onDecide({ kind: "skip" })}
@@ -750,7 +758,7 @@ function ContactForm({
         />
         {row.company && (
           <p className="-mt-1 px-2 text-xs text-[color:var(--muted)]">
-            Société devinée d'après l'adresse.
+            Société suggérée d'après le mail.
           </p>
         )}
         <div className="flex gap-2">
@@ -985,7 +993,7 @@ function FailedCard({ meeting }: { meeting: Meeting }) {
             {formatWhen(meeting.at)} · {meeting.organizer}
           </p>
           <p className="mt-3 rounded-xl bg-white px-3 py-2.5 text-xs leading-snug">
-            <span className="font-medium">Réunion non enregistrée.</span>{" "}
+            <span className="font-medium">Pas encore dans Notion.</span>{" "}
             {meeting.failed}
           </p>
           <div className="mt-3 flex gap-2">
