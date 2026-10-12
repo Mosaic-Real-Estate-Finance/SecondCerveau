@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { renderSVG } from "uqr";
 import { PrimaryButton, TextButton } from "@/components/screen";
 import { Shimmer } from "@/components/shimmer";
 import { useToast } from "@/components/toast";
 import { openInstallInvite } from "@/components/install-invite";
-import { ApiError, fetchReview, logout, removeExcluded } from "@/lib/api";
+import { ApiError, createHandoff, fetchReview, logout, removeExcluded } from "@/lib/api";
 import { currentSubscription, disablePush, enablePush, pushSupported } from "@/lib/push";
-import { detectDevice, isIOS, isStandalone, notificationSettingsPath } from "@/lib/standalone";
+import { detectDevice, detectPlatform, isIOS, isStandalone, notificationSettingsPath } from "@/lib/standalone";
 
 // Notifications, the contacts excluded from Read AI, and signing out. The
 // excluded contacts open in the same sheet, grown to its large detent.
@@ -25,8 +26,8 @@ export function SettingsScreen({
   onExpand: (expanded: boolean) => void;
 }) {
   const toast = useToast();
-  const [view, setView] = useState<"main" | "excluded">("main");
-  const show = (next: "main" | "excluded") => {
+  const [view, setView] = useState<"main" | "excluded" | "phone">("main");
+  const show = (next: "main" | "excluded" | "phone") => {
     setView(next);
     onExpand(next === "excluded");
   };
@@ -39,6 +40,9 @@ export function SettingsScreen({
   const [push, setPush] = useState<"unknown" | "on" | "off">("unknown");
   const [busy, setBusy] = useState(false);
   const installed = isStandalone();
+  // On a computer the notifications have nowhere to go: the phone is where
+  // the app belongs, and this is where it is sent there.
+  const desktop = useMemo(() => detectPlatform() === "desktop", []);
 
   useEffect(() => {
     if (!active || !installed) return;
@@ -83,6 +87,7 @@ export function SettingsScreen({
   };
 
   if (view === "excluded") return <ExcludedContacts onBack={() => show("main")} onUnauthorized={onSignedOut} />;
+  if (view === "phone") return <PhoneHandoff onBack={() => show("main")} onUnauthorized={onSignedOut} />;
 
   return (
     <div>
@@ -94,49 +99,65 @@ export function SettingsScreen({
         </TextButton>
       </header>
 
-      <section className="rounded-2xl bg-white-smoke p-4">
-        <h2 className="text-base font-medium">Notifications</h2>
-        {installed && pushSupported() ? (
-          <>
+      {desktop ? (
+        <button
+          type="button"
+          onClick={() => show("phone")}
+          className="flex w-full items-center gap-3 rounded-2xl bg-white-smoke p-4 text-left"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block text-base font-medium">Installer l'application sur mon téléphone</span>
+            <span className="mt-1 block text-xs text-[color:var(--muted)]">
+              Ajoutez l'app sur votre téléphone pour enregistrer des notes plus facilement.
+            </span>
+          </span>
+          <Chevron />
+        </button>
+      ) : (
+        <section className="rounded-2xl bg-white-smoke p-4">
+          <h2 className="text-base font-medium">Notifications</h2>
+          {installed && pushSupported() ? (
+            <>
+              <p className="mt-1 text-xs text-[color:var(--muted)]">
+                Une réunion ajoutée, des personnes à valider, ou une réunion qui n'a pas pu être enregistrée. Jamais de
+                résumé ni de transcription.
+              </p>
+              {/* The one thing to touch in this card, set apart on its own plate. */}
+              <label className="mt-3 flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
+                <span className="text-base font-medium">Recevoir les notifications</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={push === "on"}
+                  disabled={busy || push === "unknown"}
+                  onChange={() => void toggle()}
+                  className="h-6 w-6 accent-[color:var(--color-navy)]"
+                />
+              </label>
+            </>
+          ) : installed ? (
             <p className="mt-1 text-xs text-[color:var(--muted)]">
-              Une réunion ajoutée, des personnes à valider, ou une réunion qui n'a pas pu être enregistrée. Jamais de
-              résumé ni de transcription.
+              {isIOS()
+                ? `${detectDevice() === "ipad" ? "Cet iPad" : "Cet iPhone"} ne reçoit pas les notifications : iOS 16.4 ou plus récent est requis.`
+                : "Ce navigateur ne reçoit pas les notifications."}
             </p>
-            {/* The one thing to touch in this card, set apart on its own plate. */}
-            <label className="mt-3 flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
-              <span className="text-base font-medium">Recevoir les notifications</span>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={push === "on"}
-                disabled={busy || push === "unknown"}
-                onChange={() => void toggle()}
-                className="h-6 w-6 accent-[color:var(--color-navy)]"
-              />
-            </label>
-          </>
-        ) : installed ? (
-          <p className="mt-1 text-xs text-[color:var(--muted)]">
-            {isIOS()
-              ? `${detectDevice() === "ipad" ? "Cet iPad" : "Cet iPhone"} ne reçoit pas les notifications : iOS 16.4 ou plus récent est requis.`
-              : "Ce navigateur ne reçoit pas les notifications."}
-          </p>
-        ) : (
-          <>
-            <p className="mt-1 text-xs text-[color:var(--muted)]">
-              Les notifications n'arrivent que dans l'application installée sur l'écran d'accueil.
-            </p>
-            <button
-              type="button"
-              onClick={openInstallInvite}
-              className="mt-3 flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-left text-base font-medium text-navy"
-            >
-              Installer l'application
-              <Chevron />
-            </button>
-          </>
-        )}
-      </section>
+          ) : (
+            <>
+              <p className="mt-1 text-xs text-[color:var(--muted)]">
+                Les notifications n'arrivent que dans l'application installée sur l'écran d'accueil.
+              </p>
+              <button
+                type="button"
+                onClick={openInstallInvite}
+                className="mt-3 flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-left text-base font-medium text-navy"
+              >
+                Installer l'application
+                <Chevron />
+              </button>
+            </>
+          )}
+        </section>
+      )}
 
       <button
         type="button"
@@ -240,6 +261,96 @@ function ExcludedContacts({ onBack, onUnauthorized }: { onBack: () => void; onUn
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+// The computer's way onto the phone: a QR code that opens the app there,
+// signed in as the same person, on the install guide. The link inside is a
+// sign-in, short-lived and good twice (Safari, then the installed app on an
+// iPhone — see functions/_lib/session.ts), hence the warning under it.
+function PhoneHandoff({ onBack, onUnauthorized }: { onBack: () => void; onUnauthorized: () => void }) {
+  const [link, setLink] = useState<{ url: string; until: number } | null>(null);
+  const [error, setError] = useState("");
+  const [now, setNow] = useState(() => Date.now());
+
+  const make = async () => {
+    setError("");
+    setLink(null);
+    try {
+      const { url, expiresIn } = await createHandoff();
+      const at = Date.now();
+      setNow(at);
+      setLink({ url, until: at + expiresIn * 1000 });
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) return onUnauthorized();
+      setError((cause as Error).message || "Le QR code n'a pas pu être créé.");
+    }
+  };
+
+  useEffect(() => {
+    void make();
+    const tick = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(tick);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const expired = link !== null && now >= link.until;
+  const left = link ? Math.max(0, Math.ceil((link.until - now) / 60000)) : 0;
+  const svg = useMemo(
+    () => (link ? renderSVG(link.url, { ecc: "M", border: 2, blackColor: "#020342", whiteColor: "#ffffff" }) : ""),
+    [link],
+  );
+
+  return (
+    <div>
+      <header className="mb-2">
+        <TextButton onClick={onBack} className="-ml-3 flex items-center gap-1">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M15 5l-7 7 7 7" />
+          </svg>
+          Réglages
+        </TextButton>
+        <h1 className="mt-1 font-serif text-2xl">Scannez avec votre téléphone</h1>
+        <p className="mt-2 text-base text-[color:var(--muted)]">
+          Visez ce code avec l'appareil photo. L'app s'ouvre, vous êtes déjà connecté, il ne reste qu'à l'installer.
+        </p>
+      </header>
+
+      <div className="mt-5 flex justify-center">
+        <div className="relative h-56 w-56 overflow-hidden rounded-2xl bg-white p-2 shadow-[0_0_0_1px_var(--hairline)]">
+          {svg && !expired && (
+            <span
+              role="img"
+              aria-label="QR code de connexion"
+              className="block h-full w-full [&>svg]:h-full [&>svg]:w-full"
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          )}
+          {(!link || expired) && (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
+              {error ? (
+                <p className="px-3 text-xs text-[color:var(--muted)]">{error}</p>
+              ) : expired ? (
+                <p className="px-3 text-sm text-[color:var(--muted)]">Ce code a expiré.</p>
+              ) : (
+                <Shimmer className="text-sm">Création du code…</Shimmer>
+              )}
+              {(error || expired) && (
+                <TextButton onClick={() => void make()} className="text-sm">
+                  Nouveau code
+                </TextButton>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <p className="mt-4 text-center text-xs text-[color:var(--muted)]">
+        {link && !expired
+          ? `Valable encore ${left} min. Il ouvre votre compte : ne le partagez pas.`
+          : "Il ouvre votre compte : ne le partagez pas."}
+      </p>
     </div>
   );
 }

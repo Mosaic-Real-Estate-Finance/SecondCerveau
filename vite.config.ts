@@ -141,6 +141,9 @@ function pagesFunctions(env: Record<string, string>): Plugin {
     "POST /api/auth/verify": { file: "/functions/api/auth.ts", name: "onRequestPost" },
     "POST /api/auth/logout": { file: "/functions/api/auth.ts", name: "onRequestPost" },
     "POST /api/auth/stt-token": { file: "/functions/api/auth.ts", name: "onRequestPost" },
+    "POST /api/auth/handoff": { file: "/functions/api/auth.ts", name: "onRequestPost" },
+    "POST /api/auth/redeem": { file: "/functions/api/auth.ts", name: "onRequestPost" },
+    "GET /api/auth/manifest": { file: "/functions/api/auth.ts", name: "onRequestGet" },
   };
   return {
     name: "pages-functions",
@@ -272,6 +275,9 @@ export default defineConfig(async ({ mode }) => {
           short_name: "Mosaic",
           description: "Dictée, réunions et contacts vers Notion.",
           lang: "fr",
+          // Fixed, so a start address that varies (the sign-in handed over
+          // from a computer, api/auth manifest) is still the same app.
+          id: "/",
           start_url: "/",
           display: "standalone",
           orientation: "portrait",

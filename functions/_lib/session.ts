@@ -1,4 +1,4 @@
-import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { jwtVerify, SignJWT } from "jose";
 import { redis } from "./redis.js";
 import type { Env } from "./notion.js";
@@ -22,6 +22,7 @@ const KEYS = {
   cool: (email: string) => `auth:cool:${email}`,
   hour: (email: string) => `auth:hour:${email}`,
   revoked: (jti: string) => `auth:revoked:${jti}`,
+  handoff: (hash: string) => `auth:handoff:${hash}`,
 };
 
 export class SessionConfigError extends Error {}
@@ -84,6 +85,46 @@ export async function checkCode(env: Env, email: string, code: string): Promise<
   if (tries >= CODE_TRIES) await store.del(KEYS.code(email));
   else await store.set(KEYS.code(email), { ...held, tries }, { keepTtl: true });
   return false;
+}
+
+// ---- Handing a session to a phone --------------------------------------------
+//
+// The settings, on a computer, show a QR code: the phone that scans it is
+// signed in as the same person without typing a code. The code carries a
+// token that is long, random, short-lived and good for two sign-ins at most.
+//
+// Two, not one, because of iOS: an app installed on the home screen keeps its
+// own cookies, apart from Safari's. Safari signs in with the first use, to
+// show the install guide; the installed app, which starts on an address that
+// carries the same token, signs in with the second. Android shares Chrome's
+// cookies with the installed app and leaves the second unused.
+//
+// Stored hashed with the server secret, like the codes: a read of the store
+// does not hand anyone a working token.
+
+const HANDOFF_TTL = 10 * 60;
+const HANDOFF_USES = 2;
+
+const handoffHash = (env: Env, token: string) => createHmac("sha256", secret(env)).update(`handoff:${token}`).digest("hex");
+
+export const handoffShape = (token: unknown): token is string => typeof token === "string" && /^[A-Za-z0-9_-]{43}$/.test(token);
+
+/** A fresh token for `email`, valid ten minutes. */
+export async function createHandoff(env: Env, email: string): Promise<{ token: string; expiresIn: number }> {
+  const token = randomBytes(32).toString("base64url");
+  await redis(env).set(KEYS.handoff(handoffHash(env, token)), { email, uses: 0 }, { ex: HANDOFF_TTL });
+  return { token, expiresIn: HANDOFF_TTL };
+}
+
+/** The address the token was made for, or null once it is spent or expired. */
+export async function redeemHandoff(env: Env, token: string): Promise<string | null> {
+  const store = redis(env);
+  const key = KEYS.handoff(handoffHash(env, token));
+  const held = await store.get<{ email: string; uses: number }>(key);
+  if (!held || held.uses >= HANDOFF_USES) return null;
+  if (held.uses + 1 >= HANDOFF_USES) await store.del(key);
+  else await store.set(key, { ...held, uses: held.uses + 1 }, { keepTtl: true });
+  return held.email;
 }
 
 // ---- Sessions ---------------------------------------------------------------

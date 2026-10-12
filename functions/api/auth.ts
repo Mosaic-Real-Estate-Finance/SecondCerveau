@@ -5,8 +5,11 @@ import {
   checkCode,
   cleanEmail,
   clearedCookie,
+  createHandoff,
+  handoffShape,
   issueSession,
   readSession,
+  redeemHandoff,
   requestCode,
   revoke,
   validEmail,
@@ -15,8 +18,8 @@ import { findUser } from "../_lib/users.js";
 
 // /api/auth/code, /api/auth/verify, /api/auth/logout — one function for the
 // three (research E-1: the Hobby plan stops at twelve). contracts/auth.md.
-// /api/auth/stt-token rides on the same function for the same reason: api/
-// already holds twelve files.
+// /api/auth/stt-token, /handoff, /redeem and GET /manifest ride on the same
+// function for the same reason: api/ already holds twelve files.
 
 const actionOf = (request: Request) => new URL(request.url).pathname.split("/").filter(Boolean).pop() ?? "";
 
@@ -125,6 +128,64 @@ async function sttToken(request: Request, env: Parameters<Handler>[0]["env"]) {
   });
 }
 
+// ---- From the computer to the phone -----------------------------------------
+//
+// /handoff: the signed-in computer asks for a sign-in link to show as a QR
+// code. /redeem: the phone that opened it gets its session. GET /manifest:
+// the install manifest, whose start address carries the token, so that the
+// app installed on an iPhone — which does not share Safari's cookies — signs
+// itself in on its first launch. See session.ts.
+
+const PARAM = "connexion";
+
+async function handoff(request: Request, env: Parameters<Handler>[0]["env"]) {
+  const denied = await guard(request, env);
+  if (denied instanceof Response) return denied;
+  try {
+    const { token, expiresIn } = await createHandoff(env, denied.user.email);
+    const url = new URL(`/?${PARAM}=${token}`, new URL(request.url).origin).href;
+    return json({ url, expiresIn });
+  } catch {
+    return unavailable();
+  }
+}
+
+async function redeem(request: Request, env: Parameters<Handler>[0]["env"]) {
+  const body = (await request.json().catch(() => ({}))) as { token?: unknown };
+  if (!handoffShape(body.token)) return json({ error: "Lien de connexion invalide." }, 400);
+  let email: string | null;
+  try {
+    email = await redeemHandoff(env, body.token);
+  } catch {
+    return unavailable();
+  }
+  // Still on the list: a token outlives nothing that users.ts takes away.
+  const user = email ? findUser(email) : undefined;
+  if (!user) return json({ error: "Ce QR code a expiré. Affichez-en un nouveau depuis l'ordinateur." }, 401);
+  const response = json({ email: user.email, firstName: user.firstName });
+  response.headers.append("Set-Cookie", await issueSession(env, user.email));
+  return response;
+}
+
+async function manifest(request: Request) {
+  const url = new URL(request.url);
+  const token = url.searchParams.get("t");
+  const response = await fetch(new URL("/manifest.webmanifest", url.origin)).catch(() => null);
+  const base = response?.ok ? ((await response.json().catch(() => null)) as Record<string, unknown> | null) : null;
+  if (!base) return json({ error: "Manifeste indisponible" }, 502);
+  // Same app, same identity: only where it starts changes. The token is not
+  // checked here; it is checked when the app spends it.
+  const start = handoffShape(token) ? `/?${PARAM}=${token}` : "/";
+  return new Response(JSON.stringify({ ...base, id: "/", start_url: start }), {
+    headers: { "Content-Type": "application/manifest+json", "Cache-Control": "no-store" },
+  });
+}
+
+export const onRequestGet: Handler = async ({ request }) => {
+  if (actionOf(request) === "manifest") return manifest(request);
+  return json({ error: "Route inconnue" }, 404);
+};
+
 export const onRequestPost: Handler = async ({ request, env }) => {
   switch (actionOf(request)) {
     case "code":
@@ -135,6 +196,10 @@ export const onRequestPost: Handler = async ({ request, env }) => {
       return logout(request, env);
     case "stt-token":
       return sttToken(request, env);
+    case "handoff":
+      return handoff(request, env);
+    case "redeem":
+      return redeem(request, env);
     default:
       return json({ error: "Route inconnue" }, 404);
   }

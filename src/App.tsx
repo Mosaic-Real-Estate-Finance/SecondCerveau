@@ -9,7 +9,18 @@ import { Sheet } from "@/components/sheet";
 import { InstallInvite } from "@/components/install-invite";
 import { PushBanner } from "@/components/push-banner";
 import { ToastProvider } from "@/components/toast";
-import { ApiError, fetchContacts, fetchReviewCount, fetchSession, session, type Contact, type Session } from "@/lib/api";
+import {
+  ApiError,
+  fetchContacts,
+  fetchReviewCount,
+  fetchSession,
+  redeemHandoff,
+  session,
+  type Contact,
+  type Session,
+} from "@/lib/api";
+import { isIOS, isStandalone } from "@/lib/standalone";
+import { openInstallInvite } from "@/components/install-invite";
 import { persistStorage, updateNote, type Note, type NoteContact } from "@/lib/notes";
 import { resumePending, transcribeNote } from "@/lib/pipeline";
 import { afterTransition } from "@/lib/schedule";
@@ -32,6 +43,30 @@ function linkedReview(): string | null {
   return id;
 }
 
+// A phone that scanned the QR code of a computer's settings opens
+// /?connexion=<token>. The token signs it in, without a code (api/auth).
+const HANDOFF = "connexion";
+const handoffToken = new URLSearchParams(window.location.search).get(HANDOFF);
+// A reload of the same tab must not spend the token a second time: the
+// second use is the installed app's.
+const SPENT = "mosaic-handoff-spent";
+
+function forgetHandoff() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete(HANDOFF);
+  window.history.replaceState(null, "", url.pathname + url.search);
+}
+
+// In Safari on an iPhone the address keeps its token, and the install
+// manifest is swapped for one that starts there: the app added to the home
+// screen does not share Safari's cookies, and signs itself in on its first
+// launch with the token's second use. Whichever of the two iOS takes as the
+// start address — the page's or the manifest's — carries it.
+function carryHandoffToInstall(token: string) {
+  const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+  if (link) link.href = `/api/auth/manifest?t=${encodeURIComponent(token)}`;
+}
+
 export default function App() {
   const [user, setUser] = useState<Session | null>(session.get());
   const [focusId, setFocusId] = useState<string | null>(linkedReview);
@@ -47,6 +82,41 @@ export default function App() {
   useEffect(() => {
     void persistStorage();
     void resumePending();
+  }, []);
+
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [handingOff, setHandingOff] = useState(Boolean(handoffToken) && !session.get());
+  useEffect(() => {
+    if (!handoffToken) return;
+    const installed = isStandalone();
+    const keepForInstall = !installed && isIOS();
+    if (keepForInstall) carryHandoffToInstall(handoffToken);
+    else forgetHandoff();
+    let spent: string | null = null;
+    try {
+      spent = sessionStorage.getItem(SPENT);
+    } catch {
+      // Private mode: at worst the token's second use goes to this tab.
+    }
+    if (spent === handoffToken && session.get()) return;
+    redeemHandoff(handoffToken)
+      .then((next) => {
+        try {
+          sessionStorage.setItem(SPENT, handoffToken);
+        } catch {
+          // See above.
+        }
+        session.set(next);
+        setUser(next);
+        // Straight to the install guide, in the browser: that is what the
+        // QR code was for. Left a moment to mount with the signed-in tree.
+        if (!installed) window.setTimeout(openInstallInvite, 400);
+      })
+      .catch((error) => {
+        if (session.get()) return;
+        setHandoffError((error as Error).message || "Ce QR code n'a pas pu vous connecter.");
+      })
+      .finally(() => setHandingOff(false));
   }, []);
 
   const closeSettings = useCallback(() => {
@@ -141,6 +211,8 @@ export default function App() {
   if (!user) {
     return (
       <AccessGate
+        pending={handingOff}
+        notice={handoffError}
         onValid={(next) => {
           session.set(next);
           setUser(next);

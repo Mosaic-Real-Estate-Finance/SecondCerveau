@@ -117,6 +117,14 @@ export const fetchSession = () => call<Session>("/api/session");
 
 export const logout = () => call<{ ok: true }>("/api/auth/logout", { method: "POST", body: "{}" });
 
+/** A sign-in link for a phone, shown as a QR code on the computer. */
+export const createHandoff = () =>
+  call<{ url: string; expiresIn: number }>("/api/auth/handoff", { method: "POST", body: "{}" });
+
+/** The phone side: the token from that link opens a session here. */
+export const redeemHandoff = (token: string) =>
+  call<Session>("/api/auth/redeem", { method: "POST", body: JSON.stringify({ token }) });
+
 // ---- Real-time transcription --------------------------------------------------
 
 /** Everything needed to open one Soniox stream. The key opens one, once. */
