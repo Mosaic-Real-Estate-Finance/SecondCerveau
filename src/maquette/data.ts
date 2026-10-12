@@ -12,14 +12,14 @@ export type Person = {
   candidate?: { name: string; company: string };
 };
 
-export type Line = { speaker: string; at: string; text: string };
-
 export type Meeting = {
   id: string;
   title: string;
-  when: string;
+  /** When the meeting started. */
+  at: Date;
   organizer: string;
-  transcript: Line[];
+  /** The summary Read AI wrote, as it sends it: paragraphs apart by a blank line. */
+  summary: string;
   people: Person[];
   /** A colleague's recording already made the note: only people are left to add. */
   noteExists?: boolean;
@@ -27,35 +27,56 @@ export type Meeting = {
   failed?: string;
 };
 
-const TRANSCRIPT: Line[] = [
-  { speaker: "Oscar Baron", at: "00:00", text: "Merci à tous d'être là. L'idée aujourd'hui, c'est de caler le calendrier des appels de fonds avant la fin du mois." },
-  { speaker: "Marie Durand", at: "00:42", text: "De notre côté, le premier appel peut partir dès la signature de l'acte, le second à la mise hors d'eau." },
-  { speaker: "Jean Martin", at: "01:15", text: "La banque demandera une garantie d'achèvement, et une caution personnelle du promoteur au-delà de huit millions." },
-  { speaker: "Oscar Baron", at: "02:03", text: "Entendu. On peut prévoir la visite du site la semaine prochaine pour avancer sur les garanties\u00a0?" },
-  { speaker: "Sophie Leroy", at: "02:31", text: "Jeudi matin me va. J'enverrai le dossier technique la veille pour que chacun puisse le lire avant." },
-];
+/** A time of day, so many calendar days before today. */
+function daysAgo(days: number, hours: number, minutes: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  date.setHours(hours, minutes, 0, 0);
+  return date;
+}
+
+const SHORT =
+  "Point sur le financement de l'opération : calendrier des appels de fonds, garanties demandées par la banque et prochaine visite du site.";
+
+// Long enough to scroll under the summary's header.
+const LONG = [
+  "Le comité a passé en revue le dossier de financement de l'opération de 48 logements à Issy-les-Moulineaux, présenté par Nexity. Le prix de revient est arrêté à 14,2 M€, dont 3,1 M€ de foncier déjà acquis, pour un chiffre d'affaires prévisionnel de 17,8 M€.",
+  "La banque confirme son accord de principe pour un crédit promoteur de 9,5 M€ sur 30 mois, sous réserve d'une pré-commercialisation de 40 % et d'une garantie financière d'achèvement. Lucas Bernard indique que la pré-commercialisation atteint 32 % à date, avec une dizaine de réservations attendues d'ici la fin du mois.",
+  "Camille Petit a présenté le calendrier des appels de fonds : 35 % à l'achèvement des fondations, 70 % à la mise hors d'eau, 95 % à l'achèvement. Le premier appel est prévu pour la fin du premier trimestre.",
+  "Points d'attention soulevés : le recours d'un riverain sur le permis de construire, purgé depuis trois semaines, et l'augmentation de 6 % du lot gros œuvre après la renégociation avec l'entreprise générale.",
+  "Prochaines étapes : envoi du dossier technique complet par Nexity sous huit jours, visite du site jeudi prochain, et décision définitive du comité à la séance du mois prochain. Paul Girard se charge de la note de synthèse pour le comité.",
+].join("\n\n");
 
 export const MEETINGS: Meeting[] = [
   // One unknown person, two known contacts.
   {
     id: "one-unknown",
     title: "Financement — Résidence Les Tilleuls",
-    when: "Mar. 14 oct. · 14h30",
+    at: daysAgo(0, 14, 30),
     organizer: "Oscar Baron",
-    transcript: TRANSCRIPT,
+    summary: SHORT,
     people: [
-      { name: "Marie Durand", email: "marie.durand@kandbaz.fr", known: false, company: "Kandbaz" },
+      {
+        name: "Marie Durand",
+        email: "marie.durand@kandbaz.fr",
+        known: false,
+        company: "Kandbaz",
+      },
       { name: "Jean Martin", email: "j.martin@ca-paris.fr", known: true },
-      { name: "Sophie Leroy", email: "sophie@leroy-patrimoine.fr", known: true },
+      {
+        name: "Sophie Leroy",
+        email: "sophie@leroy-patrimoine.fr",
+        known: true,
+      },
     ],
   },
   // Several unknowns, one of them probably a contact (same name, other address).
   {
     id: "probable",
     title: "Comité d'investissement Nexity",
-    when: "Mer. 15 oct. · 10h00",
+    at: daysAgo(1, 10, 0),
     organizer: "Philippe Bernieri",
-    transcript: TRANSCRIPT,
+    summary: LONG,
     people: [
       {
         name: "Lucas Bernard",
@@ -63,7 +84,12 @@ export const MEETINGS: Meeting[] = [
         known: false,
         candidate: { name: "Lucas Bernard", company: "Nexity" },
       },
-      { name: "Camille Petit", email: "c.petit@nexity.fr", known: false, company: "Nexity" },
+      {
+        name: "Camille Petit",
+        email: "c.petit@nexity.fr",
+        known: false,
+        company: "Nexity",
+      },
       { name: "Paul Girard", email: "paul.girard@nexity.fr", known: true },
     ],
   },
@@ -71,12 +97,22 @@ export const MEETINGS: Meeting[] = [
   {
     id: "all-unknown",
     title: "Premier échange — Groupe Altarea",
-    when: "Jeu. 16 oct. · 16h15",
+    at: daysAgo(3, 16, 15),
     organizer: "Jean-Philippe Deltour",
-    transcript: TRANSCRIPT,
+    summary: SHORT,
     people: [
-      { name: "Hugo Lambert", email: "h.lambert@altarea.com", known: false, company: "Altarea" },
-      { name: "Inès Moreau", email: "ines.moreau@altarea.com", known: false, company: "Altarea" },
+      {
+        name: "Hugo Lambert",
+        email: "h.lambert@altarea.com",
+        known: false,
+        company: "Altarea",
+      },
+      {
+        name: "Inès Moreau",
+        email: "ines.moreau@altarea.com",
+        known: false,
+        company: "Altarea",
+      },
       { name: "Nadia Benali", email: "nadia@benali-conseil.fr", known: false },
     ],
   },
@@ -84,22 +120,31 @@ export const MEETINGS: Meeting[] = [
   {
     id: "note-exists",
     title: "Visite de chantier — Bordeaux Euratlantique",
-    when: "Ven. 17 oct. · 09h00",
+    at: daysAgo(12, 9, 0),
     organizer: "Oscar Baron",
-    transcript: TRANSCRIPT,
+    summary: SHORT,
     noteExists: true,
     people: [
-      { name: "Thomas Roux", email: "thomas.roux@bouygues-immo.fr", known: false, company: "Bouygues Immobilier" },
-      { name: "Claire Fontaine", email: "c.fontaine@bnpparibas.com", known: true },
+      {
+        name: "Thomas Roux",
+        email: "thomas.roux@bouygues-immo.fr",
+        known: false,
+        company: "Bouygues Immobilier",
+      },
+      {
+        name: "Claire Fontaine",
+        email: "c.fontaine@bnpparibas.com",
+        known: true,
+      },
     ],
   },
   // The report could not be processed.
   {
     id: "failed",
     title: "Point hebdo — Promoteurs",
-    when: "Ven. 17 oct. · 11h30",
+    at: daysAgo(5, 11, 30),
     organizer: "Philippe Bernieri",
-    transcript: [],
+    summary: "",
     failed: "Notion n'a pas répondu à temps.",
     people: [],
   },
@@ -115,4 +160,10 @@ export const CONTACTS = [
   { name: "Inès Morel", company: "Kaufman & Broad" },
 ];
 
-export const TYPES = ["Promoteur", "Banque", "Investisseur", "Notaire", "Conseil"];
+export const TYPES = [
+  "Promoteur",
+  "Banque",
+  "Investisseur",
+  "Notaire",
+  "Conseil",
+];

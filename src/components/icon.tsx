@@ -5,6 +5,7 @@ import gear from "@/assets/icons/gear.svg?raw";
 import microphone from "@/assets/icons/microphone.svg?raw";
 import minusCircle from "@/assets/icons/minus.circle.svg?raw";
 import quoteBubble from "@/assets/icons/quote.bubble.svg?raw";
+import squareAndPencil from "@/assets/icons/square.and.pencil.svg?raw";
 import xmarkCircle from "@/assets/icons/xmark.circle.svg?raw";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ const ICONS = {
   "xmark.circle": inline(xmarkCircle),
   "minus.circle": inline(minusCircle),
   "quote.bubble": inline(quoteBubble),
+  "square.and.pencil": inline(squareAndPencil),
 } as const;
 
 export type IconName = keyof typeof ICONS;
