@@ -78,9 +78,11 @@ function Maquette() {
   return (
     <ToastProvider>
       <InstallInvite auto={false} />
-      <div className="mx-auto min-h-full max-w-[480px]">
+      {/* The screen owns its scrolling: it is given the height left under the
+          demo's own strip, as a page of the app is given the screen's. */}
+      <div className="mx-auto flex h-full max-w-[480px] flex-col">
         <div
-          className="mx-4 flex items-center justify-between gap-3 rounded-2xl border border-dashed border-[color:var(--hairline)] px-4 py-2.5"
+          className="mx-4 flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-dashed border-[color:var(--hairline)] px-4 py-2.5"
           style={{ marginTop: "calc(var(--safe-top) + 12px)" }}
         >
           <p className="text-xs text-[color:var(--muted)]">Maquette : données fictives, rien n'est envoyé.</p>
@@ -95,7 +97,9 @@ function Maquette() {
             Réinitialiser
           </button>
         </div>
-        <Demo key={round} />
+        <div className="min-h-0 flex-1 [--safe-top:0px]">
+          <Demo key={round} />
+        </div>
       </div>
     </ToastProvider>
   );

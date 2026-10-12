@@ -75,6 +75,8 @@ function forgetParam(name: string) {
 export default function App() {
   const [user, setUser] = useState<Session | null>(session.get());
   const [focusId, setFocusId] = useState<string | null>(linkedReview);
+  // Changes with every notification tapped, the same one twice included.
+  const [focusKey, setFocusKey] = useState(0);
   const [page, setPage] = useState<Page>(focusId !== null ? 4 : 1);
   const [reviewCount, setReviewCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -201,6 +203,7 @@ export default function App() {
       const id = url?.searchParams.get("valider");
       if (id === null || id === undefined) return;
       setFocusId(id);
+      setFocusKey((key) => key + 1);
       setSettingsOpen(false);
       setPage(4);
     };
@@ -311,6 +314,7 @@ export default function App() {
             active={page === 4}
             contacts={contacts}
             focusId={focusId}
+            focusKey={focusKey}
             onBack={() => {
               setFocusId(null);
               setPage(1);

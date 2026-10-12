@@ -668,6 +668,24 @@ a {
   flex: 1 1 auto;
 }
 
+/* The title and the tabs of « Notifications », over the list: frosted
+   glass, so the cards are seen sliding under them, and a soft edge below. */
+.notifications-head {
+  background: color-mix(in srgb, var(--color-white) 78%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+}
+.notifications-head::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 16px;
+  background: linear-gradient(color-mix(in srgb, var(--color-white) 60%, transparent), transparent);
+  pointer-events: none;
+}
+
 /* ---- Notifications ---------------------------------------------------
    A card folds away once decided, the rows Notion is writing breathe, a ✕
    turns to ✓, the icons say what they mean on hover, and a long summary

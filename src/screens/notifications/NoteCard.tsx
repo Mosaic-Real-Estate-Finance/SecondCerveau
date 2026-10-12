@@ -87,7 +87,7 @@ export function NoteCard({
               type="button"
               onClick={() => setConfirming(true)}
               disabled={sending || leaving}
-              className="h-12 flex-1 whitespace-nowrap rounded-xl bg-white px-3 font-medium text-danger disabled:opacity-40"
+              className="h-12 flex-1 whitespace-nowrap rounded-xl bg-white px-3 font-medium text-midnight-blue disabled:opacity-40"
             >
               Supprimer
             </button>
