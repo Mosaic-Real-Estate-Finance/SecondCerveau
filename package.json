@@ -4,15 +4,13 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "predev": "node scripts/copy-ort.mjs",
     "dev": "vite",
-    "predev:mobile": "node scripts/copy-ort.mjs",
     "dev:mobile": "vite --host --mode mobile",
-    "prebuild": "node scripts/copy-ort.mjs",
     "build": "tsc -b && vite build",
     "postbuild": "node scripts/outlook-manifest.mjs --out dist/outlook/manifest.xml",
     "preview": "vite preview",
     "icons": "node scripts/generate-icons.mjs",
+    "mail-logo": "node scripts/generate-mail-logo.mjs",
     "splash": "node scripts/generate-ios-splash.mjs",
     "typecheck": "tsc -b",
     "check:api": "node scripts/check-api.mjs",
@@ -25,13 +23,11 @@
     "outlook:manifest": "node scripts/outlook-manifest.mjs",
     "outlook:icons": "node scripts/generate-outlook-icons.mjs",
     "outlook:certs": "office-addin-dev-certs install --days 365 --domains 127.0.0.1,localhost,192.168.1.86",
-    "dev:vercel": "vercel dev --listen 5173",
-    "outlook:manifest:prod": "node scripts/outlook-manifest.mjs"
+    "dev:vercel": "vercel dev --listen 5173"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.24.0",
     "@fontsource/lora": "^5.3.0",
-    "@huggingface/transformers": "^4.3.0",
     "@upstash/redis": "^1.39.0",
     "@vercel/functions": "^3.9.9",
     "clsx": "^2.1.1",
@@ -42,6 +38,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tailwind-merge": "^3.7.0",
+    "uqr": "^0.1.3",
     "voice-glow": "^0.2.1",
     "web-push": "^3.6.7"
   },

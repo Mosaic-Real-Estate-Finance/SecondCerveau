@@ -1,6 +1,10 @@
 @import "tailwindcss";
-@import "@fontsource/lora/400.css";
-@import "@fontsource/lora/600.css";
+/* French needs latin and latin-ext only; the package's default files would
+   also ship cyrillic, vietnamese, math and symbols. */
+@import "@fontsource/lora/latin-400.css";
+@import "@fontsource/lora/latin-ext-400.css";
+@import "@fontsource/lora/latin-600.css";
+@import "@fontsource/lora/latin-ext-600.css";
 @import "./transitions/_root.css";
 @import "./transitions/snippets.css";
 
@@ -19,6 +23,9 @@
   --color-white-smoke: #f7f7f7;
   /* Text and icons on the navy accent: white in both themes. */
   --color-on-accent: #ffffff;
+  /* Errors only (the code field's ring): the system red, lifted in the dark
+     as iOS does. */
+  --color-danger: #ff3b30;
   --color-transparent: transparent;
   --color-current: currentColor;
 
@@ -53,6 +60,17 @@
   /* Sheets sit on the page's own white; in the dark they are lifted a
      shade, as iOS raises a presented sheet. */
   --sheet-bg: var(--color-white);
+  /* The glow under the microphone, in the Mosaic blues: navy at the core,
+     lighter tints of the same hue outward, the ink at the bottom. */
+  --beam-core: #000082;
+  --beam-mid: #1f1fb0;
+  --beam-above: #3d3dd6;
+  --beam-edge: #5b5be8;
+  --beam-deep: #020342;
+  /* A QR code is scanned dark on light, whatever the theme: some phone
+     cameras do not read one inverted. Its paper and ink stay put. */
+  --qr-paper: #ffffff;
+  --qr-ink: #020342;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
   color-scheme: light dark;
@@ -90,6 +108,13 @@
     --scrim-strong: rgb(0 0 0 / 0.55);
     --shadow: rgb(0 0 0 / 0.5);
     --sheet-bg: #16161f;
+    --color-danger: #ff453a;
+    /* Light on dark, the glow turns to the lifted accent and its tints. */
+    --beam-core: #6366f1;
+    --beam-mid: #4f46e5;
+    --beam-above: #818cf8;
+    --beam-edge: #a5b4fc;
+    --beam-deep: #312e81;
     --shimmer-base: rgb(236 236 246 / 0.45);
     --shimmer-highlight: #ffffff;
   }
@@ -331,11 +356,16 @@ a {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Vertical only. With overflow-y set, overflow-x would otherwise become
+     auto too, and the settings' second page, parked beside the first for
+     its slide, made the whole content draggable sideways. */
+  overflow-x: hidden;
+  touch-action: pan-y;
   overscroll-behavior: contain;
   padding: 4px 16px 16px;
 }
-/* At a smaller detent the scroller stops where the screen does, so content
-   taller than three quarters of it can still be reached. */
+/* At a smaller detent the scroller stops where the sheet does: content that
+   fits never scrolls; content taller than the large detent still can. */
 .sheet:not(.is-full) > .sheet-body {
   flex: none;
   max-height: calc(var(--sheet-visible, 75dvh) - 20px - var(--safe-bottom));
@@ -354,11 +384,56 @@ a {
   flex: 1;
   min-height: 0;
 }
+/* The pages of a sheet (SheetPages in sheet.tsx): one grid cell, so the two
+   pages crossing are drawn over each other, and the same glide as the app's
+   pages, on transform and opacity alone. */
+.sheet-pages {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+.sheet-page {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.sheet-page > * {
+  flex: 1;
+  min-height: 0;
+}
+.sheet-page[data-motion] {
+  will-change: opacity, transform;
+  animation-duration: var(--page-slide-dur), var(--page-fade-dur);
+  animation-timing-function: var(--page-slide-ease), var(--page-fade-ease);
+  animation-fill-mode: both;
+}
+.sheet-page[data-motion^="in"] {
+  animation-name: sheet-page-slide-in, sheet-page-fade-in;
+  animation-delay: var(--page-stagger);
+}
+.sheet-page[data-motion^="out"] {
+  animation-name: sheet-page-slide-out, sheet-page-fade-out;
+  pointer-events: none;
+}
+.sheet-page[data-motion="in-right"] { --sheet-page-x: var(--page-slide-distance); }
+.sheet-page[data-motion="in-left"] { --sheet-page-x: calc(var(--page-slide-distance) * -1); }
+.sheet-page[data-motion="out-left"] { --sheet-page-x: calc(var(--page-slide-distance) * -1); }
+.sheet-page[data-motion="out-right"] { --sheet-page-x: var(--page-slide-distance); }
+@keyframes sheet-page-slide-in { from { transform: translateX(var(--sheet-page-x)); } to { transform: none; } }
+@keyframes sheet-page-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheet-page-slide-out { from { transform: none; } to { transform: translateX(var(--sheet-page-x)); } }
+@keyframes sheet-page-fade-out { from { opacity: 1; } to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .sheet-layer,
   .sheet-scrim,
   .sheet {
     transition: none !important;
+  }
+  .sheet-page[data-motion] {
+    animation: none !important;
+  }
+  .sheet-page[data-motion^="out"] {
+    visibility: hidden;
   }
 }
 
@@ -396,7 +471,8 @@ a {
 }
 .record-morph.t-morph[data-open="true"] {
   width: min(calc(100vw - 32px), 448px);
-  height: 168px;
+  /* Room for three or four lines of live text between the status and the pill. */
+  height: 236px;
 }
 .record-morph .t-morph-plus {
   inset: auto auto 0 calc(50% - 48px);
@@ -413,26 +489,6 @@ a {
   transition: none !important;
 }
 
-/* ---- Voice note on the review screen --------------------------------
-   The Rare UI file stays untouched; its neutrals are mapped to the Mosaic
-   ones here, same as the recorder. The accent glow comes from the prop. */
-.voice-note-mosaic > div:first-child {
-  background: var(--color-white-smoke);
-}
-.voice-note-mosaic [data-slot="voice-note-control"] {
-  background: var(--color-white);
-  color: var(--color-midnight-blue);
-}
-.voice-note-mosaic [data-slot="voice-note-track"] > div:first-child > span {
-  background: var(--scrim-strong);
-}
-.voice-note-mosaic [data-slot="voice-note-track"] > div:last-child span {
-  background: var(--color-midnight-blue);
-}
-.voice-note-mosaic [data-slot="voice-note-time"] {
-  color: var(--muted);
-}
-
 /* ---- Contact list skeleton ------------------------------------------
    The list has no fixed height: the content layer stays in flow and sizes
    the wrapper, the skeleton lies over it while loading. */
@@ -446,10 +502,6 @@ a {
 }
 .contact-skel.is-revealed .t-skel-skeleton {
   pointer-events: none;
-}
-
-.voice-note-mosaic [data-slot="voice-note-time"] {
-  font-size: 12px;
 }
 
 /* Rows off screen are not rendered until they scroll in: the contact list
@@ -520,6 +572,15 @@ a {
 .search-field .t-clear-placeholder {
   color: var(--muted);
 }
+/* Outlined in the primary colour at rest, not only while typing: the field
+   reads as a field. Inset, inside the snippet's clip; the focus ring would
+   only double it. */
+.search-field {
+  box-shadow: inset 0 0 0 2px var(--color-navy);
+}
+.search-field > input:focus-visible {
+  outline: none;
+}
 
 /* ---- Error shake on the send button --------------------------------- */
 .send-button.t-input {
@@ -543,7 +604,7 @@ a {
   left: 0;
   right: 0;
   height: 3px;
-  background: rgb(0 0 130 / 0.1);
+  background: color-mix(in srgb, var(--color-navy) 10%, transparent);
 }
 .close-countdown-bar {
   height: 100%;

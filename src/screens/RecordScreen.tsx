@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { VoiceBeam } from "voice-glow";
 import { Icon } from "@/components/icon";
@@ -6,14 +6,22 @@ import { Symbol } from "@/components/logo";
 import { noteDate, Screen, statusLabel, TextButton } from "@/components/screen";
 import { useToast } from "@/components/toast";
 import { formatTime, VoiceRecorder } from "@/components/voice-recorder";
-import { storageIsDurable, useNotes, type Note } from "@/lib/notes";
+import { useConnectivity, type Connectivity } from "@/lib/connectivity";
+import { storageIsDurable, useNote, useNotes, type Note } from "@/lib/notes";
 import { pageSlideMs } from "@/lib/schedule";
-import { coolMicrophone, useMeter, useRecorder, warmMicrophone } from "@/lib/use-recorder";
+import { cssVar, useColorScheme } from "@/lib/theme";
+import { useMeter, useRecorder, type Hold } from "@/lib/use-recorder";
 
 // The glow stays in the Mosaic blues: navy at the centre, lighter tints of the
-// same hue outward, no hue drift.
-const BEAM_COLORS = ["#000082", "#1f1fb0", "#3d3dd6", "#020342", "#5b5be8", "#1f1fb0", "#3d3dd6"];
-const BEAM_BAND = { core: "#000082", above: "#3d3dd6", mid: "#1f1fb0", below: "#020342" };
+// same hue outward, no hue drift. The values are the theme's (--beam-* in
+// index.css), read again when the system turns light or dark.
+const beamPalette = () => {
+  const [core, mid, above, edge, deep] = ["--beam-core", "--beam-mid", "--beam-above", "--beam-edge", "--beam-deep"].map(cssVar);
+  return {
+    colors: [core, mid, above, deep, edge, mid, above],
+    band: { core, above, mid, below: deep },
+  };
+};
 
 // Multipliers on the light theme's own (stroke 1.2, inner 0.85, bloom 0.5),
 // plus a little more colour and a little more gain.
@@ -27,6 +35,32 @@ const BEAM_DENSITY = {
   // Breathing between words, so the screen never looks dead mid sentence.
   idle: 0.26,
 } as const;
+
+// The microphone is fixed, so it can grow into the recording panel in place;
+// its centre is computed rather than left to the middle of the window. On a
+// short window — a desktop browser, a phone in landscape — the middle of the
+// window is inside the greeting, and the button covered it.
+const BUTTON = 96;
+/** The open panel's height, as in index.css (.record-morph[data-open]). */
+const PANEL = 236;
+const GAP = 16;
+
+/**
+ * Where the button's centre goes: in the middle of the free band between the
+ * greeting and the pending list (or the bottom of the screen), never over the
+ * greeting, and low enough that the open panel still fits on the screen.
+ */
+function placeButton(greeting: HTMLElement | null, pending: HTMLElement | null): number {
+  const height = window.innerHeight;
+  const top = greeting ? greeting.getBoundingClientRect().bottom + greeting.closest(".t-page")!.scrollTop : 0;
+  const floor = pending ? pending.getBoundingClientRect().top + pending.closest(".t-page")!.scrollTop : height;
+  const highest = top + GAP + BUTTON / 2;
+  const lowest = Math.min(floor - GAP - BUTTON / 2, height - GAP - PANEL / 2);
+  const middle = (top + Math.min(floor, height)) / 2;
+  // No room at all: under the greeting, whatever is below. The list scrolls;
+  // the greeting is what the button must not hide.
+  return Math.max(highest, Math.min(middle, lowest));
+}
 
 const PROMPTS = ["Qu'est-ce qu'on note aujourd'hui ?", "Un point à enregistrer ?", "Une info à enregistrer ?"];
 
@@ -56,6 +90,21 @@ export function RecordScreen({
   // its own animation does not run against the page slide.
   const [quiet, setQuiet] = useState(false);
   const recording = recorder.state === "starting" || recorder.state === "recording";
+  // No recording is offered that could not be transcribed: the dictation is
+  // turned into text live, on the network. A dictation already under way is
+  // not interrupted by this — it holds and resumes on its own (use-recorder).
+  const connectivity = useConnectivity(active);
+
+  const greetingRef = useRef<HTMLDivElement>(null);
+  const pendingRef = useRef<HTMLElement>(null);
+  const [centre, setCentre] = useState<number | null>(null);
+  const blocked = !open && !recording && connectivity.status !== "online" && connectivity.status !== "checking";
+  // While a bad link is being checked again, the screen stays on what it said.
+  const [shownBlocked, setShownBlocked] = useState(false);
+  useEffect(() => {
+    if (connectivity.status !== "checking") setShownBlocked(blocked);
+  }, [blocked, connectivity.status]);
+  const offline = shownBlocked && !open && !recording;
 
   // Drawn once per app launch, not on every render.
   const prompt = useMemo(() => PROMPTS[Math.floor(Math.random() * PROMPTS.length)], []);
@@ -66,8 +115,23 @@ export function RecordScreen({
   // Pointer down, not click: the recording starts as the finger lands, about
   // a tenth of a second before the click would fire. The click stays for
   // keyboards and screen readers.
+  // Measured after layout and again whenever the window, the greeting or the
+  // list changes size.
+  useLayoutEffect(() => {
+    const place = () => setCentre(placeButton(greetingRef.current, pendingRef.current));
+    place();
+    const observer = new ResizeObserver(place);
+    if (greetingRef.current) observer.observe(greetingRef.current);
+    if (pendingRef.current) observer.observe(pendingRef.current);
+    window.addEventListener("resize", place);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", place);
+    };
+  }, [offline, pending.length > 0]);
+
   const openPanel = () => {
-    if (open) return;
+    if (open || offline) return;
     setOpen(true);
     void recorder.start();
   };
@@ -107,22 +171,16 @@ export function RecordScreen({
     setOpen(false);
   };
 
+  // A dictation dropped by a transcription outage: the panel closes and the
+  // banner explains (OutageBanner).
+  useEffect(() => {
+    if (recorder.shelved) setOpen(false);
+  }, [recorder.shelved]);
+
   // Leaving the screen with the panel open (resume from the list) closes it.
   useEffect(() => {
     if (!active && open && !recording) setOpen(false);
   }, [active, open, recording]);
-
-  // The microphone stays open while this screen is on show, so a press
-  // records at once; it is released as soon as the app or the screen is left.
-  useEffect(() => {
-    const sync = () => {
-      if (active && document.visibilityState === "visible") void warmMicrophone();
-      else if (!recording) coolMicrophone();
-    };
-    sync();
-    document.addEventListener("visibilitychange", sync);
-    return () => document.removeEventListener("visibilitychange", sync);
-  }, [active, recording]);
 
   return (
     <Screen>
@@ -133,7 +191,9 @@ export function RecordScreen({
           type="button"
           onClick={onReview}
           className="flex h-11 w-11 items-center justify-center rounded-full text-navy"
-          aria-label={reviewCount ? `À valider, ${reviewCount} appel${reviewCount > 1 ? "s" : ""}` : "À valider"}
+          aria-label={
+            reviewCount ? `Notifications, ${reviewCount} appel${reviewCount > 1 ? "s" : ""} à décider` : "Notifications"
+          }
         >
           <Icon name={reviewCount > 0 ? "bell.badge" : "bell"} className="h-[22px]" />
         </button>
@@ -148,18 +208,30 @@ export function RecordScreen({
       </div>
       {/* The greeting sits in the upper part; the button holds the middle of
           the screen, in the layer below. */}
-      <div className="flex flex-col items-center pt-[5vh] text-center">
-        <Symbol className="h-16 text-midnight-blue" />
-        <h1 className="mt-8 text-balance font-serif text-2xl">
-          Bonjour {firstName},
-          <br />
-          {prompt}
-        </h1>
-      </div>
-      <div className="flex-1" aria-hidden />
+      {offline ? (
+        <NoConnection
+          status={connectivity.status}
+          unstable={connectivity.status === "unstable"}
+          onRetry={() => void connectivity.check()}
+        />
+      ) : (
+        <>
+          {/* On a short window the logo goes first, then the type tightens:
+              the greeting and the button must both fit above the fold. */}
+          <div ref={greetingRef} className="flex flex-col items-center pt-[5vh] text-center">
+            <Symbol className="h-16 text-midnight-blue [@media(max-height:640px)]:hidden" />
+            <h1 className="mt-8 text-balance font-serif text-2xl [@media(max-height:640px)]:mt-0 [@media(max-height:520px)]:text-xl">
+              Bonjour {firstName},
+              <br />
+              {prompt}
+            </h1>
+          </div>
+          <div className="flex-1" aria-hidden />
+        </>
+      )}
 
       {pending.length > 0 && (
-        <section aria-labelledby="pending-title" className="pb-2">
+        <section ref={pendingRef} aria-labelledby="pending-title" className="pb-2">
           <h2 id="pending-title" className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
             En attente
           </h2>
@@ -205,18 +277,26 @@ export function RecordScreen({
       {active && recorder.state === "recording" && <Beam stream={recorder.stream} paused={recorder.paused} />}
 
       {/* Centred on the screen, growing into the recording panel. */}
-      <div className="pointer-events-none fixed inset-0 z-20 mx-auto flex max-w-[480px] items-center justify-center px-4">
+      <div
+        className="pointer-events-none fixed inset-x-0 z-20 mx-auto flex max-w-[480px] items-center justify-center px-4"
+        style={{ top: (centre ?? window.innerHeight / 2) - PANEL, height: PANEL * 2 }}
+        hidden={offline}
+      >
         <div className="record-morph t-morph pointer-events-auto" data-open={open} data-quiet={quiet || undefined}>
           <div className="t-morph-menu flex flex-col justify-between p-4" aria-hidden={!open}>
             <div className="flex items-center justify-between">
               <span className="text-base text-on-accent" aria-live="polite">
                 {recorder.state === "error"
                   ? "Enregistrement impossible"
-                  : recorder.paused
-                    ? "En pause"
-                    : recorder.state === "recording"
-                      ? "Enregistrement"
-                      : "Ouverture du micro"}
+                  : recorder.unavailable
+                    ? "Transcription indisponible"
+                    : recorder.hold
+                      ? "En pause, connexion perdue"
+                      : recorder.paused
+                        ? "En pause"
+                        : recorder.state === "recording"
+                          ? "Enregistrement"
+                          : "Ouverture du micro"}
               </span>
               <TextButton onClick={cancel} className="-mr-3 text-on-accent" tabIndex={open ? 0 : -1}>
                 {recorder.state === "error" ? "Fermer" : "Annuler"}
@@ -225,6 +305,9 @@ export function RecordScreen({
             {recorder.state === "error" ? (
               <p className="text-base text-on-accent">{recorder.error}</p>
             ) : (
+              <LiveText noteId={recorder.noteId} hold={recorder.hold} unavailable={recorder.unavailable} />
+            )}
+            {recorder.state !== "error" && (
               <LiveRecorder
                 recording={recorder.state === "recording"}
                 paused={recorder.paused}
@@ -273,13 +356,16 @@ const BEAM_HEIGHT = "min(56dvh, 460px)";
 // around — the browser refuses to render fixed content below its floating
 // controls, so the glow always ends on that line and used to be sliced
 // across its brightest part. Fading it out over its last tenth means it
-// arrives there already white, the same white the canvas shows underneath,
+// arrives there already faded into the page, whatever the theme,
 // and the light reads as coming from beyond the edge instead of stopping at
 // one. In an installed app there is no bar and no line, and the same fade
 // simply softens the very bottom of the glow.
 const BEAM_MASK = "linear-gradient(to bottom, transparent 0%, #000 34%, #000 90%, transparent 100%)";
 
 function Beam({ stream, paused }: { stream: MediaStream | null; paused: boolean }) {
+  const scheme = useColorScheme();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const palette = useMemo(beamPalette, [scheme]);
   return createPortal(
     <div
       aria-hidden
@@ -292,12 +378,12 @@ function Beam({ stream, paused }: { stream: MediaStream | null; paused: boolean 
     >
       <VoiceBeam
         type="mobile"
-        theme="light"
+        theme={scheme}
         // On hold the glow fades out rather than following the room.
         active={!paused}
         stream={stream}
-        colors={BEAM_COLORS}
-        bandColors={BEAM_BAND}
+        colors={palette.colors}
+        bandColors={palette.band}
         staticColors
         // Denser than the library's light theme, which is tuned for a glow
         // under a chat input rather than one that has a whole phone screen
@@ -345,5 +431,92 @@ function LiveRecorder({
       finishLabel="Terminer l'enregistrement"
       className="w-full"
     />
+  );
+}
+
+// The words as they are recognised, between the status line and the pill.
+// Subscribes to the note on its own, so the text updating several times a
+// second redraws this paragraph alone. Anchored to the bottom and clipped at
+// the top: the newest words are always in view, the oldest fade out above.
+const LIVE_MASK = "linear-gradient(to bottom, transparent 0%, #000 40%)";
+
+const HOLD_TEXT: Record<NonNullable<Hold>, string> = {
+  offline: "La connexion est coupée. L'enregistrement reprendra seul dès qu'elle revient ; rien de ce qui a été dit n'est perdu.",
+  background: "Reprise de l'enregistrement…",
+};
+
+function LiveText({ noteId, hold, unavailable }: { noteId: string | null; hold: Hold; unavailable: string | null }) {
+  const text = useNote(noteId)?.partial ?? "";
+  if (unavailable) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col justify-end overflow-hidden py-2" aria-live="polite">
+        <p className="text-base leading-snug text-on-accent">
+          {unavailable.charAt(0).toUpperCase() + unavailable.slice(1)}. L'enregistrement continue : la dictée sera
+          transcrite dès que le service répondra.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="flex min-h-0 flex-1 flex-col justify-end overflow-hidden py-2"
+      style={hold ? undefined : { maskImage: LIVE_MASK, WebkitMaskImage: LIVE_MASK }}
+      aria-live="polite"
+    >
+      <p className="text-base leading-snug text-on-accent">
+        {hold ? HOLD_TEXT[hold] : text || <span className="opacity-60">Parlez, le texte s'affiche ici.</span>}
+      </p>
+    </div>
+  );
+}
+
+// In place of the greeting and the microphone when the network cannot carry a
+// dictation. It checks again by itself; the button only does it sooner.
+function NoConnection({
+  status,
+  unstable,
+  onRetry,
+}: {
+  status: Connectivity;
+  unstable: boolean;
+  onRetry: () => void;
+}) {
+  const checking = status === "checking";
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center pb-[8vh] text-center" role="alert">
+      <span className="flex h-20 w-20 items-center justify-center rounded-full bg-white-smoke text-midnight-blue">
+        <svg
+          aria-hidden
+          viewBox="0 0 24 24"
+          className="h-9 w-9"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M2.5 8.8a14 14 0 0 1 19 0" />
+          <path d="M5.6 12.2a9.5 9.5 0 0 1 12.8 0" />
+          <path d="M8.8 15.5a5 5 0 0 1 6.4 0" />
+          <circle cx="12" cy="19" r="0.9" fill="currentColor" stroke="none" />
+          <path d="M3.5 3.5l17 17" />
+        </svg>
+      </span>
+      <h1 className="mt-8 text-balance font-serif text-2xl">
+        {unstable ? "Connexion trop instable" : "Pas de connexion internet"}
+      </h1>
+      <p className="mt-3 max-w-[22rem] text-balance text-base text-[color:var(--muted)]">
+        La dictée est transcrite en direct : elle a besoin d'une connexion stable. Vérifiez le Wi-Fi ou le réseau
+        mobile, l'enregistrement sera proposé dès qu'elle revient.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        disabled={checking}
+        className="mt-8 flex h-12 items-center justify-center rounded-full bg-white-smoke px-6 text-base font-medium text-navy disabled:opacity-60"
+      >
+        {checking ? "Vérification…" : "Vérifier la connexion"}
+      </button>
+    </div>
   );
 }

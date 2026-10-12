@@ -39,7 +39,7 @@ export const newDraft = (name: string, email: string): Draft => ({
 /** A draft the panel may send. The two columns that make a contact findable again. */
 export const draftReady = (draft: Draft) => Boolean(draft.name.trim() && draft.email.trim());
 
-const input = "h-11 w-full rounded-xl bg-white px-3 text-sm text-midnight-blue outline-none";
+const input = "h-11 w-full rounded-xl bg-white px-3 text-midnight-blue outline-none";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -128,7 +128,7 @@ export function ParticipantForm({
       <Field label="Société">
         {chosen ? (
           <div className="flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2.5">
-            <span className="truncate text-sm">{chosen}</span>
+            <span className="truncate">{chosen}</span>
             <button
               type="button"
               className="shrink-0 text-2xs underline text-[color:var(--muted)]"
@@ -158,7 +158,7 @@ export function ParticipantForm({
                   <li key={company.id}>
                     <button
                       type="button"
-                      className="w-full truncate rounded-lg bg-white px-3 py-2 text-left text-sm"
+                      className="w-full truncate rounded-lg bg-white px-3 py-2 text-left"
                       onClick={() => set({ companyId: company.id, companyName: company.name })}
                     >
                       {company.name}
@@ -169,7 +169,7 @@ export function ParticipantForm({
                   <li>
                     <button
                       type="button"
-                      className="w-full truncate rounded-lg bg-white px-3 py-2 text-left text-sm text-navy"
+                      className="w-full truncate rounded-lg bg-white px-3 py-2 text-left text-navy"
                       onClick={() => set({ companyId: undefined, companyName: query.trim() })}
                     >
                       Créer « {query.trim()} »

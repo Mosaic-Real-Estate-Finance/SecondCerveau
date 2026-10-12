@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { StackBanner } from "@/components/stack-banner";
 import { useToast } from "@/components/toast";
 import { enablePush, pushOptedOut, pushSupported } from "@/lib/push";
-import { isStandalone } from "@/lib/standalone";
-import { cn } from "@/lib/utils";
+import { isStandalone, notificationSettingsPath } from "@/lib/standalone";
 
 // Notifications are what tell the team a Read AI meeting is waiting for a
 // decision, so the installed app asks for them straight away and keeps
@@ -18,8 +18,6 @@ type Permission = NotificationPermission | "unsupported";
 
 const read = (): Permission => (pushSupported() ? Notification.permission : "unsupported");
 
-const LEAVE_MS = 250 + 60; // --stack-close, plus a frame or two
-
 export function PushBanner({ visible }: { visible: boolean }) {
   const toast = useToast();
   const installed = isStandalone();
@@ -29,7 +27,7 @@ export function PushBanner({ visible }: { visible: boolean }) {
   const ask = async () => {
     if (asking.current) return;
     if (Notification.permission === "denied") {
-      toast.show("Notifications refusées : réactivez-les dans Réglages › Notifications › Mosaic.");
+      toast.show(`Notifications refusées : réactivez-les dans ${notificationSettingsPath()}.`);
       return;
     }
     asking.current = true;
@@ -75,52 +73,21 @@ export function PushBanner({ visible }: { visible: boolean }) {
 
   const wanted = installed && visible && permission !== "granted" && permission !== "unsupported";
 
-  // Mounted with .is-enter, reflowed, then released in the same task, as the
-  // snippet orchestrates it; unmounted only after its .is-leaving close.
-  const [shown, setShown] = useState(wanted);
-  const [leaving, setLeaving] = useState(false);
-  useEffect(() => {
-    if (wanted) {
-      setLeaving(false);
-      setShown(true);
-      return;
-    }
-    if (!shown) return;
-    setLeaving(true);
-    const timer = window.setTimeout(() => setShown(false), LEAVE_MS);
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wanted]);
-
-  const banner = useRef<HTMLDivElement>(null);
-  const [entered, setEntered] = useState(false);
-  useLayoutEffect(() => {
-    const node = banner.current;
-    if (!shown || !node) return setEntered(false);
-    void node.offsetWidth;
-    setEntered(true);
-  }, [shown]);
-
-  if (!shown) return null;
   return (
-    <div className="push-banner-stage" role="region" aria-label="Notifications">
-      <div className="t-stack">
-        <div ref={banner} className={cn("t-stack-banner push-banner", !entered && "is-enter", leaving && "is-leaving")} data-depth="0">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Les notifications sont importantes</p>
-            <p className="mt-0.5 text-xs text-[color:var(--muted)]">
-              Elles permettent de valider l'ajout d'un résumé de Read AI dans Notion.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void ask()}
-            className="shrink-0 rounded-full bg-navy px-4 py-2.5 text-sm font-medium text-on-accent"
-          >
-            Activer →
-          </button>
-        </div>
+    <StackBanner visible={wanted} label="Notifications">
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold">Les notifications sont importantes</p>
+        <p className="mt-0.5 text-xs text-[color:var(--muted)]">
+          Elles permettent de valider l'ajout d'un résumé de Read AI dans Notion.
+        </p>
       </div>
-    </div>
+      <button
+        type="button"
+        onClick={() => void ask()}
+        className="shrink-0 rounded-full bg-navy px-4 py-2.5 font-medium text-on-accent"
+      >
+        Activer →
+      </button>
+    </StackBanner>
   );
 }

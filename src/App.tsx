@@ -7,13 +7,26 @@ import { ReviewScreen } from "@/screens/ReviewScreen";
 import { SettingsScreen } from "@/screens/SettingsScreen";
 import { Sheet } from "@/components/sheet";
 import { InstallInvite } from "@/components/install-invite";
+import { OutageBanner } from "@/components/outage-banner";
 import { PushBanner } from "@/components/push-banner";
 import { ToastProvider } from "@/components/toast";
-import { ApiError, fetchContacts, fetchReviewCount, fetchSession, session, type Contact, type Session } from "@/lib/api";
+import {
+  ApiError,
+  fetchContacts,
+  fetchReviewCount,
+  fetchSession,
+  createHandoff,
+  redeemHandoff,
+  session,
+  type Contact,
+  type Session,
+} from "@/lib/api";
+import { useOutage } from "@/lib/outage";
+import { isIOS, isStandalone } from "@/lib/standalone";
+import { openInstallInvite } from "@/components/install-invite";
 import { persistStorage, updateNote, type Note, type NoteContact } from "@/lib/notes";
 import { resumePending, transcribeNote } from "@/lib/pipeline";
 import { afterTransition } from "@/lib/schedule";
-import { checkModelCached, preloadModel } from "@/lib/transcriber";
 
 export type ContactsState = {
   status: "loading" | "ready" | "error";
@@ -25,11 +38,38 @@ export type ContactsState = {
 
 type Page = 1 | 2 | 3 | 4;
 
-// A notification opens /?valider=<id>: the « À valider » screen, on that call.
+// A notification opens /?valider=<id>: the « Notifications » screen, on that
+// call — or on no call in particular when the parameter is empty.
 function linkedReview(): string | null {
   const id = new URLSearchParams(window.location.search).get("valider");
   if (id !== null) window.history.replaceState(null, "", window.location.pathname);
   return id;
+}
+
+// A phone that scanned the QR code of a computer's settings opens
+// /?connexion=<token>. The token signs it in, without a code (api/auth).
+//
+// On an iPhone the app added to the home screen does not share Safari's
+// cookies. So Safari, once signed in, takes an install token and reloads on
+// /?installer=<token>: index.html points the install manifest at an address
+// that carries it, and the page's own address carries it too — whichever iOS
+// takes as the start address, the installed app opens on it and signs itself
+// in with that token on its first launch. Safari never spends it.
+const QR = "connexion";
+const INSTALL = "installer";
+const params = new URLSearchParams(window.location.search);
+const fragment = new URLSearchParams(window.location.hash.slice(1));
+// In the fragment (QR codes made from now on), or the query (older ones).
+const qrToken = fragment.get(QR) ?? params.get(QR);
+const installToken = params.get(INSTALL);
+
+function forgetParam(name: string) {
+  const url = new URL(window.location.href);
+  url.searchParams.delete(name);
+  const hash = new URLSearchParams(url.hash.slice(1));
+  hash.delete(name);
+  url.hash = hash.toString();
+  window.history.replaceState(null, "", url.pathname + url.search + url.hash);
 }
 
 export default function App() {
@@ -38,7 +78,11 @@ export default function App() {
   const [page, setPage] = useState<Page>(focusId !== null ? 4 : 1);
   const [reviewCount, setReviewCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const outage = useOutage();
   const [settingsExpanded, setSettingsExpanded] = useState(false);
+  // A new key at every opening: the settings start on their first page, with
+  // nothing left over from the last visit.
+  const [settingsKey, setSettingsKey] = useState(0);
   const [noteId, setNoteId] = useState<string | null>(null);
   const noteIdRef = useRef(noteId);
   noteIdRef.current = noteId;
@@ -46,10 +90,57 @@ export default function App() {
 
   useEffect(() => {
     void persistStorage();
-    // The model downloads in the background from the first launch: streamed to
-    // the cache, never loaded into memory until a transcription needs it.
-    void checkModelCached().then(preloadModel);
     void resumePending();
+  }, []);
+
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [handingOff, setHandingOff] = useState(
+    Boolean(qrToken) || (Boolean(installToken) && isStandalone() && !session.get()),
+  );
+  useEffect(() => {
+    const installed = isStandalone();
+    const signIn = (token: string) =>
+      redeemHandoff(token).then((next) => {
+        session.set(next);
+        setUser(next);
+      });
+    const failed = (error: unknown) => {
+      if (session.get()) return;
+      setHandoffError((error as Error).message || "Ce lien n'a pas pu vous connecter.");
+    };
+
+    if (installToken) {
+      if (!installed) {
+        // Safari, back from the reload below: the address keeps its token for
+        // the install, and the guide opens.
+        if (session.get()) window.setTimeout(openInstallInvite, 400);
+        return;
+      }
+      forgetParam(INSTALL);
+      if (session.get()) return;
+      signIn(installToken)
+        .catch(failed)
+        .finally(() => setHandingOff(false));
+      return;
+    }
+
+    if (!qrToken) return;
+    forgetParam(QR);
+    signIn(qrToken)
+      .then(async () => {
+        if (installed) return;
+        if (isIOS()) {
+          // See above: a token for the app about to be installed, carried by
+          // a fresh page whose manifest starts there.
+          const { url } = await createHandoff({ install: true }).catch(() => ({ url: null }));
+          if (url) return window.location.replace(url);
+        }
+        // Straight to the install guide: that is what the QR code was for.
+        // Left a moment to mount with the signed-in tree.
+        window.setTimeout(openInstallInvite, 400);
+      })
+      .catch(failed)
+      .finally(() => setHandingOff(false));
   }, []);
 
   const closeSettings = useCallback(() => {
@@ -144,6 +235,8 @@ export default function App() {
   if (!user) {
     return (
       <AccessGate
+        pending={handingOff}
+        notice={handoffError}
         onValid={(next) => {
           session.set(next);
           setUser(next);
@@ -160,9 +253,10 @@ export default function App() {
 
   const recorded = (note: Note) => {
     openNote(note);
-    // Decoding the audio and waking the Whisper worker cost tens of
-    // milliseconds of main thread each: started here they would land on the
-    // frames of the page slide. They wait for it to be over.
+    // Finalising the stream is a message and a wait; but if the stream did
+    // not carry the dictation, decoding the recording costs tens of
+    // milliseconds of main thread, which would land on the frames of the
+    // page slide. It waits for the slide to be over.
     afterTransition(() => void transcribeNote(note.id));
   };
 
@@ -184,7 +278,10 @@ export default function App() {
             onRecorded={recorded}
             onOpen={openNote}
             onReview={() => setPage(4)}
-            onSettings={() => setSettingsOpen(true)}
+            onSettings={() => {
+              setSettingsKey((key) => key + 1);
+              setSettingsOpen(true);
+            }}
           />
         </section>
         <section className="t-page" data-page-id="2" inert={page !== 2}>
@@ -224,9 +321,12 @@ export default function App() {
       </div>
       {/* The settings rise over the home screen in a sheet rather than
           sliding in as a page. */}
-      <PushBanner visible={page === 1 && !settingsOpen} />
+      {/* One banner at a time: an outage says more than a reminder. */}
+      <OutageBanner visible={page === 1 && !settingsOpen} />
+      <PushBanner visible={page === 1 && !settingsOpen && !outage} />
       <Sheet open={settingsOpen} onClose={closeSettings} label="Réglages" full={settingsExpanded}>
         <SettingsScreen
+          key={settingsKey}
           active={settingsOpen}
           email={user.email}
           onBack={closeSettings}

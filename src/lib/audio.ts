@@ -1,6 +1,6 @@
-// Whisper takes 16 kHz mono PCM. Decoding happens on the main thread because
-// workers have no AudioContext; the samples are then transferred, not copied.
-export async function decodeForWhisper(bytes: ArrayBuffer): Promise<Float32Array> {
+// A stored recording as the transcription stream takes it: 16 kHz mono PCM.
+// Only used when the live stream did not carry the whole dictation.
+export async function decodeTo16k(bytes: ArrayBuffer): Promise<Float32Array> {
   if (!bytes.byteLength) throw new Error("enregistrement vide");
   const context = new OfflineAudioContext(1, 1, 16000);
   // decodeAudioData detaches what it is given, and the same bytes are held in

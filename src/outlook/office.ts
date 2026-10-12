@@ -1,9 +1,7 @@
 // The only file that talks to Office.js.
 //
 // office.js is loaded by a script tag in outlook.html, from the Microsoft CDN,
-// and is never bundled — Microsoft does not support a local copy, and it is
-// also the reason the isolation headers must not reach /outlook: COEP
-// require-corp would block it outright.
+// and is never bundled — Microsoft does not support a local copy.
 //
 // The surface used here is small enough to declare, which keeps @types/office-js
 // out of the build. Everything is read, nothing is written back to the mailbox.

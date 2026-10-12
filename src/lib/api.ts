@@ -117,6 +117,25 @@ export const fetchSession = () => call<Session>("/api/session");
 
 export const logout = () => call<{ ok: true }>("/api/auth/logout", { method: "POST", body: "{}" });
 
+/** A sign-in link for a phone, shown as a QR code on the computer. */
+export const createHandoff = (options: { install?: boolean } = {}) =>
+  call<{ url: string; expiresIn: number }>("/api/auth/handoff", { method: "POST", body: JSON.stringify(options) });
+
+/** The phone side: the token from that link opens a session here. */
+export const redeemHandoff = (token: string) =>
+  call<Session>("/api/auth/redeem", { method: "POST", body: JSON.stringify({ token }) });
+
+// ---- Real-time transcription --------------------------------------------------
+
+/** Everything needed to open one Soniox stream. The key opens one, once. */
+export type SttToken = { apiKey: string; expiresAt: string | null; wsUrl: string; model: string };
+
+export const fetchSttToken = () => call<SttToken>("/api/auth/stt-token", { method: "POST", body: "{}" });
+
+/** Transcription stopped on the account's side: the owner is mailed (once per outage). */
+export const reportSttOutage = (reason: string) =>
+  call<{ ok: true }>("/api/auth/stt-alert", { method: "POST", body: JSON.stringify({ reason }) });
+
 export const fetchContacts = () =>
   call<{ contacts: Contact[]; rollup: boolean; typeOptions: string[] }>("/api/contacts");
 
@@ -147,7 +166,16 @@ export type NoteFile = { id: string; name: string; size: number };
 // transcription is still running rather than after it. Notion drops an
 // upload that is never attached to a page after an hour, which is far
 // longer than the few seconds between this and the note being sent.
+//
+// Refused here past 4.2 MB: Vercel stops a request body at 4.5 MB with an
+// answer of its own, before the route can say anything useful (api/files).
+const UPLOAD_MAX = 4_200_000;
+
 export function uploadFile(file: File) {
+  if (file.size > UPLOAD_MAX) {
+    const mb = (bytes: number) => (bytes / 1_000_000).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+    return Promise.reject(new ApiError(`Fichier trop lourd : ${mb(file.size)} Mo, maximum ${mb(UPLOAD_MAX)} Mo.`, 413, false));
+  }
   const body = new FormData();
   body.append("file", file, file.name);
   return call<NoteFile>("/api/files", { method: "POST", body });

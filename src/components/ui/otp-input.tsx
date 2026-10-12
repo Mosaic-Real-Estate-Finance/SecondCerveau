@@ -10,9 +10,9 @@ const PATTERNS = {
 
 // success draws its own ring in svg, so no css ring here
 const RING = {
-  idle: "focus-visible:ring-2 focus-visible:ring-[#868593]/50",
+  idle: "focus-visible:ring-2 focus-visible:ring-[color:var(--hairline)]",
   success: "",
-  error: "ring-2 ring-[#FF3B30]/70 delay-150",
+  error: "ring-2 ring-danger/70 delay-150",
 } as const;
 
 // The app's ink rather than the original green: midnight blue, or its light
@@ -26,7 +26,7 @@ const SIZES = {
 } as const;
 
 const SLOT_CLASS =
-  "bg-[#F4F4F9] dark:bg-[#22222E] text-center font-medium text-transparent caret-transparent outline-none transition-shadow duration-200 selection:bg-transparent disabled:cursor-not-allowed disabled:opacity-50";
+  "bg-white-smoke text-center font-medium text-transparent caret-transparent outline-none transition-shadow duration-200 selection:bg-transparent disabled:cursor-not-allowed disabled:opacity-50";
 
 const ROLL_SPRING = { type: "spring", stiffness: 500, damping: 34 } as const;
 const CARET_SPRING = { type: "spring", stiffness: 500, damping: 40 } as const;
@@ -61,6 +61,8 @@ export type OtpInputProps = Omit<ComponentProps<"div">, "onChange" | "value" | "
   /** Spread the slots over the full width, square at any width. */
   fluid?: boolean;
   slotClassName?: string;
+  /** The drawn blinking caret in the empty slot. Off, nothing marks the slot but its focus. */
+  caret?: boolean;
 };
 
 export function OtpInput({
@@ -76,6 +78,7 @@ export function OtpInput({
   disabled,
   autoFocus,
   fluid = false,
+  caret = true,
   className,
   slotClassName,
   ...props
@@ -95,7 +98,7 @@ export function OtpInput({
     value === undefined ? Array.from({ length }, (_, i) => uncontrolled[i] ?? "") : toSlots(value, length);
   const numeric = type === "numbers";
   const scale = SIZES[size];
-  const caretVisible = focused !== null && !slots[focused];
+  const caretVisible = caret && focused !== null && !slots[focused];
 
   const commit = (next: string[]) => {
     if (value === undefined) setUncontrolled(next);

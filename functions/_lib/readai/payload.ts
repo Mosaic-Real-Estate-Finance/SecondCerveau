@@ -118,6 +118,25 @@ export function parseMeeting(payload: unknown): Meeting | null {
   };
 }
 
+/**
+ * Below this, a report has nothing to file. Read AI sends a meeting_end for a
+ * call that broke off on connection — then sends the real one a minute later
+ * under another session — with an empty transcript and a summary that only
+ * says so ("No summary available due to limited meeting data"). Twenty
+ * words is less than one sentence each way: no conversation fits under it.
+ */
+const MIN_WORDS = 20;
+
+/** Whether the meeting has a transcript worth a note, a question or a push. */
+export function hasContent(meeting: Pick<Meeting, "blocks">): boolean {
+  let words = 0;
+  for (const block of meeting.blocks) {
+    words += block.words.split(/\s+/).filter(Boolean).length;
+    if (words >= MIN_WORDS) return true;
+  }
+  return false;
+}
+
 /** "07:42", or "1:07:42" past the hour. */
 export function clock(ms: number): string {
   const total = Math.floor(Math.max(0, ms) / 1000);

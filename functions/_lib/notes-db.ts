@@ -17,6 +17,25 @@ export async function contactProperty(env: Env, schema: Schema): Promise<string>
   return found.name;
 }
 
+// The default template of the notes data source, which carries the layout of
+// a note. Read once per isolate every five minutes rather than on every note.
+// https://developers.notion.com/reference/post-page
+const templates = new Map<string, { at: number; id: string | null }>();
+
+export async function defaultTemplateId(env: Env, sourceId: string): Promise<string | null> {
+  const cached = templates.get(sourceId);
+  if (cached && Date.now() - cached.at < 5 * 60_000) return cached.id;
+  const list = await notion<{ templates?: { id: string; is_default?: boolean }[] }>(
+    env,
+    `/data_sources/${sourceId}/templates`,
+  ).catch(() => null);
+  if (!list) return null;
+  const all = list.templates ?? [];
+  const id = (all.find((template) => template.is_default) ?? all[0])?.id ?? null;
+  templates.set(sourceId, { at: Date.now(), id });
+  return id;
+}
+
 /** Every id of a paginated property, which the page object truncates at 25. */
 export async function propertyItems(env: Env, pageId: string, propertyId: string): Promise<any[]> {
   const items: any[] = [];

@@ -42,11 +42,13 @@ export type Note = {
   duration: number;
   amplitudes: number[];
   transcript?: string;
-  /** What has come back so far while the dictation is still being transcribed. */
+  /** The live text while the dictation is streamed: final words, then the current guess. */
   partial?: string;
   // undefined: not chosen yet. null: sent without a contact, on purpose.
   contact?: NoteContact;
   error?: string;
+  /** Put aside by a transcription outage: tried again at every launch. */
+  outage?: boolean;
 };
 
 const store = createStore("mosaic-dictee", "notes");
@@ -195,9 +197,10 @@ export async function getNote(id: string): Promise<Note | undefined> {
 }
 
 /** Never rejects: the note is in memory before the database is touched. */
-export async function saveNote(note: Note) {
+export async function saveNote(note: Note, { durable = true } = {}) {
   memory.set(note.id, note);
   publish();
+  if (!durable) return note;
   if (note.transcript) writeMirror();
   await persist(note);
   return note;
@@ -207,15 +210,24 @@ export async function saveNote(note: Note) {
 // are chained so neither read-modify-write overwrites the other.
 const pending = new Map<string, Promise<unknown>>();
 
-export function updateNote(id: string, patch: Partial<Note>): Promise<Note | undefined> {
+// `durable: false` is for the live text, which changes several times a
+// second while the recording grows: written to the database each time, it
+// would copy megabytes of audio for a few words. It reaches the database with
+// the next ordinary write, and it is redone anyway if the tab dies.
+export function updateNote(id: string, patch: Partial<Note>, { durable = true } = {}): Promise<Note | undefined> {
   const run = (pending.get(id) ?? Promise.resolve())
     .catch(() => undefined)
     .then(async () => {
       const note = await getNote(id);
       if (!note) return undefined;
-      return saveNote({ ...note, ...patch });
+      return saveNote({ ...note, ...patch }, { durable });
     });
   pending.set(id, run);
+  // Let go once it is the last one: the chain would otherwise hold the note,
+  // its recording included, for as long as the app runs.
+  void run.finally(() => {
+    if (pending.get(id) === run) pending.delete(id);
+  });
   return run;
 }
 
@@ -245,7 +257,7 @@ export function useNote(id: string | null) {
   return id ? notes.find((note) => note.id === id) : undefined;
 }
 
-// Asks the browser not to evict the audio and the model under storage pressure.
+// Asks the browser not to evict the audio under storage pressure.
 export async function persistStorage() {
   try {
     if (navigator.storage?.persisted && !(await navigator.storage.persisted())) {

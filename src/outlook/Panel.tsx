@@ -13,7 +13,6 @@ import {
   importAttachment,
   listCompanies,
   matchContacts,
-  setFallbackEmail,
   setTokenProvider,
   uploadLimit,
   type Company,
@@ -199,26 +198,34 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
   const uploads = useRef(new Map<string, UploadedFile & { at: number }>());
   const drafting = useRef(false);
 
+  const generation = useRef(0);
   const load = useCallback(async () => {
+    // Only the latest load may draw: on a pinned panel, a quick change of
+    // mail starts a second load while the first is still reading, and the
+    // first, finishing last, would show — and send — the previous mail.
+    const mine = ++generation.current;
+    const set = (next: Stage) => {
+      if (generation.current === mine) setStage(next);
+    };
     // Order matters. office.js loads in any browser tab, so "no mailbox" has
     // to be ruled out before "mailbox too old" — otherwise opening the page to
     // look at the layout reports that Outlook needs updating.
-    if (!inOutlook || !inMailbox()) return setStage({ name: "outside" });
-    if (!supportsNaa()) return setStage({ name: "incompatible" });
-    if (!configured()) return setStage({ name: "unconfigured" });
+    if (!inOutlook || !inMailbox()) return set({ name: "outside" });
+    if (!supportsNaa()) return set({ name: "incompatible" });
+    if (!configured()) return set({ name: "unconfigured" });
 
-    setStage({ name: "loading", read: 0 });
+    set({ name: "loading", read: 0 });
     created.current.clear();
     uploads.current.clear();
 
     // Waited for, not read once: see awaitItem in ./office.
     const mail = await awaitItem();
-    if (!mail?.conversationId) return setStage({ name: "no-mail" });
-    if (!(await bodyReadable())) return setStage({ name: "protected" });
+    if (!mail?.conversationId) return set({ name: "no-mail" });
+    if (!(await bodyReadable())) return set({ name: "protected" });
 
     const participants = fold(mail.participants, INTERNAL_DOMAINS, [...USERS_EMAILS, currentUser()]);
     const outside = externals(participants);
-    if (!outside.length) return setStage({ name: "no-external" });
+    if (!outside.length) return set({ name: "no-external" });
 
     try {
       // Both tokens first, in series. The very first acquisition can open the
@@ -231,7 +238,7 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
       // Then the reads, together: the thread, the note and the contacts are
       // independent, so the panel waits on the slowest rather than on the sum.
       const [messages, note, match, companies, limit] = await Promise.all([
-        fetchThread(graph, mail.conversationId, (read) => setStage({ name: "loading", read })),
+        fetchThread(graph, mail.conversationId, (read) => set({ name: "loading", read })),
         findNote(mail.conversationId),
         matchContacts(outside.map((one) => one.address)),
         listCompanies().catch(() => ({ companies: [], typeOptions: [] })),
@@ -260,7 +267,7 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
       const split = note ? at + 1 : 0;
       const files = candidates(messages.slice(split), messages.slice(0, split), limit);
 
-      setStage({
+      set({
         name: "ready",
         data: {
           mail,
@@ -275,17 +282,16 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
         },
       });
     } catch (error) {
-      if (error instanceof AuthError) return setStage({ name: "failed", message: error.message, retry: true });
-      if (error instanceof GraphError) return setStage({ name: "failed", message: error.message, retry: error.status >= 500 });
+      if (error instanceof AuthError) return set({ name: "failed", message: error.message, retry: true });
+      if (error instanceof GraphError) return set({ name: "failed", message: error.message, retry: error.status >= 500 });
       const api = error as ApiError;
-      setStage({ name: "failed", message: api.message ?? "Chargement impossible.", retry: api.retry ?? true });
+      set({ name: "failed", message: api.message ?? "Chargement impossible.", retry: api.retry ?? true });
     }
   }, [inOutlook]);
 
   useEffect(() => {
     if (inOutlook) {
       if (configured()) setTokenProvider(apiToken);
-      else setFallbackEmail(currentUser());
     }
     void load();
 
@@ -603,7 +609,7 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
                       aria-label={`Rattacher ${row.participant.name || row.participant.address}`}
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
+                      <span className="block truncate font-medium">
                         {row.match?.name || row.participant.name || row.participant.address}
                       </span>
                       <span className="block truncate text-2xs text-[color:var(--muted)]">
@@ -702,7 +708,7 @@ function FilesBox({
                   aria-label={`Joindre ${file.label}`}
                 />
                 <span className="min-w-0 flex-1">
-                  <span className={cn("block truncate text-sm", !ready && "text-[color:var(--muted)]")}>{file.label}</span>
+                  <span className={cn("block truncate", !ready && "text-[color:var(--muted)]")}>{file.label}</span>
                   <span className="block text-2xs text-[color:var(--muted)]">
                     {ready ? sizeLabel(file.size) : file.reason}
                   </span>

@@ -28,7 +28,7 @@ const AUTHORITY = import.meta.env.VITE_ENTRA_AUTHORITY ?? "https://login.microso
 const API_SCOPE = import.meta.env.VITE_ENTRA_API_SCOPE ?? "";
 const GRAPH_SCOPE = "https://graph.microsoft.com/Mail.Read";
 
-/** False when no app registration is configured: the panel then uses the fallback header. */
+/** False when no app registration is configured: the panel then says so and calls nothing. */
 export const configured = () => Boolean(CLIENT_ID && API_SCOPE);
 
 export class AuthError extends Error {

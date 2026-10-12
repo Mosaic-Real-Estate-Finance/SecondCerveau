@@ -29,7 +29,17 @@ const STEP = {
   }),
 };
 
-export function AccessGate({ onValid }: { onValid: (session: Session) => void }) {
+export function AccessGate({
+  onValid,
+  notice,
+  pending = false,
+}: {
+  onValid: (session: Session) => void;
+  /** Said above the form: a QR code from the computer that did not sign in. */
+  notice?: string | null;
+  /** A QR code from the computer is signing this phone in: no form yet. */
+  pending?: boolean;
+}) {
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -115,8 +125,13 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
           animate="center"
           exit={reduceMotion ? undefined : "exit"}
         >
-          {step === "email" ? (
-            <h1 className="mt-12 text-center font-serif text-2xl">Qui se connecte ?</h1>
+          {pending ? (
+            <h1 className="mt-12 text-center font-serif text-2xl">Connexion…</h1>
+          ) : step === "email" ? (
+            <>
+              <h1 className="mt-12 text-center font-serif text-2xl">Qui se connecte ?</h1>
+              {notice && <p className="mt-3 text-center text-base text-[color:var(--muted)]">{notice}</p>}
+            </>
           ) : (
             <>
               <h1 className="mt-12 font-serif text-2xl">Quel est votre code de connexion ?</h1>
@@ -125,7 +140,7 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
               </p>
             </>
           )}
-          <form onSubmit={submit} className="mt-8">
+          <form onSubmit={submit} className="mt-8" hidden={pending}>
             <div ref={wrap} className="t-input-wrap">
               {step === "email" ? (
                 <div
@@ -153,6 +168,9 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
               ) : (
                 <OtpInput
                   autoFocus
+                  // No blinking bar in the first slot: the boxes already say
+                  // where the code goes, and the bar read as a stray cursor.
+                  caret={false}
                   value={code}
                   status={status}
                   role="group"

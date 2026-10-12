@@ -87,7 +87,7 @@ done   # 401 partout
 | Conformité | aucun secret dans `dist/` ; aucun contenu ni email dans les logs Vercel | I, VIII |
 | Non-régression | dictée depuis la PWA installée après connexion par code | US3-8 |
 | Non-régression | complément Outlook : classer un mail | SC-008 |
-| Non-régression | en-têtes COOP / COEP présents sur `/` | — |
+| Non-régression | en-tête COOP présent sur `/` (COEP retiré avec le moteur Whisper) | — |
 
 Réunion d'une heure sans Read AI : `node scripts/readai-sample.mjs --minutes 60` produit un
 payload signé (participants à fournir) à poster sur le webhook.

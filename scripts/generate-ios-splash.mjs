@@ -56,6 +56,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     (device) =>
       `    <link rel="apple-touch-startup-image" media="(device-width: ${device[0]}px) and (device-height: ${device[1]}px) and (-webkit-device-pixel-ratio: ${device[2]}) and (orientation: portrait)" href="/${splashPath(device)}" />`,
   ).join("\n");
-  await writeFile(out("splash/links.html"), `${links}\n`);
+  // To paste into index.html; printed rather than written into public/,
+  // where it would be deployed for nothing.
+  console.log(links);
   console.log(`splash: ${DEVICES.length} images générées`);
 }

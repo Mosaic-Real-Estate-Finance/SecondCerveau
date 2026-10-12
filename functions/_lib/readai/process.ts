@@ -5,7 +5,7 @@ import { redis } from "../redis.js";
 import { findSame, keyOf, RECENT_MS, traceOf, type Trace } from "./meeting-key.js";
 import { matchExternals } from "./match.js";
 import { completeNote, createMeetingNote, findNoteByKey } from "./note.js";
-import type { Meeting } from "./payload.js";
+import { hasContent, type Meeting } from "./payload.js";
 import { split } from "./participants.js";
 import {
   close,
@@ -29,8 +29,10 @@ import {
 
 export type Outcome = "ignored" | "noted" | "queued" | "merged" | "error";
 
-const valider = (id: string) => `/?valider=${id}`;
-const plural = (count: number) => `${count} personne${count > 1 ? "s" : ""} à valider`;
+// Every notification opens the « Notifications » screen, on its call when it
+// has one. A meeting already written to Notion has none: the bare parameter
+// still opens the screen rather than the home page.
+const valider = (id = "") => `/?valider=${id}`;
 const titleOf = (meeting: Pick<Meeting, "title">) => meeting.title || "Réunion sans titre";
 
 /** What a waiting call keeps: the meeting minus its raw participant list. */
@@ -75,9 +77,9 @@ async function recentTraces(env: Env): Promise<Record<string, Trace>> {
  * Processes one meeting_end. Never throws: whatever fails after the webhook
  * has answered becomes an item in error, visible and retryable (principle VI).
  */
-export async function processMeeting(env: Env, meeting: Meeting): Promise<Outcome> {
+export async function processMeeting(env: Env, meeting: Meeting, lockWaitMs = 240_000): Promise<Outcome> {
   try {
-    const outcome = await run(env, meeting);
+    const outcome = await run(env, meeting, lockWaitMs);
     console.info(`[readai] ${outcome} session=${meeting.sessionId.slice(0, 12)}`);
     return outcome;
   } catch (error) {
@@ -85,15 +87,21 @@ export async function processMeeting(env: Env, meeting: Meeting): Promise<Outcom
     const item = await keepFailed(env, meeting, error);
     await notifyAll(env, {
       title: `Réunion non enregistrée — ${titleOf(meeting)}`,
-      body: "Ouvrez « À valider » pour réessayer.",
-      url: item ? valider(item.id) : "/",
+      body: "Ouvrez « Notifications » pour réessayer.",
+      url: valider(item?.id),
       tag: item?.id,
     });
     return "error";
   }
 }
 
-async function run(env: Env, meeting: Meeting): Promise<Outcome> {
+async function run(env: Env, meeting: Meeting, lockWaitMs: number): Promise<Outcome> {
+  // A call with no transcript — one that broke off and was recorded again —
+  // is dropped before anything: no item, no note, no notification.
+  if (!hasContent(meeting)) {
+    console.info(`[readai] empty transcript session=${meeting.sessionId.slice(0, 12)}`);
+    return "ignored";
+  }
   const excluded = await excludedSet(env);
   const { authors, externals } = split(meeting, internalDomains(env), excluded);
   // Only colleagues, or externals without an address, or all excluded:
@@ -122,7 +130,7 @@ async function run(env: Env, meeting: Meeting): Promise<Outcome> {
     });
   }
 
-  return locked(env, 240_000, async () => {
+  return locked(env, lockWaitMs, async () => {
     const trace = traceOf(
       meeting.title,
       meeting.start,
@@ -176,11 +184,11 @@ async function run(env: Env, meeting: Meeting): Promise<Outcome> {
 
     // ---- New meeting. ----
     if (!people.length) {
-      const created = await createMeetingNote(env, { meeting, key, authorIds, contactIds: recognized.map((c) => c.id) });
+      await createMeetingNote(env, { meeting, key, authorIds, contactIds: recognized.map((c) => c.id) });
       await notifyAll(env, {
         title: `Réunion ajoutée — ${titleOf(meeting)}`,
         body: recognized.map((contact) => contact.name).filter(Boolean).join(", "),
-        url: created.url,
+        url: valider(),
         tag: key,
       });
       return "noted";
@@ -244,11 +252,25 @@ async function queue(
   return item;
 }
 
+// The meeting's start, as the team reads a clock: Paris time, 14h30.
+const PARIS = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" });
+const hourOf = (iso: string) => {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "" : PARIS.format(date).replace(":", "h");
+};
+
+// One name, never a list: the first person still waiting for a decision —
+// someone the CRM does not know, which is the whole point of asking. With
+// several, the others are decided on the same screen.
 async function notifyQueued(env: Env, item: QueueItem) {
-  const open = item.people.filter((person) => !person.decision).length;
+  const person = item.people.find((candidate) => !candidate.decision) ?? item.people[0];
+  const name = person?.name?.trim() || person?.email || "un participant";
+  const hour = hourOf(item.meeting.start);
   await notifyAll(env, {
-    title: `${plural(open)} — ${titleOf(item.meeting)}`,
-    body: item.kind === "complete" ? "À ajouter à une note existante." : "Rien n'est écrit dans Notion avant votre décision.",
+    title: `On ajoute ${name} au CRM ?`,
+    body: hour
+      ? `Décidez en 1-clic si la réunion de ${hour} doit être dans Notion.`
+      : "Décidez en 1-clic si la réunion doit être dans Notion.",
     url: valider(item.id),
     tag: item.id,
   });
@@ -262,8 +284,13 @@ export async function retry(env: Env, itemId: string) {
   const item = await locked(env, 30_000, () => loadItem(env, itemId));
   if (!item) throw new QueueError(404, "Cet appel a déjà été traité.", "gone");
   if (item.stage === "process") {
+    // Replayed first, and the old item dropped only once the replay has an
+    // outcome — which, failed, is a new item in error of its own. Dropped
+    // first, a function stopped mid-replay would lose the meeting for good:
+    // Read AI does not send it again. The lock wait stays well inside the
+    // 120 s this route is given (vercel.json).
+    const outcome = await processMeeting(env, item.meeting as Meeting, 60_000);
     await locked(env, 30_000, () => deleteItem(env, item));
-    const outcome = await processMeeting(env, item.meeting as Meeting);
     return { outcome };
   }
   return locked(env, 30_000, async () => {

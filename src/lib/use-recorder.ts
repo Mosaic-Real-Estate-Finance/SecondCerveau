@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { startCapture, type Capture } from "./audio-capture";
-import { guardEnd, guardStart, liveAllowed } from "./engine-guard";
-import { abandonLive, beginLive, pushSegment } from "./live-transcript";
-import { removeNote, saveNote, toBytes, type Note } from "./notes";
-import { wake } from "./pipeline";
-import { warmEngine } from "./transcriber";
+import { removeNote, saveNote, toBytes, updateNote, type Note } from "./notes";
+import { dropStream, startStream, wake } from "./pipeline";
+import type { SonioxStream, StreamState } from "./soniox";
 
 export type RecorderState = "idle" | "starting" | "recording" | "error";
+
+/**
+ * Why the recording is on hold without the user having asked: the link to the
+ * transcription is down, or the app went to the background. It resumes by
+ * itself when the reason goes away.
+ */
+export type Hold = "offline" | "background" | null;
+
+/**
+ * A stream down for less than this does not hold the recording: the buffer
+ * covers a reconnection, and a hold that flashes on and off is only noise.
+ */
+const HOLD_AFTER_MS = 1500;
 
 // mp4 first: Safari only records mp4, and every engine decodes it.
 const MIME_TYPES = ["audio/mp4;codecs=mp4a.40.2", "audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
@@ -44,33 +55,23 @@ export function useMeter() {
   );
 }
 
-// ---- Warm microphone ----------------------------------------------------
-// Opening the microphone takes a few hundred milliseconds on a phone, and the
-// first words spoken meanwhile are lost. The home screen keeps it open while
-// visible, so a press starts recording at once. Nothing is recorded or sent
-// until the button is pressed.
+// ---- Microphone -----------------------------------------------------------
+// Opened on the press, released with the recording. The system shows the
+// microphone in use for as long as a track is live — and meeting recorders
+// (Notion, Fathom, Granola…) take any microphone in use for a call to record.
+// Kept open on the home screen, it was: a few hundred milliseconds saved on
+// the first word, paid with a microphone indicator and their pop-ups for as
+// long as the app was on screen.
 
-let warmStream: MediaStream | null = null;
-let warming: Promise<MediaStream | null> | null = null;
+let micStream: MediaStream | null = null;
 
-const isLive = (stream: MediaStream | null) =>
-  !!stream && stream.getAudioTracks().some((track) => track.readyState === "live");
-
-export function warmMicrophone() {
-  if (isLive(warmStream)) return Promise.resolve(warmStream);
-  warming ??= navigator.mediaDevices
-    .getUserMedia(CONSTRAINTS)
-    .then((stream) => (warmStream = stream))
-    .catch(() => null)
-    .finally(() => {
-      warming = null;
-    });
-  return warming;
+function openMicrophone() {
+  return navigator.mediaDevices.getUserMedia(CONSTRAINTS).then((stream) => (micStream = stream));
 }
 
-export function coolMicrophone() {
-  warmStream?.getTracks().forEach((track) => track.stop());
-  warmStream = null;
+function releaseMicrophone() {
+  micStream?.getTracks().forEach((track) => track.stop());
+  micStream = null;
 }
 
 // ---- Recorder -------------------------------------------------------------
@@ -83,7 +84,14 @@ const captured = ({ startedAt, pausedTotal, pausedAt }: Timed) =>
 export function useRecorder() {
   const [state, setState] = useState<RecorderState>("idle");
   const [paused, setPaused] = useState(false);
+  const [hold, setHold] = useState<Hold>(null);
+  // Set when the transcription refused for good. The recording goes on: it
+  // is kept, and transcribed again once the service answers.
+  const [unavailable, setUnavailable] = useState<string | null>(null);
+  const [noteId, setNoteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Counts the dictations dropped by an outage, for the screen to close.
+  const [shelved, setShelved] = useState(0);
   // Shared with the screen glow, which listens to the same microphone.
   const [stream, setStream] = useState<MediaStream | null>(null);
 
@@ -95,6 +103,13 @@ export function useRecorder() {
     source: MediaStreamAudioSourceNode | null;
     /** Null when this browser has no live path: the file is done at the end. */
     capture: Capture | null;
+    link: SonioxStream;
+    /** Paused by the user, held by the link or the tab: either stops the recording. */
+    userPaused: boolean;
+    hold: Hold;
+    holdTimer: number;
+    /** Removes the page listeners added for this recording. */
+    detach: () => void;
     chunks: Blob[];
     amplitudes: number[];
     startedAt: number;
@@ -107,39 +122,88 @@ export function useRecorder() {
     ready: Promise<unknown>;
   } | null>(null);
 
-  // The stream itself stays open: the screen decides when to release it.
+  // The microphone goes with the recording: the system's indicator is off as
+  // soon as the dictation ends, whichever way it ends.
   const teardown = useCallback(() => {
     const current = session.current;
     if (!current) return;
     cancelAnimationFrame(current.frame);
     clearInterval(current.saveTimer);
+    clearTimeout(current.holdTimer);
+    current.detach();
     current.capture?.abort();
     current.source?.disconnect();
     current.context.close().catch(() => undefined);
     session.current = null;
+    releaseMicrophone();
     setStream(null);
+    setHold(null);
+    setUnavailable(null);
+    setNoteId(null);
     wake.release();
   }, []);
 
-  useEffect(() => teardown, [teardown]);
+  // One place decides whether sound is being recorded: the user's pause and
+  // the hold both stop it, and only both gone resumes it.
+  const apply = useCallback((current: NonNullable<typeof session.current>) => {
+    const stop = current.userPaused || current.hold !== null;
+    if (current.recorder.state === "inactive") return;
+    try {
+      if (stop && !current.pausedAt) {
+        current.pausedAt = performance.now();
+        current.recorder.pause();
+        current.capture?.setPaused(true);
+      } else if (!stop && current.pausedAt) {
+        current.pausedTotal += performance.now() - current.pausedAt;
+        current.pausedAt = 0;
+        current.recorder.resume();
+        current.capture?.setPaused(false);
+      }
+    } catch {
+      // iOS may already have interrupted the recorder itself.
+    }
+    setPaused(current.userPaused);
+    setHold(current.hold);
+  }, []);
+
+  // Unmounted mid recording — signed out with the panel open: the recorder
+  // and the live stream stop with the screen. What was saved so far stays,
+  // and is transcribed at the next launch (resumePending).
+  useEffect(
+    () => () => {
+      const current = session.current;
+      if (current) {
+        if (current.recorder.state !== "inactive") current.recorder.stop();
+        dropStream(current.note.id);
+      }
+      teardown();
+    },
+    [teardown],
+  );
+
+  // Each press of the microphone, numbered: a start still waiting for the
+  // microphone when « Annuler » is pressed must not carry on behind the
+  // closed panel once it is granted.
+  const generation = useRef(0);
 
   // Called from pointerdown. The audio context is created before any await,
   // inside the gesture, which is what Safari requires to let it run.
   const start = useCallback(async () => {
     if (session.current) return;
+    const mine = ++generation.current;
     setError(null);
     setPaused(false);
     setMeter({ amplitudes: [], elapsed: 0 });
     const context = new AudioContext();
     void context.resume();
-    let liveId: string | null = null;
+    let streamId: string | null = null;
     try {
-      let stream = isLive(warmStream) ? warmStream! : null;
-      if (!stream) {
-        setState("starting");
-        stream = await warmMicrophone();
-        if (!stream) stream = await navigator.mediaDevices.getUserMedia(CONSTRAINTS);
-        warmStream = stream;
+      setState("starting");
+      const stream = await openMicrophone();
+      if (generation.current !== mine) {
+        releaseMicrophone();
+        context.close().catch(() => undefined);
+        return;
       }
 
       // Recording first; everything else follows without holding it back.
@@ -178,6 +242,45 @@ export function useRecorder() {
       const source = context.createMediaStreamSource(stream);
       source.connect(analyser);
 
+      // The transcription stream opens now, in parallel with everything else.
+      // What is said before it is connected waits in its buffer.
+      streamId = note.id;
+      const onLink = (link: StreamState) => {
+        if (session.current !== current) return;
+        clearTimeout(current.holdTimer);
+        if (link === "failed" && current.link.error?.outage) {
+          // The account's problem (credit, key): nothing the user can do,
+          // and they are not told the reason. It is met within the first
+          // second, before anything is said: the dictation is dropped on the
+          // spot, the panel closes, and the banner says the rest (outage.ts).
+          void cancel().then(() => setShelved((count) => count + 1));
+          return;
+        }
+        if (link === "failed") {
+          // Not the network, and nothing a pause would wait out: the
+          // recording carries on and the reason is said as it is.
+          setUnavailable(current.link.error?.message ?? "le service ne répond pas");
+          if (current.hold) {
+            current.hold = null;
+            apply(current);
+          }
+        } else if (link === "live") {
+          // Back: a hold for the link ends here; one for the background ends
+          // when the app is in front, which it must be for this to happen.
+          if (current.hold && document.visibilityState === "visible") {
+            current.hold = null;
+            apply(current);
+          }
+        } else if (link === "down" && !current.hold) {
+          current.holdTimer = window.setTimeout(() => {
+            if (session.current !== current || current.link.state === "live") return;
+            current.hold = document.visibilityState === "visible" ? "offline" : "background";
+            apply(current);
+          }, HOLD_AFTER_MS);
+        }
+      };
+      const live = startStream(note.id, onLink);
+
       const current = {
         note,
         recorder,
@@ -185,6 +288,11 @@ export function useRecorder() {
         context,
         source,
         capture: null as Capture | null,
+        link: live,
+        userPaused: false,
+        hold: null as Hold,
+        holdTimer: 0,
+        detach: () => undefined,
         chunks,
         amplitudes: [] as number[],
         startedAt,
@@ -197,35 +305,59 @@ export function useRecorder() {
       };
       session.current = current;
 
-      // Transcribing the dictation as it is spoken means holding the whole
-      // model in memory while the microphone is open. That is the part a
-      // phone may refuse, so it happens behind the breadcrumb: a tab that
-      // does not come back from it drops to the plain path by itself, on
-      // its own next launch, and stays there.
-      if (liveAllowed()) {
-        liveId = note.id;
-        beginLive(note.id);
-        guardStart("dictée transcrite en direct");
-        // Nothing is downloaded here; it returns at once if the weights are
-        // not on the device yet.
-        void warmEngine();
-        // After the recorder, never before it: registering the processor
-        // costs a few milliseconds and they must not come out of the
-        // recording.
-        void startCapture(source, (pcm) => pushSegment(note.id, pcm)).then((capture) => {
-          if (capture && session.current === current) current.capture = capture;
-          else abandonLive(note.id);
-        });
-      }
+      // After the recorder, never before it: registering the processor costs
+      // a few milliseconds and they must not come out of the recording.
+      void startCapture(source, (pcm) => live.push(pcm)).then((capture) => {
+        if (capture && session.current === current) current.capture = capture;
+        else if (!capture) dropStream(note.id);
+      });
+
+      // iOS suspends the tab when the screen locks or another app comes
+      // forward, and the socket dies with it, usually without saying so. The
+      // recording is held and the socket let go on the way out; on the way
+      // back the stream reconnects, replays what Soniox had not confirmed,
+      // and the recording resumes once it is live again.
+      const away = () => {
+        if (session.current !== current) return;
+        clearTimeout(current.holdTimer);
+        current.hold = "background";
+        apply(current);
+        current.link.suspend();
+        // Whatever the recorder has so far, in case the tab does not return.
+        void toBytes(new Blob(chunks, { type: recorder.mimeType })).then((audio) =>
+          updateNote(note.id, { audio, duration: captured(current), amplitudes: [...current.amplitudes] }),
+        );
+      };
+      const back = () => {
+        if (session.current !== current || document.visibilityState !== "visible") return;
+        current.link.resume();
+        if (current.link.state === "live" && current.hold === "background") {
+          current.hold = null;
+          apply(current);
+        }
+      };
+      const onVisibility = () => (document.visibilityState === "hidden" ? away() : back());
+      document.addEventListener("visibilitychange", onVisibility);
+      window.addEventListener("pagehide", away);
+      window.addEventListener("pageshow", back);
+      current.detach = () => {
+        document.removeEventListener("visibilitychange", onVisibility);
+        window.removeEventListener("pagehide", away);
+        window.removeEventListener("pageshow", back);
+      };
 
       const samples = new Float32Array(analyser.fftSize);
 
       // Each second's chunk goes to IndexedDB every few seconds, so a tab
       // killed mid dictation still leaves a playable, transcribable prefix.
+      // Merged into the note rather than written over it: the live text is on
+      // it too. A save still in flight when the recording stops is dropped,
+      // so it cannot put a shorter recording back over the full one.
       current.saveTimer = window.setInterval(() => {
-        void toBytes(new Blob(chunks, { type: recorder.mimeType })).then((audio) =>
-          saveNote({ ...note, audio, duration: captured(current), amplitudes: [...current.amplitudes] }),
-        );
+        void toBytes(new Blob(chunks, { type: recorder.mimeType })).then((audio) => {
+          if (session.current !== current) return;
+          return updateNote(note.id, { audio, duration: captured(current), amplitudes: [...current.amplitudes] });
+        });
       }, SAVE_EVERY_MS);
 
       let lastSample = 0;
@@ -243,92 +375,91 @@ export function useRecorder() {
         current.frame = requestAnimationFrame(tick);
       };
       current.frame = requestAnimationFrame(tick);
+      setNoteId(note.id);
     } catch (cause) {
-      if (liveId) abandonLive(liveId);
+      if (streamId) dropStream(streamId);
       context.close().catch(() => undefined);
       teardown();
       const denied = (cause as DOMException)?.name === "NotAllowedError";
       setError(denied ? "Accès au micro refusé. Autorisez-le dans les réglages du navigateur." : "Micro indisponible.");
       setState("error");
     }
-  }, [teardown]);
+  }, [teardown, apply]);
 
   // Holds the recording where it is. The microphone stays open, so resuming
   // is instant; nothing is captured meanwhile.
   const togglePause = useCallback(() => {
     const current = session.current;
     if (!current || current.recorder.state === "inactive") return;
-    if (current.pausedAt) {
-      current.pausedTotal += performance.now() - current.pausedAt;
-      current.pausedAt = 0;
-      current.recorder.resume();
-      current.capture?.setPaused(false);
-      setPaused(false);
-    } else {
-      current.pausedAt = performance.now();
-      current.recorder.pause();
-      current.capture?.setPaused(true);
-      setPaused(true);
-    }
-  }, []);
+    current.userPaused = !current.userPaused;
+    apply(current);
+  }, [apply]);
 
-  // Resolves with the saved note, ready for transcription.
-  const stop = useCallback(async (): Promise<Note | null> => {
+  // Resolves with the saved note, ready for transcription. A second press of
+  // « Terminer » while the first is finishing gets the same answer, not a
+  // second note.
+  const stopping = useRef<Promise<Note | null> | null>(null);
+  const stop = useCallback((): Promise<Note | null> => {
+    if (!stopping.current) {
+      stopping.current = finish().finally(() => {
+        stopping.current = null;
+      });
+    }
+    return stopping.current;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teardown]);
+
+  const finish = async (): Promise<Note | null> => {
     const current = session.current;
     if (!current) return null;
     clearInterval(current.saveTimer);
     const duration = captured(current);
     // The live transcript is only used if the capture heard the dictation
-    // through. A graph interrupted on the way — a call coming in, the app
-    // sent to the background — would give a text with its middle missing,
-    // which is far worse than one that took longer to arrive.
+    // through. A graph interrupted on the way — a call coming in — would give
+    // a text with its middle missing, which is far worse than one that took
+    // longer to arrive. (Holds pause both clocks alike, so they do not count.)
     const heard = current.capture?.seconds() ?? 0;
     // The processor is registered a few milliseconds after the recorder
     // starts, and the last partial block is never sent: under a second of
     // slack covers both, and nothing like the gap an interruption leaves.
     if (!current.capture || heard < duration - 0.8) {
-      abandonLive(current.note.id);
+      dropStream(current.note.id);
       current.capture?.abort();
     } else {
-      // The last utterance, before anything is torn down. It joins the queue
-      // behind the ones already running, so what is left to wait for is one
-      // pass.
-      const tail = await current.capture.end();
-      if (tail) pushSegment(current.note.id, tail);
+      // The last quarter second, before anything is torn down. The stream
+      // itself is finalised by the transcription, which takes it from here.
+      await current.capture.end();
     }
     if (current.recorder.state === "paused") current.recorder.resume();
     if (current.recorder.state !== "inactive") current.recorder.stop();
     // The first save is only a safety net against a killed tab; the full one
     // below replaces it, so its failure must not hold up the recording.
     const [audio] = await Promise.all([current.stopped, current.ready.catch(() => undefined)]);
-    const note: Note = {
-      ...current.note,
-      status: "recorded",
-      audio,
-      duration,
-      amplitudes: current.amplitudes,
-    };
+    const fields = { status: "recorded" as const, audio, duration, amplitudes: current.amplitudes };
     teardown();
     // Awaited: what follows reads the note back, and an unfinished write
-    // would hand it the partial audio saved while recording.
-    await saveNote(note);
+    // would hand it the partial audio saved while recording. Merged, so the
+    // live text stays on it until the final one replaces it.
+    const note = (await updateNote(current.note.id, fields)) ?? (await saveNote({ ...current.note, ...fields }));
     setPaused(false);
     setState("idle");
     return note;
-  }, [teardown]);
+  };
 
   const cancel = useCallback(async () => {
     const current = session.current;
-    if (!current) return setState("idle");
+    if (!current) {
+      generation.current++;
+      return setState("idle");
+    }
     if (current.recorder.state !== "inactive") current.recorder.stop();
-    abandonLive(current.note.id);
-    guardEnd();
-    await current.ready;
+    dropStream(current.note.id);
+    await current.ready.catch(() => undefined);
     teardown();
     await removeNote(current.note.id);
     setPaused(false);
     setState("idle");
   }, [teardown]);
 
-  return { state, paused, error, stream, start, stop, cancel, togglePause };
+  return { state, paused, hold, unavailable, noteId, error, stream, shelved, start, stop, cancel, togglePause };
 }

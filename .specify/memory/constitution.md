@@ -1,14 +1,13 @@
 <!--
 Sync Impact Report
-Version : 1.0.0 → 2.0.0 (MAJEUR : le principe II est redéfini de façon incompatible,
-et le chemin d'identification x-user-email admis par IV disparaît)
+Version : 2.0.0 → 3.0.0 (MAJEUR : la contrainte « transcription sur l'appareil, l'audio ne
+quitte pas le téléphone » est retirée ; la dictée est transcrite en temps réel par Soniox)
 Principes modifiés :
-  - II. Notion est la source de vérité → même titre, stockage annexe Redis admis pour
-    l'état opérationnel, appel en attente conservé en entier jusqu'à la décision
-  - IV. Toute route API est authentifiée → même titre, trois preuves nommées (signature
-    HMAC du webhook, session PWA ouverte par code email, jeton Microsoft du complément)
-  - VIII. Minimisation des données → étendu aux réunions, exception unique bornée par II
-Sections modifiées : Contraintes produit et interface (trois outils, routes /api/readai/*)
+  - I. Aucun secret côté client → admet une clé temporaire, à usage unique et de courte
+    durée, frappée par le serveur pour un seul flux de transcription
+  - VIII. Minimisation des données → Soniox nommé comme seul destinataire tiers de l'audio
+    et du texte d'une dictée, pour la transcription et rien d'autre
+Sections modifiées : Contraintes produit et interface (transcription d'une dictée)
 Sections ajoutées : aucune
 Sections retirées : aucune
 Templates : plan, spec et tasks lisent la constitution à l'exécution, aucun à modifier
@@ -28,6 +27,10 @@ trois et passent avant toute décision technique.
 Le token Notion, les clés IA et les secrets Entra VIVENT uniquement en variables
 d'environnement serveur. Aucun fichier livré au navigateur NE CONTIENT de secret, ni en
 production ni en développement.
+
+Seule exception : une clé de transcription temporaire, frappée par le serveur pour une
+session authentifiée, valable une minute et pour un seul flux (`/api/auth/stt-token`). La clé
+Soniox elle-même ne quitte jamais le serveur.
 
 Vérifiable : une recherche de motif de clé dans le bundle de production ne renvoie rien.
 
@@ -112,8 +115,12 @@ Le contenu d'une dictée, d'un mail ou d'une réunion N'EST jamais journalisé c
 une réunion, cela couvre le résumé, la transcription, et le nom comme l'email de chaque
 participant. Ce contenu transite vers Notion et nulle part ailleurs.
 
-Seule exception : le stockage temporaire d'un appel en attente de validation, borné par le
-principe II (champs nécessaires seulement, supprimé dès la décision).
+Deux exceptions, et seulement deux :
+
+- le stockage temporaire d'un appel en attente de validation, borné par le principe II
+  (champs nécessaires seulement, supprimé dès la décision) ;
+- l'audio d'une dictée, envoyé à Soniox pour la transcription en temps réel, directement depuis
+  l'appareil. Rien d'autre n'y part, et le serveur ne voit ni l'audio ni le texte avant Notion.
 
 Vérifiable : aucun journal serveur ne contient de texte de réunion, de nom ni d'adresse de
 participant ; les journaux citent des identifiants techniques et des statuts.
@@ -125,8 +132,9 @@ réunions contiennent les propos des clients ; ce qui n'est pas conservé n'a pa
 
 - L'interface est en français, et suit la direction artistique Mosaic : palette, Lora, niveau
   de mouvement 1.
-- La transcription d'une dictée se fait sur l'appareil. L'audio ne quitte pas le téléphone ;
-  seul le texte part.
+- La transcription d'une dictée se fait en temps réel chez Soniox : l'appareil y envoie l'audio
+  pendant la dictée, et l'enregistrement reste sur l'appareil jusqu'à la confirmation de
+  Notion (principe VI). Sans connexion, la dictée ne démarre pas.
 - Le dépôt porte trois outils indépendants : la dictée (`/api/*` historiques), le complément
   Outlook (`/api/outlook/*`) et la synchronisation Read AI (`/api/readai/*`). Ils partagent
   les briques serveur de `functions/_lib` (client Notion, utilisateurs, authentification,
@@ -159,4 +167,4 @@ une clarification sans portée nouvelle.
 Revue de conformité : la grille de convergence de chaque feature vérifie au minimum les
 principes I, IV, V, VI et VIII, qui sont ceux dont la violation est silencieuse.
 
-**Version**: 2.0.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-08
+**Version**: 3.0.0 | **Ratified**: 2026-10-03 | **Last Amended**: 2026-10-12

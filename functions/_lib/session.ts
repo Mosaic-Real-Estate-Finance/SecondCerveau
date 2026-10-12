@@ -1,4 +1,4 @@
-import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { jwtVerify, SignJWT } from "jose";
 import { redis } from "./redis.js";
 import type { Env } from "./notion.js";
@@ -21,7 +21,9 @@ const KEYS = {
   code: (email: string) => `auth:code:${email}`,
   cool: (email: string) => `auth:cool:${email}`,
   hour: (email: string) => `auth:hour:${email}`,
+  tries: (email: string) => `auth:tries:${email}`,
   revoked: (jti: string) => `auth:revoked:${jti}`,
+  handoff: (hash: string) => `auth:handoff:${hash}`,
 };
 
 export class SessionConfigError extends Error {}
@@ -55,35 +57,79 @@ export async function requestCode(env: Env, email: string, allowed: boolean): Pr
   const store = redis(env);
   const cool = await store.set(KEYS.cool(email), 1, { nx: true, ex: 60 });
   if (cool !== "OK") return { ok: false, status: 429, error: "Attendez une minute avant de redemander un code." };
+  // The window is opened with its expiry in one command: an incr followed by
+  // a separate expire would leave, if the function died between the two, a
+  // counter that never expires and an address locked out for good.
+  await store.set(KEYS.hour(email), 0, { nx: true, ex: 3600 });
   const sent = await store.incr(KEYS.hour(email));
-  if (sent === 1) await store.expire(KEYS.hour(email), 3600);
   if (sent > SENDS_PER_HOUR) return { ok: false, status: 429, error: "Trop de codes demandés, réessayez dans une heure." };
   if (!allowed) return { ok: true, code: null };
 
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-  await store.set(KEYS.code(email), { hash: hashOf(env, email, code), tries: 0 }, { ex: CODE_TTL });
+  await store.set(KEYS.code(email), { hash: hashOf(env, email, code) }, { ex: CODE_TTL });
+  await store.del(KEYS.tries(email));
   return { ok: true, code };
 }
 
 /**
- * True once, for the right code within ten minutes. Five wrong tries and the
- * code is gone: the sixth attempt meets nothing to guess.
+ * True once, for the right code within ten minutes. Five tries and the code
+ * is gone: the sixth attempt meets nothing to guess.
+ *
+ * The try is counted before the comparison, by an atomic increment: a read,
+ * compare and write back would let a burst of parallel guesses all read the
+ * same count, and spend one try for a thousand guesses.
  */
 export async function checkCode(env: Env, email: string, code: string): Promise<boolean> {
+  if (!/^\d{6}$/.test(code)) return false;
   const store = redis(env);
-  const held = await store.get<{ hash: string; tries: number }>(KEYS.code(email));
-  if (!held || !/^\d{6}$/.test(code)) return false;
+  const held = await store.get<{ hash: string }>(KEYS.code(email));
+  if (!held) return false;
+  const [tries] = await store.multi().incr(KEYS.tries(email)).expire(KEYS.tries(email), CODE_TTL).exec<[number, number]>();
+  if (tries > CODE_TRIES) {
+    await store.del(KEYS.code(email));
+    return false;
+  }
   const given = Buffer.from(hashOf(env, email, code));
   const right = given.length === held.hash.length && timingSafeEqual(given, Buffer.from(held.hash));
-  if (right) {
-    // Single use: deleted before the session is even signed.
-    await store.del(KEYS.code(email));
-    return true;
-  }
-  const tries = held.tries + 1;
-  if (tries >= CODE_TRIES) await store.del(KEYS.code(email));
-  else await store.set(KEYS.code(email), { ...held, tries }, { keepTtl: true });
-  return false;
+  // Single use: deleted before the session is even signed. A last wrong try
+  // takes the code with it.
+  if (right || tries >= CODE_TRIES) await store.del(KEYS.code(email), KEYS.tries(email));
+  return right;
+}
+
+// ---- Handing a session to a phone --------------------------------------------
+//
+// The settings, on a computer, show a QR code: the phone that scans it is
+// signed in as the same person without typing a code. The code carries a
+// token that is long, random, short-lived and good for one sign-in.
+//
+// iOS needs a second one. An app added to the home screen keeps its own
+// cookies, apart from Safari's: signed in in Safari, it would still ask for a
+// code. So Safari, once signed in, asks for an install token, and reloads on
+// an address that carries it, with a manifest that starts there too: the
+// installed app starts on that address and signs itself in with it on its
+// first launch. It lives longer, the time to read the guide and install.
+//
+// Stored hashed with the server secret, like the codes: a read of the store
+// does not hand anyone a working token. Each is spent in one atomic read.
+
+export type HandoffKind = "qr" | "install";
+const HANDOFF_TTL: Record<HandoffKind, number> = { qr: 10 * 60, install: 30 * 60 };
+
+const handoffHash = (env: Env, token: string) => createHmac("sha256", secret(env)).update(`handoff:${token}`).digest("hex");
+
+export const handoffShape = (token: unknown): token is string => typeof token === "string" && /^[A-Za-z0-9_-]{43}$/.test(token);
+
+/** A fresh single-use token for `email`. */
+export async function createHandoff(env: Env, email: string, kind: HandoffKind): Promise<{ token: string; expiresIn: number }> {
+  const token = randomBytes(32).toString("base64url");
+  await redis(env).set(KEYS.handoff(handoffHash(env, token)), { email, kind }, { ex: HANDOFF_TTL[kind] });
+  return { token, expiresIn: HANDOFF_TTL[kind] };
+}
+
+/** What the token was made for, or null once it is spent or expired. */
+export async function redeemHandoff(env: Env, token: string): Promise<{ email: string; kind: HandoffKind } | null> {
+  return (await redis(env).getdel<{ email: string; kind: HandoffKind }>(KEYS.handoff(handoffHash(env, token)))) ?? null;
 }
 
 // ---- Sessions ---------------------------------------------------------------
