@@ -180,7 +180,7 @@ function taskpaneIsNotTheApp(): Plugin {
     transformIndexHtml: {
       order: "post",
       handler(html, context) {
-        if (!context.path.includes("outlook")) return html;
+        if (!context.path.includes("outlook") && !context.path.includes("maquette")) return html;
         return html.replace(/\s*<link rel="manifest"[^>]*>/g, "");
       },
     },
@@ -201,6 +201,8 @@ export default defineConfig(async ({ mode }) => {
         input: {
           main: fileURLToPath(new URL("./index.html", import.meta.url)),
           outlook: fileURLToPath(new URL("./outlook.html", import.meta.url)),
+          // A mockup of the Notifications screen, without sign-in (src/maquette).
+          maquette: fileURLToPath(new URL("./maquette.html", import.meta.url)),
         },
       },
     },
@@ -235,12 +237,12 @@ export default defineConfig(async ({ mode }) => {
           // served from the dictation's cache — the denylist below only governs
           // the navigation fallback, never an exact precache hit — and the
           // add-in would run on a stale build with no way to notice.
-          globIgnores: ["splash/**", "pwa-install-animation.html", "pwa-anim/**", "outlook.html", "outlook/**", "assets/outlook-*.js", "assets/outlook-*.css"],
+          globIgnores: ["splash/**", "pwa-install-animation.html", "pwa-anim/**", "outlook.html", "outlook/**", "assets/outlook-*.js", "assets/outlook-*.css", "maquette.html", "assets/maquette-*"],
           navigateFallback: "index.html",
           // The dictation's service worker has scope "/", so without /outlook
           // on this list it answers a taskpane navigation with the dictation
           // shell — and the add-in shows the wrong application entirely.
-          navigateFallbackDenylist: [/^\/api\//, /^\/outlook/],
+          navigateFallbackDenylist: [/^\/api\//, /^\/outlook/, /^\/maquette/],
           // A cold launch of the installed app on a poor connection would
           // otherwise wait for the network with no time limit, which on iOS
           // shows a white screen for up to a minute. Past three seconds the

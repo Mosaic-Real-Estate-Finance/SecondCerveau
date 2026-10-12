@@ -1,7 +1,10 @@
 import bell from "@/assets/icons/bell.svg?raw";
 import bellBadge from "@/assets/icons/bell.badge.svg?raw";
+import checkmarkCircle from "@/assets/icons/checkmark.circle.svg?raw";
 import gear from "@/assets/icons/gear.svg?raw";
 import microphone from "@/assets/icons/microphone.svg?raw";
+import minusCircle from "@/assets/icons/minus.circle.svg?raw";
+import xmarkCircle from "@/assets/icons/xmark.circle.svg?raw";
 import { cn } from "@/lib/utils";
 
 // The SF Symbols exports, kept byte for byte in src/assets/icons. They paint in
@@ -14,6 +17,9 @@ const ICONS = {
   "bell.badge": inline(bellBadge),
   gear: inline(gear),
   microphone: inline(microphone),
+  "checkmark.circle": inline(checkmarkCircle),
+  "xmark.circle": inline(xmarkCircle),
+  "minus.circle": inline(minusCircle),
 } as const;
 
 export type IconName = keyof typeof ICONS;

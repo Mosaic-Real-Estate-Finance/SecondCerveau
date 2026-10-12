@@ -3,8 +3,7 @@ import { dismissOutage, useOutage } from "@/lib/outage";
 
 // What a user is told when transcription stops on the account's side (see
 // lib/outage.ts): not the reason, which is not theirs to fix, but that the
-// owner knows and that they will hear when it is fixed. The dictation they
-// were making waits in the list of the home screen.
+// owner knows and that they will hear when it is fixed.
 
 export function OutageBanner({ visible }: { visible: boolean }) {
   const outage = useOutage();

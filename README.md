@@ -122,8 +122,8 @@ millisecondes, mais allumait l'indicateur micro du système en permanence, et
 les enregistreurs de réunion (Notion, Fathom…) le prenaient pour un appel.
 
 **Une panne côté compte Soniox** (crédit épuisé, clé refusée, clé absente du
-serveur) n'est pas montrée telle quelle : le panneau se referme, la dictée
-attend dans la liste et sera retranscrite à une prochaine ouverture, et une
+serveur) n'est pas montrée telle quelle : elle se révèle dans la première
+seconde, la dictée commencée est supprimée, le panneau se referme et une
 bannière dit que Théo est prévenu. `POST /api/auth/stt-alert` envoie un seul
 mail par panne à `STT_ALERT_EMAIL` (par défaut theo@gouman.fr) : ce qui s'est
 passé, qui, quand. Le lien de ce mail, une fois le problème réglé, prévient

@@ -90,7 +90,7 @@ export function useRecorder() {
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [noteId, setNoteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Counts the dictations put aside by an outage, for the screen to close.
+  // Counts the dictations dropped by an outage, for the screen to close.
   const [shelved, setShelved] = useState(0);
   // Shared with the screen glow, which listens to the same microphone.
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -250,13 +250,10 @@ export function useRecorder() {
         clearTimeout(current.holdTimer);
         if (link === "failed" && current.link.error?.outage) {
           // The account's problem (credit, key): nothing the user can do,
-          // and they are not told the reason. The dictation so far is kept
-          // and put aside — transcribed at a later launch, once it is fixed
-          // — and the panel closes; the banner says the rest (outage.ts).
-          void stop().then((kept) => {
-            if (kept) dropStream(kept.id);
-            setShelved((count) => count + 1);
-          });
+          // and they are not told the reason. It is met within the first
+          // second, before anything is said: the dictation is dropped on the
+          // spot, the panel closes, and the banner says the rest (outage.ts).
+          void cancel().then(() => setShelved((count) => count + 1));
           return;
         }
         if (link === "failed") {

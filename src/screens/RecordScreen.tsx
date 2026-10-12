@@ -171,8 +171,8 @@ export function RecordScreen({
     setOpen(false);
   };
 
-  // A dictation put aside by a transcription outage: the panel closes, the
-  // note waits in the list, and the banner explains (OutageBanner).
+  // A dictation dropped by a transcription outage: the panel closes and the
+  // banner explains (OutageBanner).
   useEffect(() => {
     if (recorder.shelved) setOpen(false);
   }, [recorder.shelved]);
