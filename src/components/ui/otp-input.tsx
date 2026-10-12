@@ -61,6 +61,8 @@ export type OtpInputProps = Omit<ComponentProps<"div">, "onChange" | "value" | "
   /** Spread the slots over the full width, square at any width. */
   fluid?: boolean;
   slotClassName?: string;
+  /** The drawn blinking caret in the empty slot. Off, nothing marks the slot but its focus. */
+  caret?: boolean;
 };
 
 export function OtpInput({
@@ -76,6 +78,7 @@ export function OtpInput({
   disabled,
   autoFocus,
   fluid = false,
+  caret = true,
   className,
   slotClassName,
   ...props
@@ -95,7 +98,7 @@ export function OtpInput({
     value === undefined ? Array.from({ length }, (_, i) => uncontrolled[i] ?? "") : toSlots(value, length);
   const numeric = type === "numbers";
   const scale = SIZES[size];
-  const caretVisible = focused !== null && !slots[focused];
+  const caretVisible = caret && focused !== null && !slots[focused];
 
   const commit = (next: string[]) => {
     if (value === undefined) setUncontrolled(next);

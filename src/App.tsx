@@ -24,7 +24,8 @@ export type ContactsState = {
 
 type Page = 1 | 2 | 3 | 4;
 
-// A notification opens /?valider=<id>: the « À valider » screen, on that call.
+// A notification opens /?valider=<id>: the « Notifications » screen, on that
+// call — or on no call in particular when the parameter is empty.
 function linkedReview(): string | null {
   const id = new URLSearchParams(window.location.search).get("valider");
   if (id !== null) window.history.replaceState(null, "", window.location.pathname);

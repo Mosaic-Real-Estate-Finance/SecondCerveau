@@ -21,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { fold, match } from "@/screens/ContactScreen";
 
-// « À valider » (brief §8): the meetings Read AI sent that name someone the
+// « Notifications », formerly « À valider » (brief §8): the meetings Read AI sent that name someone the
 // CRM does not know. Nothing about them is in Notion until every person is
 // settled here — attached to a contact, created as one, or set aside.
 
@@ -208,7 +208,7 @@ export function ReviewScreen({
 
   return (
     <Screen>
-      <TopBar title="À valider" onBack={onBack} backLabel="Accueil" />
+      <TopBar title="Notifications" onBack={onBack} backLabel="Accueil" />
       <p className="-mt-3 mb-6 text-xs text-[color:var(--muted)]">
         Réunions Read AI avec une personne que le CRM ne connaît pas. Rien n'est écrit dans Notion avant votre décision.
       </p>

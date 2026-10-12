@@ -29,7 +29,10 @@ import {
 
 export type Outcome = "ignored" | "noted" | "queued" | "merged" | "error";
 
-const valider = (id: string) => `/?valider=${id}`;
+// Every notification opens the « Notifications » screen, on its call when it
+// has one. A meeting already written to Notion has none: the bare parameter
+// still opens the screen rather than the home page.
+const valider = (id = "") => `/?valider=${id}`;
 const plural = (count: number) => `${count} personne${count > 1 ? "s" : ""} à valider`;
 const titleOf = (meeting: Pick<Meeting, "title">) => meeting.title || "Réunion sans titre";
 
@@ -85,8 +88,8 @@ export async function processMeeting(env: Env, meeting: Meeting): Promise<Outcom
     const item = await keepFailed(env, meeting, error);
     await notifyAll(env, {
       title: `Réunion non enregistrée — ${titleOf(meeting)}`,
-      body: "Ouvrez « À valider » pour réessayer.",
-      url: item ? valider(item.id) : "/",
+      body: "Ouvrez « Notifications » pour réessayer.",
+      url: valider(item?.id),
       tag: item?.id,
     });
     return "error";
@@ -176,11 +179,11 @@ async function run(env: Env, meeting: Meeting): Promise<Outcome> {
 
     // ---- New meeting. ----
     if (!people.length) {
-      const created = await createMeetingNote(env, { meeting, key, authorIds, contactIds: recognized.map((c) => c.id) });
+      await createMeetingNote(env, { meeting, key, authorIds, contactIds: recognized.map((c) => c.id) });
       await notifyAll(env, {
         title: `Réunion ajoutée — ${titleOf(meeting)}`,
         body: recognized.map((contact) => contact.name).filter(Boolean).join(", "),
-        url: created.url,
+        url: valider(),
         tag: key,
       });
       return "noted";

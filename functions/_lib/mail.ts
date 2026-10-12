@@ -1,9 +1,16 @@
 import nodemailer from "nodemailer";
+import { MAIL_LOGO } from "./mail-logo.js";
 import type { Env } from "./notion.js";
 
 // The sign-in code, by Gmail SMTP with an app password (brief §10). An HTML
-// part drawn like the code screen — one box per digit — and a plain text part
-// for clients that show no HTML.
+// part drawn like the code screen — the logo, one box per digit — and a plain
+// text part for clients that show no HTML.
+//
+// The logo travels inside the message as an inline attachment (cid), not as
+// a link: a remote image is blocked by default in most mail clients, and
+// none of them draw SVG.
+
+const LOGO_CID = "mosaic-logo@mosaic";
 
 export const mailEnabled = (env: Env) => Boolean(env.SMTP_USER && env.SMTP_APP_PASSWORD);
 
@@ -29,7 +36,7 @@ function html(code: string): string {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff">
 <tr><td align="center" style="padding:48px 16px">
 <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:420px;width:100%">
-<tr><td align="center" style="font-family:${FONT};font-size:13px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${INK}">Mosaic</td></tr>
+<tr><td align="center"><img src="cid:${LOGO_CID}" width="${MAIL_LOGO.width}" height="${MAIL_LOGO.height}" alt="Mosaic Real Estate Finance" style="display:block;border:0;width:${MAIL_LOGO.width}px;height:${MAIL_LOGO.height}px;font-family:${FONT};font-size:13px;font-weight:600;color:${INK}"></td></tr>
 <tr><td align="center" style="padding-top:28px;font-family:Georgia,'Times New Roman',serif;font-size:24px;color:${INK}">Votre code de connexion</td></tr>
 <tr><td align="center" style="padding-top:28px"><table role="presentation" cellpadding="0" cellspacing="0"><tr>${slots}</tr></table></td></tr>
 <tr><td align="center" style="padding-top:28px;font-family:${FONT};font-size:14px;line-height:1.5;color:${MUTED}">Valable 10 minutes, pour une seule connexion.<br>Si vous n'avez rien demandé, ignorez ce message.</td></tr>
@@ -58,5 +65,14 @@ export async function sendCode(env: Env, to: string, code: string): Promise<void
       "Si vous n'avez rien demandé, ignorez ce message.",
     ].join("\n"),
     html: html(code),
+    attachments: [
+      {
+        filename: "mosaic.png",
+        content: Buffer.from(MAIL_LOGO.base64, "base64"),
+        contentType: "image/png",
+        cid: LOGO_CID,
+        contentDisposition: "inline",
+      },
+    ],
   });
 }

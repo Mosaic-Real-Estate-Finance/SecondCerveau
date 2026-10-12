@@ -153,6 +153,9 @@ export function AccessGate({ onValid }: { onValid: (session: Session) => void })
               ) : (
                 <OtpInput
                   autoFocus
+                  // No blinking bar in the first slot: the boxes already say
+                  // where the code goes, and the bar read as a stray cursor.
+                  caret={false}
                   value={code}
                   status={status}
                   role="group"

@@ -6,6 +6,7 @@ import { Symbol } from "@/components/logo";
 import { noteDate, Screen, statusLabel, TextButton } from "@/components/screen";
 import { useToast } from "@/components/toast";
 import { formatTime, VoiceRecorder } from "@/components/voice-recorder";
+import { useConnectivity, type Connectivity } from "@/lib/connectivity";
 import { storageIsDurable, useNote, useNotes, type Note } from "@/lib/notes";
 import { pageSlideMs } from "@/lib/schedule";
 import { coolMicrophone, useMeter, useRecorder, warmMicrophone, type Hold } from "@/lib/use-recorder";
@@ -56,6 +57,17 @@ export function RecordScreen({
   // its own animation does not run against the page slide.
   const [quiet, setQuiet] = useState(false);
   const recording = recorder.state === "starting" || recorder.state === "recording";
+  // No recording is offered that could not be transcribed: the dictation is
+  // turned into text live, on the network. A dictation already under way is
+  // not interrupted by this — it holds and resumes on its own (use-recorder).
+  const connectivity = useConnectivity(active);
+  const blocked = !open && !recording && connectivity.status !== "online" && connectivity.status !== "checking";
+  // While a bad link is being checked again, the screen stays on what it said.
+  const [shownBlocked, setShownBlocked] = useState(false);
+  useEffect(() => {
+    if (connectivity.status !== "checking") setShownBlocked(blocked);
+  }, [blocked, connectivity.status]);
+  const offline = shownBlocked && !open && !recording;
 
   // Drawn once per app launch, not on every render.
   const prompt = useMemo(() => PROMPTS[Math.floor(Math.random() * PROMPTS.length)], []);
@@ -67,7 +79,7 @@ export function RecordScreen({
   // a tenth of a second before the click would fire. The click stays for
   // keyboards and screen readers.
   const openPanel = () => {
-    if (open) return;
+    if (open || offline) return;
     setOpen(true);
     void recorder.start();
   };
@@ -133,7 +145,9 @@ export function RecordScreen({
           type="button"
           onClick={onReview}
           className="flex h-11 w-11 items-center justify-center rounded-full text-navy"
-          aria-label={reviewCount ? `À valider, ${reviewCount} appel${reviewCount > 1 ? "s" : ""}` : "À valider"}
+          aria-label={
+            reviewCount ? `Notifications, ${reviewCount} appel${reviewCount > 1 ? "s" : ""} à décider` : "Notifications"
+          }
         >
           <Icon name={reviewCount > 0 ? "bell.badge" : "bell"} className="h-[22px]" />
         </button>
@@ -148,15 +162,25 @@ export function RecordScreen({
       </div>
       {/* The greeting sits in the upper part; the button holds the middle of
           the screen, in the layer below. */}
-      <div className="flex flex-col items-center pt-[5vh] text-center">
-        <Symbol className="h-16 text-midnight-blue" />
-        <h1 className="mt-8 text-balance font-serif text-2xl">
-          Bonjour {firstName},
-          <br />
-          {prompt}
-        </h1>
-      </div>
-      <div className="flex-1" aria-hidden />
+      {offline ? (
+        <NoConnection
+          status={connectivity.status}
+          unstable={connectivity.status === "unstable"}
+          onRetry={() => void connectivity.check()}
+        />
+      ) : (
+        <>
+          <div className="flex flex-col items-center pt-[5vh] text-center">
+            <Symbol className="h-16 text-midnight-blue" />
+            <h1 className="mt-8 text-balance font-serif text-2xl">
+              Bonjour {firstName},
+              <br />
+              {prompt}
+            </h1>
+          </div>
+          <div className="flex-1" aria-hidden />
+        </>
+      )}
 
       {pending.length > 0 && (
         <section aria-labelledby="pending-title" className="pb-2">
@@ -205,7 +229,10 @@ export function RecordScreen({
       {active && recorder.state === "recording" && <Beam stream={recorder.stream} paused={recorder.paused} />}
 
       {/* Centred on the screen, growing into the recording panel. */}
-      <div className="pointer-events-none fixed inset-0 z-20 mx-auto flex max-w-[480px] items-center justify-center px-4">
+      <div
+        className="pointer-events-none fixed inset-0 z-20 mx-auto flex max-w-[480px] items-center justify-center px-4"
+        hidden={offline}
+      >
         <div className="record-morph t-morph pointer-events-auto" data-open={open} data-quiet={quiet || undefined}>
           <div className="t-morph-menu flex flex-col justify-between p-4" aria-hidden={!open}>
             <div className="flex items-center justify-between">
@@ -387,6 +414,57 @@ function LiveText({ noteId, hold, unavailable }: { noteId: string | null; hold: 
       <p className="text-base leading-snug text-on-accent">
         {hold ? HOLD_TEXT[hold] : text || <span className="opacity-60">Parlez, le texte s'affiche ici.</span>}
       </p>
+    </div>
+  );
+}
+
+// In place of the greeting and the microphone when the network cannot carry a
+// dictation. It checks again by itself; the button only does it sooner.
+function NoConnection({
+  status,
+  unstable,
+  onRetry,
+}: {
+  status: Connectivity;
+  unstable: boolean;
+  onRetry: () => void;
+}) {
+  const checking = status === "checking";
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center pb-[8vh] text-center" role="alert">
+      <span className="flex h-20 w-20 items-center justify-center rounded-full bg-white-smoke text-midnight-blue">
+        <svg
+          aria-hidden
+          viewBox="0 0 24 24"
+          className="h-9 w-9"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M2.5 8.8a14 14 0 0 1 19 0" />
+          <path d="M5.6 12.2a9.5 9.5 0 0 1 12.8 0" />
+          <path d="M8.8 15.5a5 5 0 0 1 6.4 0" />
+          <circle cx="12" cy="19" r="0.9" fill="currentColor" stroke="none" />
+          <path d="M3.5 3.5l17 17" />
+        </svg>
+      </span>
+      <h1 className="mt-8 text-balance font-serif text-2xl">
+        {unstable ? "Connexion trop instable" : "Pas de connexion internet"}
+      </h1>
+      <p className="mt-3 max-w-[22rem] text-balance text-base text-[color:var(--muted)]">
+        La dictée est transcrite en direct : elle a besoin d'une connexion stable. Vérifiez le Wi-Fi ou le réseau
+        mobile, l'enregistrement sera proposé dès qu'elle revient.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        disabled={checking}
+        className="mt-8 flex h-12 items-center justify-center rounded-full bg-white-smoke px-6 text-base font-medium text-navy disabled:opacity-60"
+      >
+        {checking ? "Vérification…" : "Vérifier la connexion"}
+      </button>
     </div>
   );
 }

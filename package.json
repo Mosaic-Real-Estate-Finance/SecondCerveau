@@ -10,6 +10,7 @@
     "postbuild": "node scripts/outlook-manifest.mjs --out dist/outlook/manifest.xml",
     "preview": "vite preview",
     "icons": "node scripts/generate-icons.mjs",
+    "mail-logo": "node scripts/generate-mail-logo.mjs",
     "splash": "node scripts/generate-ios-splash.mjs",
     "typecheck": "tsc -b",
     "check:api": "node scripts/check-api.mjs",
