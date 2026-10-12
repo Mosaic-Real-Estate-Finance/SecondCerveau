@@ -1,48 +1,101 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@/styles/index.css";
-import { MEETINGS } from "./data";
-import { MeetingCard } from "./MeetingCard";
+import { ToastProvider, useToast } from "@/components/toast";
+import type { ContactsState } from "@/App";
+import type { ReviewItem } from "@/lib/api";
+import type { Note } from "@/lib/notes";
+import { NotificationsScreen } from "@/screens/NotificationsScreen";
+import { COMPANIES, CONTACTS, items as freshItems, notes as freshNotes, TYPES } from "./fixtures";
 
-// A mockup of the « Notifications » screen, apart from the app: no sign-in,
-// no server, fictional meetings, one per case. /maquette.html.
+// A demo of the « Notifications » screen, apart from the app: no sign-in, no
+// server. /maquette.html.
+//
+// It is the screen itself, not a copy: the routes it calls are answered here,
+// in the page, after a pause the length of a real one, and nothing leaves the
+// browser. The notes are the page's own, never the phone's store — the demo
+// shares the app's origin, and deleting a note here must not touch a real one.
+
+let queue: ReviewItem[] = freshItems();
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const reply = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+
+window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
+  if (!url.pathname.startsWith("/api/")) return reply({ error: "Hors de la maquette" }, 404);
+  const body = init?.body ? JSON.parse(String(init.body)) : {};
+  const drop = (id: string) => (queue = queue.filter((item) => item.id !== id));
+  switch (url.pathname) {
+    case "/api/readai/items":
+      await pause(400);
+      return reply({ items: queue, excluded: [], count: queue.length });
+    case "/api/readai/settle":
+      // Contacts created, then the note: a few seconds for real.
+      await pause(1400);
+      drop(body.itemId);
+      return reply({ closed: true, noteUrl: "#" });
+    case "/api/readai/ignore":
+      await pause(300);
+      drop(body.itemId);
+      return reply({ closed: true, noteUrl: null });
+    case "/api/readai/retry":
+      await pause(1400);
+      drop(body.itemId);
+      return reply({ closed: true, noteUrl: "#" });
+    case "/api/companies":
+      return reply({ companies: COMPANIES, typeOptions: [] });
+    default:
+      return reply({ ok: true });
+  }
+};
+
+const contacts: ContactsState = { status: "ready", contacts: CONTACTS, typeOptions: TYPES };
+
+function Demo() {
+  const toast = useToast();
+  const [notes, setNotes] = useState<Note[]>(freshNotes);
+  return (
+    <NotificationsScreen
+      active
+      contacts={contacts}
+      focusId={null}
+      notes={notes}
+      onDeleteNote={(id) => setNotes((list) => list.filter((note) => note.id !== id))}
+      onBack={() => toast.show("Dans l'app : retour à l'accueil.")}
+      onCount={() => undefined}
+      onOpenNote={() => toast.show("Dans l'app : la note s'ouvre pour choisir un contact ou l'envoyer.")}
+      onOpenExcluded={() => toast.show("Dans l'app : Réglages › Contacts exclus.")}
+      onUnauthorized={() => undefined}
+    />
+  );
+}
 
 function Maquette() {
-  // A new key resets every card to its first state.
+  // A new key resets everything to the first state.
   const [round, setRound] = useState(0);
   return (
-    <div
-      className="mx-auto min-h-full max-w-[480px] px-4"
-      style={{
-        paddingTop: "calc(var(--safe-top) + 12px)",
-        paddingBottom: "calc(var(--safe-bottom) + 48px)",
-      }}
-    >
-      <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-dashed border-[color:var(--hairline)] px-4 py-2.5">
-        <p className="text-xs text-[color:var(--muted)]">
-          Maquette : réunions fictives, rien n'est envoyé.
-        </p>
-        <button
-          type="button"
-          onClick={() => setRound((n) => n + 1)}
-          className="shrink-0 text-xs font-medium text-navy"
+    <ToastProvider>
+      <div className="mx-auto min-h-full max-w-[480px]">
+        <div
+          className="mx-4 flex items-center justify-between gap-3 rounded-2xl border border-dashed border-[color:var(--hairline)] px-4 py-2.5"
+          style={{ marginTop: "calc(var(--safe-top) + 12px)" }}
         >
-          Réinitialiser
-        </button>
+          <p className="text-xs text-[color:var(--muted)]">Maquette : données fictives, rien n'est envoyé.</p>
+          <button
+            type="button"
+            onClick={() => {
+              queue = freshItems();
+              setRound((n) => n + 1);
+            }}
+            className="shrink-0 text-xs font-medium text-navy"
+          >
+            Réinitialiser
+          </button>
+        </div>
+        <Demo key={round} />
       </div>
-
-      <h1 className="font-serif text-2xl">Notifications</h1>
-      <p className="mt-1 text-xs text-[color:var(--muted)]">
-        Réunions Read AI avec une personne que le CRM ne connaît pas. Rien n'est
-        écrit dans Notion avant votre décision.
-      </p>
-
-      <div key={round} className="mt-6 flex flex-col gap-3">
-        {MEETINGS.map((meeting) => (
-          <MeetingCard key={meeting.id} meeting={meeting} />
-        ))}
-      </div>
-    </div>
+    </ToastProvider>
   );
 }
 

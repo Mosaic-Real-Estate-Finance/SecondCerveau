@@ -21,7 +21,16 @@ function nextStep(note: Note) {
   return "Vérifier et envoyer";
 }
 
-export function NoteCard({ note, onOpen }: { note: Note; onOpen: (note: Note) => void }) {
+export function NoteCard({
+  note,
+  onOpen,
+  onDelete = removeNote,
+}: {
+  note: Note;
+  onOpen: (note: Note) => void;
+  /** The phone's own store by default; the mockup keeps its notes apart. */
+  onDelete?: (id: string) => unknown;
+}) {
   const [confirming, setConfirming] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const text = note.transcript || note.partial || "";
@@ -33,7 +42,7 @@ export function NoteCard({ note, onOpen }: { note: Note; onOpen: (note: Note) =>
     setConfirming(false);
     setLeaving(true);
     // Folded away first, then forgotten: the list does not jump.
-    window.setTimeout(() => void removeNote(note.id), LEAVE_MS);
+    window.setTimeout(() => void onDelete(note.id), LEAVE_MS);
   };
 
   return (

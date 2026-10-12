@@ -34,6 +34,8 @@ export function NotificationsScreen({
   onOpenNote,
   onOpenExcluded,
   onUnauthorized,
+  notes: shownNotes,
+  onDeleteNote,
 }: {
   active: boolean;
   contacts: ContactsState;
@@ -46,9 +48,13 @@ export function NotificationsScreen({
   /** Réglages › Contacts exclus, from the banner. */
   onOpenExcluded: () => void;
   onUnauthorized: () => void;
+  /** The mockup's own notes, kept away from the phone's store (same origin). */
+  notes?: Note[];
+  onDeleteNote?: (id: string) => unknown;
 }) {
   const toast = useToast();
-  const notes = useNotes();
+  const stored = useNotes();
+  const notes = shownNotes ?? stored;
   const [view, setView] = useState<View>("all");
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -130,7 +136,7 @@ export function NotificationsScreen({
   const renderEntry = (entry: Entry) =>
     entry.kind === "note" ? (
       <li key={`note-${entry.note.id}`}>
-        <NoteCard note={entry.note} onOpen={onOpenNote} />
+        <NoteCard note={entry.note} onOpen={onOpenNote} onDelete={onDeleteNote} />
       </li>
     ) : (
       <li key={entry.item.id} id={`review-${entry.item.id}`} className="scroll-mt-4">
