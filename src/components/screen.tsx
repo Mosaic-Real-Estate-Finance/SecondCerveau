@@ -83,13 +83,3 @@ export function statusLabel(note: Note) {
       return "Envoi échoué";
   }
 }
-
-const time = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
-const day = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
-
-export function noteDate(timestamp: number) {
-  const date = new Date(timestamp);
-  const today = new Date();
-  const sameDay = date.toDateString() === today.toDateString();
-  return sameDay ? `Aujourd'hui, ${time.format(date)}` : `${day.format(date)}, ${time.format(date)}`;
-}

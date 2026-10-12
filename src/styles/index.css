@@ -84,6 +84,13 @@
   --page-slide-distance: 24px;
   --page-stagger: 40ms;
 
+  /* Sliding tabs, in the theme's own colours rather than the snippet's
+     greys: the bar is a card, the pill the page, the labels the ink. */
+  --tabs-text-muted: var(--muted);
+  --tabs-text-active: var(--color-midnight-blue);
+  --tabs-bar-bg: var(--color-white-smoke);
+  --tabs-pill-bg: var(--color-white);
+
   /* Sheets, after UISheetPresentationController: the system's spring as a
      curve, and the duration of a sheet presentation. */
   --sheet-dur: 500ms;
@@ -117,6 +124,9 @@
     --beam-deep: #312e81;
     --shimmer-base: rgb(236 236 246 / 0.45);
     --shimmer-highlight: #ffffff;
+    /* The page is darker than the bar here: the pill is lifted above it
+       instead, as iOS draws a dark segmented control. */
+    --tabs-pill-bg: #3a3a4c;
   }
   /* The SF Symbol badge is drawn in a dark navy that vanishes on a dark
      page; it takes the accent instead. */
@@ -643,4 +653,121 @@ a {
   background: var(--color-white);
   box-shadow: 0 8px 32px var(--shadow), 0 0 0 1px var(--hairline);
   pointer-events: auto;
+}
+
+/* ---- Notifications ---------------------------------------------------
+   A card folds away once decided, the rows Notion is writing breathe, a ✕
+   turns to ✓, the icons say what they mean on hover, and a long summary
+   scrolls under its title. */
+/* A card that folds away once decided: the row of grid-template-rows goes
+   from its content's height to nothing, without measuring anything. */
+.meeting-collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 420ms var(--page-slide-ease),
+    opacity 320ms var(--page-fade-ease);
+}
+.meeting-collapse.is-closed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+.meeting-collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+/* Room between a card and its outcome only when one of them shows. */
+.meeting-collapse:not(.is-closed) + .meeting-collapse:not(.is-closed) {
+  margin-top: 8px;
+}
+
+/* While Notion works: the rows about to be written breathe. */
+.person-working {
+  animation: person-working 1.1s ease-in-out infinite;
+}
+@keyframes person-working {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ✕ turns to ✓: a quarter turn and a small pop as the symbol is swapped. */
+.person-icon.is-flipped {
+  animation: person-flip 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes person-flip {
+  0% {
+    transform: rotate(-90deg) scale(0.6);
+    opacity: 0;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* What the icon means, on hover: a bubble above it. Touch screens have no
+   hover; the same words are read out by screen readers (.sr-only). */
+@media (hover: hover) {
+  .person-tip::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: -6px;
+    z-index: 5;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: var(--color-midnight-blue);
+    color: var(--color-white);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.3;
+    white-space: nowrap;
+    box-shadow: 0 4px 16px var(--shadow);
+    opacity: 0;
+    transform: translateY(4px);
+    transition:
+      opacity 140ms ease,
+      transform 140ms ease;
+    pointer-events: none;
+  }
+  .person-tip:hover::after {
+    opacity: 1;
+    transform: none;
+    transition-delay: 120ms;
+  }
+}
+
+/* The summary's title stays put; the text scrolls under it and fades out
+   through a blur just below it, thickest against the header. */
+.summary-head {
+  background: var(--sheet-bg);
+}
+.summary-head::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 32px;
+  background: linear-gradient(
+    var(--sheet-bg),
+    transparent
+  );
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  -webkit-mask-image: linear-gradient(black, transparent);
+  mask-image: linear-gradient(black, transparent);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meeting-collapse,
+  .person-working,
+  .person-icon.is-flipped {
+    transition: none;
+    animation: none;
+  }
 }

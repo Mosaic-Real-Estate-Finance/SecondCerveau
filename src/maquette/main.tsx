@@ -1,7 +1,6 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@/styles/index.css";
-import "./maquette.css";
 import { MEETINGS } from "./data";
 import { MeetingCard } from "./MeetingCard";
 

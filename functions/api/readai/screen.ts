@@ -13,19 +13,31 @@ import {
   loadItem,
   QueueError,
   removeExcluded,
+  settle,
   viewOf,
   type DecideInput,
 } from "../../_lib/readai/queue.js";
 import { StorageUnavailable } from "../../_lib/redis.js";
 
-// The routes of the « À valider » screen: /api/readai/items, decide, ignore,
-// retry, excluded, push. One function for all of them (research E-1), every
+// The routes of the « À valider » screen: /api/readai/items, decide, settle,
+// ignore, retry, excluded, push. One function for all of them (research E-1), every
 // one behind guard() — they show client meetings and create contacts.
 // contracts/readai-screen.md.
 
 const actionOf = (request: Request) => new URL(request.url).pathname.split("/").filter(Boolean).pop() ?? "";
 
 const body = async <T>(request: Request) => (await request.json().catch(() => ({}))) as T;
+
+type DecisionBody = { action?: string; contactId?: string; contact?: NewContact };
+
+/** What the screen asked for one person, or null when it makes no sense. */
+function decisionOf(input: DecisionBody): DecideInput | null {
+  if (input.action === "attach") return { action: "attach", contactId: input.contactId ?? "" };
+  if (input.action === "create") return { action: "create", contact: input.contact ?? {} };
+  if (input.action === "skip") return { action: "skip" };
+  if (input.action === "exclude") return { action: "exclude" };
+  return null;
+}
 
 /** Errors as the screen reads them; a failed note hands back its item. */
 async function failure(env: Env, error: unknown, itemId?: string) {
@@ -65,30 +77,40 @@ export const onRequestPost: Handler = async ({ request, env }) => {
 
   switch (actionOf(request)) {
     case "decide": {
-      const input = await body<{
-        itemId?: string;
-        email?: string;
-        action?: string;
-        contactId?: string;
-        contact?: NewContact;
-      }>(request);
+      const input = await body<{ itemId?: string; email?: string } & DecisionBody>(request);
       if (!input.itemId || !input.email) return json({ error: "Requête incomplète" }, 400);
-      let decision: DecideInput;
-      if (input.action === "attach") decision = { action: "attach", contactId: input.contactId ?? "" };
-      else if (input.action === "create") decision = { action: "create", contact: input.contact ?? {} };
-      else if (input.action === "exclude") decision = { action: "exclude" };
-      else return json({ error: "Action inconnue" }, 400);
+      const decision = decisionOf(input);
+      if (!decision) return json({ error: "Action inconnue" }, 400);
       try {
         return json(await decide(env, user, input.itemId, input.email, decision));
       } catch (error) {
         return failure(env, error, input.itemId);
       }
     }
-    case "ignore": {
-      const { itemId } = await body<{ itemId?: string }>(request);
-      if (!itemId) return json({ error: "Requête incomplète" }, 400);
+    case "settle": {
+      const input = await body<{ itemId?: string; people?: ({ email?: string } & DecisionBody)[] }>(request);
+      if (!input.itemId || !Array.isArray(input.people) || input.people.length > 100) {
+        return json({ error: "Requête incomplète" }, 400);
+      }
+      const choices: { email: string; decision: DecideInput }[] = [];
+      for (const person of input.people) {
+        const decision = decisionOf(person);
+        // « Toujours ignorer » is its own request (ignore), never a step of an addition.
+        if (!person.email || !decision || decision.action === "exclude") return json({ error: "Action inconnue" }, 400);
+        choices.push({ email: person.email, decision });
+      }
       try {
-        return json(await ignore(env, itemId));
+        return json(await settle(env, user, input.itemId, choices));
+      } catch (error) {
+        return failure(env, error, input.itemId);
+      }
+    }
+    case "ignore": {
+      const { itemId, exclude } = await body<{ itemId?: string; exclude?: unknown }>(request);
+      if (!itemId) return json({ error: "Requête incomplète" }, 400);
+      const emails = Array.isArray(exclude) ? exclude.filter((email): email is string => typeof email === "string") : [];
+      try {
+        return json(await ignore(env, itemId, emails.slice(0, 100)));
       } catch (error) {
         return failure(env, error);
       }

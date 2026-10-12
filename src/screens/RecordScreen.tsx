@@ -3,9 +3,9 @@ import { createPortal } from "react-dom";
 import { VoiceBeam } from "voice-glow";
 import { Icon } from "@/components/icon";
 import { Symbol } from "@/components/logo";
-import { noteDate, Screen, statusLabel, TextButton } from "@/components/screen";
+import { Screen, TextButton } from "@/components/screen";
 import { useToast } from "@/components/toast";
-import { formatTime, VoiceRecorder } from "@/components/voice-recorder";
+import { VoiceRecorder } from "@/components/voice-recorder";
 import { useConnectivity, type Connectivity } from "@/lib/connectivity";
 import { storageIsDurable, useNote, useNotes, type Note } from "@/lib/notes";
 import { pageSlideMs } from "@/lib/schedule";
@@ -47,13 +47,13 @@ const GAP = 16;
 
 /**
  * Where the button's centre goes: in the middle of the free band between the
- * greeting and the pending list (or the bottom of the screen), never over the
- * greeting, and low enough that the open panel still fits on the screen.
+ * greeting and the bottom of the screen, never over the greeting, and low
+ * enough that the open panel still fits on the screen.
  */
-function placeButton(greeting: HTMLElement | null, pending: HTMLElement | null): number {
+function placeButton(greeting: HTMLElement | null): number {
   const height = window.innerHeight;
   const top = greeting ? greeting.getBoundingClientRect().bottom + greeting.closest(".t-page")!.scrollTop : 0;
-  const floor = pending ? pending.getBoundingClientRect().top + pending.closest(".t-page")!.scrollTop : height;
+  const floor = height;
   const highest = top + GAP + BUTTON / 2;
   const lowest = Math.min(floor - GAP - BUTTON / 2, height - GAP - PANEL / 2);
   const middle = (top + Math.min(floor, height)) / 2;
@@ -69,7 +69,6 @@ export function RecordScreen({
   firstName,
   reviewCount,
   onRecorded,
-  onOpen,
   onReview,
   onSettings,
 }: {
@@ -78,7 +77,6 @@ export function RecordScreen({
   /** Read AI calls waiting for a decision. */
   reviewCount: number;
   onRecorded: (note: Note) => void;
-  onOpen: (note: Note) => void;
   onReview: () => void;
   onSettings: () => void;
 }) {
@@ -96,7 +94,6 @@ export function RecordScreen({
   const connectivity = useConnectivity(active);
 
   const greetingRef = useRef<HTMLDivElement>(null);
-  const pendingRef = useRef<HTMLElement>(null);
   const [centre, setCentre] = useState<number | null>(null);
   const blocked = !open && !recording && connectivity.status !== "online" && connectivity.status !== "checking";
   // While a bad link is being checked again, the screen stays on what it said.
@@ -109,8 +106,10 @@ export function RecordScreen({
   // Drawn once per app launch, not on every render.
   const prompt = useMemo(() => PROMPTS[Math.floor(Math.random() * PROMPTS.length)], []);
 
-  // Pending notes, minus the one being dictated right now.
-  const pending = notes.filter((note) => !(recording && note.status === "recording"));
+  // Notes not yet in Notion, minus the one being dictated right now. They are
+  // listed in « Notifications »; here they only light the bell.
+  const pending = notes.filter((note) => !(recording && note.status === "recording")).length;
+  const waiting = reviewCount + pending;
 
   // Pointer down, not click: the recording starts as the finger lands, about
   // a tenth of a second before the click would fire. The click stays for
@@ -118,17 +117,16 @@ export function RecordScreen({
   // Measured after layout and again whenever the window, the greeting or the
   // list changes size.
   useLayoutEffect(() => {
-    const place = () => setCentre(placeButton(greetingRef.current, pendingRef.current));
+    const place = () => setCentre(placeButton(greetingRef.current));
     place();
     const observer = new ResizeObserver(place);
     if (greetingRef.current) observer.observe(greetingRef.current);
-    if (pendingRef.current) observer.observe(pendingRef.current);
     window.addEventListener("resize", place);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", place);
     };
-  }, [offline, pending.length > 0]);
+  }, [offline]);
 
   const openPanel = () => {
     if (open || offline) return;
@@ -191,11 +189,9 @@ export function RecordScreen({
           type="button"
           onClick={onReview}
           className="flex h-11 w-11 items-center justify-center rounded-full text-navy"
-          aria-label={
-            reviewCount ? `Notifications, ${reviewCount} appel${reviewCount > 1 ? "s" : ""} à décider` : "Notifications"
-          }
+          aria-label={waiting ? `Notifications, ${waiting} en attente` : "Notifications"}
         >
-          <Icon name={reviewCount > 0 ? "bell.badge" : "bell"} className="h-[22px]" />
+          <Icon name={waiting > 0 ? "bell.badge" : "bell"} className="h-[22px]" />
         </button>
         <button
           type="button"
@@ -230,45 +226,6 @@ export function RecordScreen({
         </>
       )}
 
-      {pending.length > 0 && (
-        <section ref={pendingRef} aria-labelledby="pending-title" className="pb-2">
-          <h2 id="pending-title" className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
-            En attente
-          </h2>
-          <ul className="mt-3 flex flex-col gap-2">
-            {pending.map((note) => (
-              <li key={note.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpen(note)}
-                  className="flex min-h-16 w-full items-center gap-3 rounded-2xl bg-white-smoke px-4 py-3 text-left"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-base font-medium">
-                      {note.contact ? note.contact.name : noteDate(note.createdAt)}
-                    </span>
-                    <span className="block text-xs text-[color:var(--muted)]">
-                      {statusLabel(note)}, {formatTime(note.duration)}
-                    </span>
-                  </span>
-                  <svg
-                    aria-hidden
-                    viewBox="0 0 24 24"
-                    className="h-5 w-5 shrink-0 text-navy"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
       {/* Along the bottom of the screen, a glow that rises with the voice. */}
       {/* `active` as well as the state: the glow is rendered into <body>, so

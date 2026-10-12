@@ -36,7 +36,8 @@ export type Recognized = { email: string } & ContactRef;
 
 export type Decision =
   | { action: "attach" | "create"; contactId: string; name: string; by: string; at: string }
-  | { action: "exclude"; by: string; at: string };
+  // Left out of this note only; « exclude » leaves them out for the team, for good.
+  | { action: "skip" | "exclude"; by: string; at: string };
 
 export type PendingPerson = {
   email: string;
@@ -192,6 +193,7 @@ export async function appendEmail(env: Env, contactId: string, email: string): P
 export type DecideInput =
   | { action: "attach"; contactId: string }
   | { action: "create"; contact: NewContact }
+  | { action: "skip" }
   | { action: "exclude" };
 
 export type Closed = { closed: true; noteUrl: string | null };
@@ -217,22 +219,60 @@ export async function decide(
     if (!person) throw new QueueError(404, "Personne introuvable dans cet appel.", "gone");
     if (person.decision) throw new QueueError(409, "Déjà traité", "decided");
 
-    const at = new Date().toISOString();
-    if (input.action === "attach") {
-      if (!input.contactId) throw new QueueError(400, "Contact manquant");
-      const name = await appendEmail(env, input.contactId, person.email);
-      person.decision = { action: "attach", contactId: input.contactId, name, by: user.email, at };
-    } else if (input.action === "create") {
-      // The address is the person's, never whatever the form carried.
-      const contact = await createContact(env, { ...input.contact, email: person.email });
-      person.decision = { action: "create", contactId: contact.id, name: contact.name, by: user.email, at };
-    } else {
-      await redis(env).sadd(KEYS.excluded, person.email);
-      person.decision = { action: "exclude", by: user.email, at };
-    }
+    await apply(env, user, person, input);
     await saveItem(env, item);
 
     if (!settled(item)) return { item: viewOf(item) };
+    return close(env, item);
+  });
+}
+
+/** One person settled. The caller holds the lock and saves the item. */
+async function apply(env: Env, user: User, person: PendingPerson, input: DecideInput) {
+  const at = new Date().toISOString();
+  if (input.action === "attach") {
+    if (!input.contactId) throw new QueueError(400, "Contact manquant");
+    const name = await appendEmail(env, input.contactId, person.email);
+    person.decision = { action: "attach", contactId: input.contactId, name, by: user.email, at };
+  } else if (input.action === "create") {
+    // The address is the person's, never whatever the form carried.
+    const contact = await createContact(env, { ...input.contact, email: person.email });
+    person.decision = { action: "create", contactId: contact.id, name: contact.name, by: user.email, at };
+  } else if (input.action === "skip") {
+    person.decision = { action: "skip", by: user.email, at };
+  } else {
+    await redis(env).sadd(KEYS.excluded, person.email);
+    person.decision = { action: "exclude", by: user.email, at };
+  }
+}
+
+/**
+ * « Ajouter cette note »: every person still open settled at once, then the
+ * note written — one request for the whole card, under one hold of the lock.
+ *
+ * Each decision is saved as soon as it is made: if Notion fails halfway, the
+ * contacts already created are kept on the item, and the card comes back
+ * with only the rest to settle — never a contact made twice.
+ */
+export async function settle(
+  env: Env,
+  user: User,
+  itemId: string,
+  choices: { email: string; decision: DecideInput }[],
+): Promise<{ item: ItemView } | Closed> {
+  return locked(env, 30_000, async () => {
+    const item = await loadItem(env, itemId);
+    if (!item) throw new QueueError(404, "Cet appel a déjà été traité.", "gone");
+    const byEmail = new Map(choices.map((choice) => [choice.email.trim().toLowerCase(), choice.decision]));
+    const open = item.people.filter((person) => !person.decision);
+    // Settled by a colleague since the card was drawn: the card is redrawn.
+    if (open.some((person) => !byEmail.has(person.email))) {
+      throw new QueueError(409, "La réunion a changé entre-temps.", "decided");
+    }
+    for (const person of open) {
+      await apply(env, user, person, byEmail.get(person.email)!);
+      await saveItem(env, item);
+    }
     return close(env, item);
   });
 }
@@ -276,11 +316,19 @@ export async function close(env: Env, item: QueueItem): Promise<Closed> {
   }
 }
 
-/** Set aside: nothing in Notion, and nobody added to the exclusion list. */
-export async function ignore(env: Env, itemId: string): Promise<Closed> {
+/**
+ * Set aside: nothing in Notion. Nobody is added to the exclusion list unless
+ * named in `exclude` (« Toujours ignorer »), and then only people of this
+ * call — an address the item does not hold is not the screen's to exclude.
+ */
+export async function ignore(env: Env, itemId: string, exclude: string[] = []): Promise<Closed> {
   return locked(env, 30_000, async () => {
     const item = await loadItem(env, itemId);
-    if (item) await deleteItem(env, item);
+    if (!item) return { closed: true, noteUrl: null };
+    const wanted = new Set(exclude.map((email) => email.trim().toLowerCase()));
+    const excluded = item.people.filter((person) => wanted.has(person.email)).map((person) => person.email);
+    if (excluded.length) await redis(env).sadd(KEYS.excluded, excluded[0], ...excluded.slice(1));
+    await deleteItem(env, item);
     return { closed: true, noteUrl: null };
   });
 }

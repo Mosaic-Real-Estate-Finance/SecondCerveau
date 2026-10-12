@@ -75,6 +75,7 @@ function pagesFunctions(env: Record<string, string>): Plugin {
     "POST /api/readai/webhook": { file: "/functions/api/readai/webhook.ts", name: "onRequestPost" },
     "GET /api/readai/items": { file: "/functions/api/readai/screen.ts", name: "onRequestGet" },
     "POST /api/readai/decide": { file: "/functions/api/readai/screen.ts", name: "onRequestPost" },
+    "POST /api/readai/settle": { file: "/functions/api/readai/screen.ts", name: "onRequestPost" },
     "POST /api/readai/ignore": { file: "/functions/api/readai/screen.ts", name: "onRequestPost" },
     "POST /api/readai/retry": { file: "/functions/api/readai/screen.ts", name: "onRequestPost" },
     "POST /api/readai/excluded": { file: "/functions/api/readai/screen.ts", name: "onRequestPost" },

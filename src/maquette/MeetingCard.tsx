@@ -8,7 +8,7 @@ import { Sheet, SheetPages } from "@/components/sheet";
 import { StackBanner } from "@/components/stack-banner";
 import { cn } from "@/lib/utils";
 import { CONTACTS, TYPES, type Meeting, type Person } from "./data";
-import { formatWhen } from "./when";
+import { formatWhen } from "@/lib/when";
 
 // One Read AI meeting waiting for a decision, as the « Notifications » screen
 // would show it. A mockup: every action plays out on screen, nothing is sent.
