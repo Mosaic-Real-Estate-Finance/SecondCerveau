@@ -10,7 +10,7 @@ import { useConnectivity, type Connectivity } from "@/lib/connectivity";
 import { storageIsDurable, useNote, useNotes, type Note } from "@/lib/notes";
 import { pageSlideMs } from "@/lib/schedule";
 import { cssVar, useColorScheme } from "@/lib/theme";
-import { coolMicrophone, useMeter, useRecorder, warmMicrophone, type Hold } from "@/lib/use-recorder";
+import { useMeter, useRecorder, type Hold } from "@/lib/use-recorder";
 
 // The glow stays in the Mosaic blues: navy at the centre, lighter tints of the
 // same hue outward, no hue drift. The values are the theme's (--beam-* in
@@ -171,24 +171,16 @@ export function RecordScreen({
     setOpen(false);
   };
 
+  // A dictation put aside by a transcription outage: the panel closes, the
+  // note waits in the list, and the banner explains (OutageBanner).
+  useEffect(() => {
+    if (recorder.shelved) setOpen(false);
+  }, [recorder.shelved]);
+
   // Leaving the screen with the panel open (resume from the list) closes it.
   useEffect(() => {
     if (!active && open && !recording) setOpen(false);
   }, [active, open, recording]);
-
-  // The microphone stays open while this screen is on show, so a press
-  // records at once; it is released as soon as the app or the screen is left.
-  useEffect(() => {
-    const sync = () => {
-      if (active && document.visibilityState === "visible") void warmMicrophone();
-      else if (!recording) coolMicrophone();
-    };
-    sync();
-    document.addEventListener("visibilitychange", sync);
-    return () => document.removeEventListener("visibilitychange", sync);
-  }, [active, recording]);
-  // Signed out, the screen is gone: the microphone with it.
-  useEffect(() => coolMicrophone, []);
 
   return (
     <Screen>

@@ -5,7 +5,7 @@ import { redis } from "../redis.js";
 import { findSame, keyOf, RECENT_MS, traceOf, type Trace } from "./meeting-key.js";
 import { matchExternals } from "./match.js";
 import { completeNote, createMeetingNote, findNoteByKey } from "./note.js";
-import type { Meeting } from "./payload.js";
+import { hasContent, type Meeting } from "./payload.js";
 import { split } from "./participants.js";
 import {
   close,
@@ -96,6 +96,12 @@ export async function processMeeting(env: Env, meeting: Meeting, lockWaitMs = 24
 }
 
 async function run(env: Env, meeting: Meeting, lockWaitMs: number): Promise<Outcome> {
+  // A call with no transcript — one that broke off and was recorded again —
+  // is dropped before anything: no item, no note, no notification.
+  if (!hasContent(meeting)) {
+    console.info(`[readai] empty transcript session=${meeting.sessionId.slice(0, 12)}`);
+    return "ignored";
+  }
   const excluded = await excludedSet(env);
   const { authors, externals } = split(meeting, internalDomains(env), excluded);
   // Only colleagues, or externals without an address, or all excluded:

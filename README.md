@@ -116,6 +116,19 @@ Deux garde-fous par-dessus :
 
 ### Le texte pendant la dictée
 
+**Le micro ne s'ouvre qu'à l'appui** et se ferme dès la fin de la dictée. Le
+garder ouvert sur l'accueil faisait gagner quelques centaines de
+millisecondes, mais allumait l'indicateur micro du système en permanence, et
+les enregistreurs de réunion (Notion, Fathom…) le prenaient pour un appel.
+
+**Une panne côté compte Soniox** (crédit épuisé, clé refusée, clé absente du
+serveur) n'est pas montrée telle quelle : le panneau se referme, la dictée
+attend dans la liste et sera retranscrite à une prochaine ouverture, et une
+bannière dit que Théo est prévenu. `POST /api/auth/stt-alert` envoie un seul
+mail par panne à `STT_ALERT_EMAIL` (par défaut theo@gouman.fr) : ce qui s'est
+passé, qui, quand. Le lien de ce mail, une fois le problème réglé, prévient
+par mail chaque personne touchée.
+
 La transcription tournait sur le téléphone, avec Whisper en WASM. Sur WebKit
 elle n'avait droit qu'à un seul thread, et il fallait 10 à 20 s entre le
 dernier mot et le texte. Elle part désormais chez Soniox en temps réel : le

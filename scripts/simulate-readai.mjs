@@ -98,6 +98,8 @@ function command([name, ...args]) {
     }
     case "SMEMBERS":
       return [...(entry(args[0])?.value ?? [])];
+    case "SCARD":
+      return entry(args[0])?.value.size ?? 0;
     case "HSET": {
       const held = entry(args[0]) ?? { type: "hash", value: new Map(), expires: 0 };
       store.set(args[0], held);
@@ -387,7 +389,8 @@ const report = ({ title = "Point dossier", start = T0, people, platformId = null
         start_time: String(start + index * 5_500),
         end_time: "0",
         speaker: { name: index % 2 ? "Oscar B" : "Interlocuteur" },
-        words: `Intervention ${index + 1}`,
+        // Enough words that the report counts as a conversation (hasContent).
+        words: `Intervention ${index + 1} sur le dossier, avec les points à reprendre ensemble.`,
       })),
     },
     platform: "zoom",
@@ -469,11 +472,22 @@ await scenario("webhook : réponse < 2 s pour une réunion d'une heure, puis not
   assert.equal(transcript.callout.rich_text[0].text.content, "Transcription");
   const lines = flatText(transcript.id);
   assert.equal(lines.length, 640, "transcription entière");
-  assert.ok(lines.every((line, index) => line.endsWith(`Intervention ${index + 1}`)), "dans l'ordre");
+  assert.ok(lines.every((line, index) => line.includes(`Intervention ${index + 1} `)), "dans l'ordre");
   assert.ok(lines[1].startsWith("Oscar B (00:05) — "), lines[1]);
 });
 
 // ---- Filtering ---------------------------------------------------------------
+
+await scenario("filtrage : appel avorté sans transcription → rien, pas de notification", async () => {
+  const before = { notes: allNotes().length, items: (await items()).length };
+  const aborted = report({ people: [["Inconnu Total", "inconnu@client.fr"]], turns: 0 });
+  aborted.summary = "No summary available due to limited meeting data.";
+  assert.equal(await processMeeting(env, parseMeeting(aborted)), "ignored");
+  const short = report({ people: [["Inconnu Total", "inconnu@client.fr"]], turns: 0 });
+  short.transcript.speaker_blocks = [{ start_time: String(T0), speaker: { name: "A" }, words: "Allô ? Vous m'entendez ?" }];
+  assert.equal(await processMeeting(env, parseMeeting(short)), "ignored");
+  assert.deepEqual({ notes: allNotes().length, items: (await items()).length }, before);
+});
 
 await scenario("filtrage : réunion interne seulement → rien", async () => {
   const before = { notes: allNotes().length, items: (await items()).length };
@@ -754,6 +768,36 @@ await scenario("auth : code expiré → refusé", async () => {
   const { code } = await sessionLib.requestCode(env, "pb@mosaicfin.com", true);
   store.get("auth:code:pb@mosaicfin.com").expires = Date.now() - 1;
   assert.equal((await call(auth, "/api/auth/verify", { body: { email: "pb@mosaicfin.com", code } })).status, 401);
+});
+
+await scenario("transcription : panne Soniox → une seule alerte, les personnes notées, lien « réglé » en POST seulement", async () => {
+  const sessionLib = await lib("functions/_lib/session.js");
+  const authGet = (await lib("functions/api/auth.js")).onRequestGet;
+  const cookies = [];
+  for (const email of ["ob@mosaicfin.com", "pb@mosaicfin.com"]) {
+    store.delete(`auth:cool:${email}`);
+    store.delete(`auth:hour:${email}`);
+    const { code } = await sessionLib.requestCode(env, email, true);
+    const ok = await call(auth, "/api/auth/verify", { body: { email, code } });
+    cookies.push(ok.headers.get("set-cookie").split(";")[0]);
+  }
+  assert.equal((await call(auth, "/api/auth/stt-alert", { body: { reason: "balance" } })).status, 401, "sans session");
+  assert.equal((await call(auth, "/api/auth/stt-alert", { cookie: cookies[0], body: { reason: "autre" } })).status, 400);
+  assert.equal((await call(auth, "/api/auth/stt-alert", { cookie: cookies[0], body: { reason: "balance" } })).status, 200);
+  const id = store.get("stt:outage").value;
+  assert.equal((await call(auth, "/api/auth/stt-alert", { cookie: cookies[1], body: { reason: "balance" } })).status, 200);
+  assert.equal(store.get("stt:outage").value, id, "une seule alerte par panne");
+  assert.deepEqual([...store.get("stt:outage:users").value].sort(), ["ob@mosaicfin.com", "pb@mosaicfin.com"]);
+  const wrong = await authGet({ request: new Request("http://x/api/auth/stt-resolved?t=faux"), env });
+  assert.match(await wrong.text(), /Rien à signaler/);
+  const page = await authGet({ request: new Request(`http://x/api/auth/stt-resolved?t=${id}`), env });
+  assert.match(await page.text(), /2 personnes attendent/);
+  assert.ok(store.get("stt:outage"), "un GET ne close rien");
+  const form = new FormData();
+  form.set("t", id);
+  const done = await auth({ request: new Request("http://x/api/auth/stt-resolved", { method: "POST", body: form }), env });
+  assert.match(await done.text(), /2 personnes prévenues/);
+  assert.ok(!store.get("stt:outage") && !store.get("stt:outage:users"), "panne close");
 });
 
 // ---- Logs ----------------------------------------------------------------------

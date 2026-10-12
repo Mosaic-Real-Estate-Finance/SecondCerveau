@@ -50,6 +50,8 @@ export type Env = {
   SONIOX_API_KEY?: string;
   SONIOX_WS_URL?: string;
   SONIOX_MODEL?: string;
+  /** Who hears when transcription stops on the Soniox side (credit, key). */
+  STT_ALERT_EMAIL?: string;
 };
 
 export type Handler = (context: { request: Request; env: Env }) => Promise<Response>;

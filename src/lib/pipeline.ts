@@ -122,6 +122,8 @@ export function dropStream(id: string) {
 
 // What failed, in French, for the line under the send button.
 function reason(error: unknown) {
+  // The account's problem, not the user's: its detail goes to the owner.
+  if (error instanceof SttError && error.outage) return "outil de transcription indisponible, Théo est prévenu";
   if (error instanceof SttError || error instanceof ApiError) return error.message;
   const message = String((error as Error)?.message ?? error);
   return /decod|EncodingError/i.test(message) ? "enregistrement illisible" : message;
@@ -188,10 +190,11 @@ export async function transcribeNote(id: string): Promise<void> {
       await updateNote(id, { status: "transcription-failed", error: "aucune parole détectée", partial: undefined });
       return;
     }
-    await updateNote(id, { status: "transcribed", transcript: text, partial: undefined });
+    await updateNote(id, { status: "transcribed", transcript: text, partial: undefined, outage: undefined });
   } catch (error) {
     stopPartial(id);
-    await updateNote(id, { status: "transcription-failed", error: reason(error), partial: undefined });
+    const outage = error instanceof SttError && error.outage !== null;
+    await updateNote(id, { status: "transcription-failed", error: reason(error), partial: undefined, outage });
   } finally {
     if (running.delete(id)) release();
   }
@@ -239,7 +242,9 @@ export async function resumePending() {
     }
   }
   for (const note of listNotes()) {
-    if (!note.transcript && (note.status === "recorded" || note.status === "transcribing")) {
+    // An outage may be over: what it put aside is tried again at each launch.
+    const waiting = note.status === "recorded" || note.status === "transcribing" || (note.status === "transcription-failed" && note.outage);
+    if (!note.transcript && waiting) {
       void transcribeNote(note.id);
     }
   }

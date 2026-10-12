@@ -47,6 +47,8 @@ export type Note = {
   // undefined: not chosen yet. null: sent without a contact, on purpose.
   contact?: NoteContact;
   error?: string;
+  /** Put aside by a transcription outage: tried again at every launch. */
+  outage?: boolean;
 };
 
 const store = createStore("mosaic-dictee", "notes");

@@ -7,6 +7,7 @@ import { ReviewScreen } from "@/screens/ReviewScreen";
 import { SettingsScreen } from "@/screens/SettingsScreen";
 import { Sheet } from "@/components/sheet";
 import { InstallInvite } from "@/components/install-invite";
+import { OutageBanner } from "@/components/outage-banner";
 import { PushBanner } from "@/components/push-banner";
 import { ToastProvider } from "@/components/toast";
 import {
@@ -20,6 +21,7 @@ import {
   type Contact,
   type Session,
 } from "@/lib/api";
+import { useOutage } from "@/lib/outage";
 import { isIOS, isStandalone } from "@/lib/standalone";
 import { openInstallInvite } from "@/components/install-invite";
 import { persistStorage, updateNote, type Note, type NoteContact } from "@/lib/notes";
@@ -76,6 +78,7 @@ export default function App() {
   const [page, setPage] = useState<Page>(focusId !== null ? 4 : 1);
   const [reviewCount, setReviewCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const outage = useOutage();
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   // A new key at every opening: the settings start on their first page, with
   // nothing left over from the last visit.
@@ -318,7 +321,9 @@ export default function App() {
       </div>
       {/* The settings rise over the home screen in a sheet rather than
           sliding in as a page. */}
-      <PushBanner visible={page === 1 && !settingsOpen} />
+      {/* One banner at a time: an outage says more than a reminder. */}
+      <OutageBanner visible={page === 1 && !settingsOpen} />
+      <PushBanner visible={page === 1 && !settingsOpen && !outage} />
       <Sheet open={settingsOpen} onClose={closeSettings} label="Réglages" full={settingsExpanded}>
         <SettingsScreen
           key={settingsKey}

@@ -1,5 +1,6 @@
 import { later } from "../_lib/background.js";
 import { MANIFEST } from "../_lib/manifest.js";
+import { isOutageReason, reportOutage, resolveOutage, resolvePage } from "../_lib/stt-outage.js";
 import { guard, json, type Handler } from "../_lib/notion.js";
 import {
   checkCode,
@@ -105,7 +106,9 @@ const restHostOf = (wsUrl: string) => {
 async function sttToken(request: Request, env: Parameters<Handler>[0]["env"]) {
   const denied = await guard(request, env);
   if (denied instanceof Response) return denied;
-  if (!env.SONIOX_API_KEY) return json({ error: "Transcription non configurée sur le serveur" }, 500);
+  // `outage` tells the app this is the account's problem, not the user's
+  // nor the network's: it reports it (/stt-alert) instead of retrying.
+  if (!env.SONIOX_API_KEY) return json({ error: "Transcription non configurée sur le serveur", outage: "config" }, 500);
   const wsUrl = env.SONIOX_WS_URL || SONIOX_WS_DEFAULT;
   let response: Response;
   try {
@@ -122,7 +125,8 @@ async function sttToken(request: Request, env: Parameters<Handler>[0]["env"]) {
   if (!response.ok || !body.api_key) {
     // Never the account key, and never Soniox's body as is: only its status.
     console.error(`[stt-token] Soniox a répondu ${response.status}`);
-    return json({ error: "Clé de transcription refusée", retry: response.status >= 500 }, 502);
+    if (response.status >= 500) return json({ error: "Clé de transcription refusée", retry: true }, 502);
+    return json({ error: "Clé de transcription refusée", outage: response.status === 402 ? "balance" : "key" }, 502);
   }
   return json({
     apiKey: body.api_key,
@@ -200,9 +204,38 @@ function manifest(request: Request) {
   });
 }
 
-export const onRequestGet: Handler = async ({ request }) => {
-  if (actionOf(request) === "manifest") return manifest(request);
-  return json({ error: "Route inconnue" }, 404);
+// /stt-alert: the app met a transcription outage only the account owner can
+// fix (credit, key, configuration); the owner is mailed once. /stt-resolved:
+// the link of that mail, which tells the users once it is fixed. Its token
+// is the proof, as a code is for /verify. See _lib/stt-outage.ts.
+async function sttAlert(request: Request, env: Parameters<Handler>[0]["env"]) {
+  const denied = await guard(request, env);
+  if (denied instanceof Response) return denied;
+  const body = (await request.json().catch(() => ({}))) as { reason?: unknown };
+  if (!isOutageReason(body.reason)) return json({ error: "Motif inconnu" }, 400);
+  try {
+    await reportOutage(env, denied.user, body.reason, new URL(request.url).origin);
+  } catch {
+    return unavailable();
+  }
+  return json({ ok: true });
+}
+
+async function sttResolved(request: Request, env: Parameters<Handler>[0]["env"]) {
+  const form = await request.formData().catch(() => null);
+  const token = form?.get("t");
+  return resolveOutage(env, typeof token === "string" ? token : null);
+}
+
+export const onRequestGet: Handler = async ({ request, env }) => {
+  switch (actionOf(request)) {
+    case "manifest":
+      return manifest(request);
+    case "stt-resolved":
+      return resolvePage(env, new URL(request.url).searchParams.get("t"));
+    default:
+      return json({ error: "Route inconnue" }, 404);
+  }
 };
 
 export const onRequestPost: Handler = async ({ request, env }) => {
@@ -219,6 +252,10 @@ export const onRequestPost: Handler = async ({ request, env }) => {
       return handoff(request, env);
     case "redeem":
       return redeem(request, env);
+    case "stt-alert":
+      return sttAlert(request, env);
+    case "stt-resolved":
+      return sttResolved(request, env);
     default:
       return json({ error: "Route inconnue" }, 404);
   }

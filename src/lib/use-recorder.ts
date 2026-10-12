@@ -55,33 +55,23 @@ export function useMeter() {
   );
 }
 
-// ---- Warm microphone ----------------------------------------------------
-// Opening the microphone takes a few hundred milliseconds on a phone, and the
-// first words spoken meanwhile are lost. The home screen keeps it open while
-// visible, so a press starts recording at once. Nothing is recorded or sent
-// until the button is pressed.
+// ---- Microphone -----------------------------------------------------------
+// Opened on the press, released with the recording. The system shows the
+// microphone in use for as long as a track is live — and meeting recorders
+// (Notion, Fathom, Granola…) take any microphone in use for a call to record.
+// Kept open on the home screen, it was: a few hundred milliseconds saved on
+// the first word, paid with a microphone indicator and their pop-ups for as
+// long as the app was on screen.
 
-let warmStream: MediaStream | null = null;
-let warming: Promise<MediaStream | null> | null = null;
+let micStream: MediaStream | null = null;
 
-const isLive = (stream: MediaStream | null) =>
-  !!stream && stream.getAudioTracks().some((track) => track.readyState === "live");
-
-export function warmMicrophone() {
-  if (isLive(warmStream)) return Promise.resolve(warmStream);
-  warming ??= navigator.mediaDevices
-    .getUserMedia(CONSTRAINTS)
-    .then((stream) => (warmStream = stream))
-    .catch(() => null)
-    .finally(() => {
-      warming = null;
-    });
-  return warming;
+function openMicrophone() {
+  return navigator.mediaDevices.getUserMedia(CONSTRAINTS).then((stream) => (micStream = stream));
 }
 
-export function coolMicrophone() {
-  warmStream?.getTracks().forEach((track) => track.stop());
-  warmStream = null;
+function releaseMicrophone() {
+  micStream?.getTracks().forEach((track) => track.stop());
+  micStream = null;
 }
 
 // ---- Recorder -------------------------------------------------------------
@@ -100,6 +90,8 @@ export function useRecorder() {
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [noteId, setNoteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Counts the dictations put aside by an outage, for the screen to close.
+  const [shelved, setShelved] = useState(0);
   // Shared with the screen glow, which listens to the same microphone.
   const [stream, setStream] = useState<MediaStream | null>(null);
 
@@ -130,7 +122,8 @@ export function useRecorder() {
     ready: Promise<unknown>;
   } | null>(null);
 
-  // The stream itself stays open: the screen decides when to release it.
+  // The microphone goes with the recording: the system's indicator is off as
+  // soon as the dictation ends, whichever way it ends.
   const teardown = useCallback(() => {
     const current = session.current;
     if (!current) return;
@@ -142,6 +135,7 @@ export function useRecorder() {
     current.source?.disconnect();
     current.context.close().catch(() => undefined);
     session.current = null;
+    releaseMicrophone();
     setStream(null);
     setHold(null);
     setUnavailable(null);
@@ -204,14 +198,10 @@ export function useRecorder() {
     void context.resume();
     let streamId: string | null = null;
     try {
-      let stream = isLive(warmStream) ? warmStream! : null;
-      if (!stream) {
-        setState("starting");
-        stream = await warmMicrophone();
-        if (!stream) stream = await navigator.mediaDevices.getUserMedia(CONSTRAINTS);
-        warmStream = stream;
-      }
+      setState("starting");
+      const stream = await openMicrophone();
       if (generation.current !== mine) {
+        releaseMicrophone();
         context.close().catch(() => undefined);
         return;
       }
@@ -258,6 +248,17 @@ export function useRecorder() {
       const onLink = (link: StreamState) => {
         if (session.current !== current) return;
         clearTimeout(current.holdTimer);
+        if (link === "failed" && current.link.error?.outage) {
+          // The account's problem (credit, key): nothing the user can do,
+          // and they are not told the reason. The dictation so far is kept
+          // and put aside — transcribed at a later launch, once it is fixed
+          // — and the panel closes; the banner says the rest (outage.ts).
+          void stop().then((kept) => {
+            if (kept) dropStream(kept.id);
+            setShelved((count) => count + 1);
+          });
+          return;
+        }
         if (link === "failed") {
           // Not the network, and nothing a pause would wait out: the
           // recording carries on and the reason is said as it is.
@@ -463,5 +464,5 @@ export function useRecorder() {
     setState("idle");
   }, [teardown]);
 
-  return { state, paused, hold, unavailable, noteId, error, stream, start, stop, cancel, togglePause };
+  return { state, paused, hold, unavailable, noteId, error, stream, shelved, start, stop, cancel, togglePause };
 }

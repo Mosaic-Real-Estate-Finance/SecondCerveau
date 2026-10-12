@@ -1,4 +1,5 @@
 import { ApiError, fetchSttToken } from "./api";
+import { signalOutage, type OutageReason } from "./outage";
 import { VOCABULARY } from "./vocabulary";
 
 // One dictation, streamed to Soniox while it is spoken.
@@ -59,6 +60,8 @@ export class SttError extends Error {
   constructor(
     message: string,
     readonly lasting = false,
+    /** Set when only the account owner can fix it (outage.ts). */
+    readonly outage: OutageReason | null = null,
   ) {
     super(message);
   }
@@ -194,6 +197,7 @@ export function openStream({
 
   const fail = (error: SttError) => {
     fatal = error;
+    if (error.outage) signalOutage(error.outage);
     console.warn("[soniox]", error.message);
     drop();
     setState("failed");
@@ -242,7 +246,13 @@ export function openStream({
       if (retriable) return lost();
       const said =
         REFUSALS[message.error_type ?? ""] ?? `Soniox : ${message.error_message ?? `erreur ${message.error_code}`}`;
-      return fail(new SttError(said, true));
+      const outage: OutageReason | null =
+        message.error_type === "organization_balance_exhausted" || message.error_code === 402
+          ? "balance"
+          : message.error_type === "unauthenticated" || message.error_code === 401 || message.error_code === 403
+            ? "key"
+            : null;
+      return fail(new SttError(said, true, outage));
     }
     let fin = false;
     guess = "";
@@ -282,6 +292,8 @@ export function openStream({
       token = await fetchSttToken();
     } catch (error) {
       if (current !== mine) return;
+      const outage = error instanceof ApiError ? (error.data?.outage as OutageReason | undefined) : undefined;
+      if (outage) return fail(new SttError(error instanceof Error ? error.message : "", true, outage));
       if (error instanceof ApiError && (error.status === 401 || error.status === 500)) {
         return fail(new SttError(error.message, true));
       }

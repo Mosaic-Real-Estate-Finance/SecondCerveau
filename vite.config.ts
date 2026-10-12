@@ -87,6 +87,9 @@ function pagesFunctions(env: Record<string, string>): Plugin {
     "POST /api/auth/handoff": { file: "/functions/api/auth.ts", name: "onRequestPost" },
     "POST /api/auth/redeem": { file: "/functions/api/auth.ts", name: "onRequestPost" },
     "GET /api/auth/manifest": { file: "/functions/api/auth.ts", name: "onRequestGet" },
+    "POST /api/auth/stt-alert": { file: "/functions/api/auth.ts", name: "onRequestPost" },
+    "GET /api/auth/stt-resolved": { file: "/functions/api/auth.ts", name: "onRequestGet" },
+    "POST /api/auth/stt-resolved": { file: "/functions/api/auth.ts", name: "onRequestPost" },
   };
   return {
     name: "pages-functions",

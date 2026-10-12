@@ -132,6 +132,10 @@ export type SttToken = { apiKey: string; expiresAt: string | null; wsUrl: string
 
 export const fetchSttToken = () => call<SttToken>("/api/auth/stt-token", { method: "POST", body: "{}" });
 
+/** Transcription stopped on the account's side: the owner is mailed (once per outage). */
+export const reportSttOutage = (reason: string) =>
+  call<{ ok: true }>("/api/auth/stt-alert", { method: "POST", body: JSON.stringify({ reason }) });
+
 export const fetchContacts = () =>
   call<{ contacts: Contact[]; rollup: boolean; typeOptions: string[] }>("/api/contacts");
 

@@ -47,14 +47,21 @@ function html(code: string): string {
 </html>`;
 }
 
-export async function sendCode(env: Env, to: string, code: string): Promise<void> {
-  const transport = nodemailer.createTransport({
+const transport = (env: Env) =>
+  nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
     auth: { user: env.SMTP_USER, pass: env.SMTP_APP_PASSWORD },
   });
-  await transport.sendMail({
+
+/** A plain text message: alerts and service notices, nothing to draw. */
+export async function sendPlain(env: Env, to: string, subject: string, text: string): Promise<void> {
+  await transport(env).sendMail({ from: env.SMTP_FROM || env.SMTP_USER, to, subject, text });
+}
+
+export async function sendCode(env: Env, to: string, code: string): Promise<void> {
+  await transport(env).sendMail({
     from: env.SMTP_FROM || env.SMTP_USER,
     to,
     subject: `Votre code de connexion est ${code}`,
