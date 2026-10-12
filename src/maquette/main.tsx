@@ -28,17 +28,10 @@ function Maquette() {
         Réunions Read AI avec une personne que le CRM ne connaît pas. Rien n'est écrit dans Notion avant votre décision.
       </p>
 
-      <div key={round} className="mt-6 flex flex-col gap-8">
+      <div key={round} className="mt-6 flex flex-col gap-3">
         {MEETINGS.map((meeting) => (
-          <section key={meeting.id}>
-            <h2 className="mb-2 text-2xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">{meeting.label}</h2>
-            <MeetingCard meeting={meeting} />
-          </section>
+          <MeetingCard key={meeting.id} meeting={meeting} />
         ))}
-        <section>
-          <h2 className="mb-2 text-2xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Plus rien à décider</h2>
-          <p className="text-[color:var(--muted)]">Aucune réunion en attente.</p>
-        </section>
       </div>
     </div>
   );

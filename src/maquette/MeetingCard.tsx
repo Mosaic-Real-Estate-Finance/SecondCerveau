@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icon";
 import { PrimaryButton, TextButton } from "@/components/screen";
+import { CountryPicker } from "@/components/country-picker";
+import { PhoneNumberInput } from "@/components/phone-input";
 import { Sheet, SheetPages } from "@/components/sheet";
 import { cn } from "@/lib/utils";
 import { CONTACTS, TYPES, type Meeting, type Person } from "./data";
@@ -45,7 +47,9 @@ const initialRows = (meeting: Meeting): Row[] =>
 export function MeetingCard({ meeting }: { meeting: Meeting }) {
   const [rows, setRows] = useState(() => initialRows(meeting));
   const [status, setStatus] = useState<Status>("open");
-  const [summary, setSummary] = useState(false);
+  const [transcript, setTranscript] = useState(false);
+  // The « Contacts exclus » setting, opened from the banner.
+  const [settings, setSettings] = useState(false);
   // Rows already turned to ✓ by the add animation.
   const [done, setDone] = useState<Set<string>>(new Set());
   const [refusing, setRefusing] = useState(false);
@@ -110,15 +114,31 @@ export function MeetingCard({ meeting }: { meeting: Meeting }) {
       >
         <div className="meeting-collapse-inner">
           <article className="rounded-2xl bg-white-smoke p-4">
-            <h3 className="text-base font-medium leading-snug">
-              {meeting.title}
-            </h3>
-            <p className="mt-0.5 text-xs text-[color:var(--muted)]">
-              {meeting.when} · {meeting.organizer}
-              {meeting.noteExists && " · Note déjà dans Notion"}
-            </p>
+            <header className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-medium leading-snug">
+                  {meeting.title}
+                </h3>
+                <p className="mt-0.5 text-xs text-[color:var(--muted)]">
+                  {meeting.when} · {meeting.organizer}
+                  {meeting.noteExists && " · Note déjà dans Notion"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTranscript(true)}
+                aria-label="Lire la transcription"
+                title="Lire la transcription"
+                className="-mr-2 -mt-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-navy"
+              >
+                <Icon name="quote.bubble" className="h-[18px]" />
+              </button>
+            </header>
 
-            <ul className="mt-3 overflow-hidden rounded-xl bg-white">
+            <h4 className="mt-3 px-1 text-2xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+              Présence des contacts dans le CRM
+            </h4>
+            <ul className="mt-1.5 rounded-xl bg-white">
               {rows.map((row, index) => (
                 <PersonRow
                   key={row.email}
@@ -138,19 +158,6 @@ export function MeetingCard({ meeting }: { meeting: Meeting }) {
                 />
               ))}
             </ul>
-
-            <TextButton
-              onClick={() => setSummary((on) => !on)}
-              className="-ml-3 mt-1 text-xs"
-              aria-expanded={summary}
-            >
-              {summary ? "Masquer le résumé" : "Lire le résumé"}
-            </TextButton>
-            {summary && (
-              <p className="text-xs leading-relaxed text-[color:var(--muted)]">
-                {meeting.summary}
-              </p>
-            )}
 
             <div className="mt-3 flex gap-2">
               <PrimaryButton
@@ -188,7 +195,39 @@ export function MeetingCard({ meeting }: { meeting: Meeting }) {
         created={toCreate.length}
         excluded={excluded}
         onUndo={reset}
+        onSettings={() => setSettings(true)}
       />
+
+      <Sheet
+        open={transcript}
+        onClose={() => setTranscript(false)}
+        label="Transcription"
+      >
+        <TranscriptSheet
+          meeting={meeting}
+          onClose={() => setTranscript(false)}
+        />
+      </Sheet>
+
+      <Sheet
+        open={settings}
+        onClose={() => setSettings(false)}
+        label="Contacts exclus"
+      >
+        <ExcludedSheet
+          people={rows.filter((row) => excluded.includes(row.name))}
+          onRemove={(name) => {
+            const left = excluded.filter((other) => other !== name);
+            setExcluded(left);
+            // Nobody left on the list: the meeting is back to decide on.
+            if (!left.length) {
+              setSettings(false);
+              reset();
+            }
+          }}
+          onClose={() => setSettings(false)}
+        />
+      </Sheet>
 
       <Sheet
         open={refusing}
@@ -260,21 +299,30 @@ function PersonRow({
           ? "Fiche complétée"
           : null;
   const tappable = !row.known && onOpen;
+  const firstName = row.name.split(" ")[0];
+  const tip = skipped
+    ? `${firstName} ne sera pas ajouté au CRM`
+    : icon === "checkmark.circle"
+      ? `${firstName} existe déjà dans Notion`
+      : `${firstName} n'existe pas dans Notion`;
 
   const line = (
     <span className="flex min-w-0 flex-1 items-center gap-2.5">
-      <span className={cn("person-icon flex shrink-0", done && "is-flipped")}>
-        <Icon
-          name={icon}
-          className={cn(
-            "h-[18px]",
-            icon === "checkmark.circle"
-              ? "text-navy"
-              : icon === "minus.circle"
-                ? "text-[color:var(--muted)]"
-                : "text-midnight-blue",
-          )}
-        />
+      <span className="person-tip relative flex shrink-0" data-tip={tip}>
+        <span className={cn("person-icon flex shrink-0", done && "is-flipped")}>
+          <Icon
+            name={icon}
+            className={cn(
+              "h-[18px]",
+              icon === "checkmark.circle"
+                ? "text-navy"
+                : icon === "minus.circle"
+                  ? "text-[color:var(--muted)]"
+                  : "text-midnight-blue",
+            )}
+          />
+        </span>
+        <span className="sr-only">{tip}</span>
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate">
@@ -366,14 +414,54 @@ function Outcome({
   created,
   excluded,
   onUndo,
+  onSettings,
 }: {
   status: Status;
   meeting: Meeting;
   created: number;
   excluded: string[];
   onUndo: () => void;
+  onSettings: () => void;
 }) {
   const shown = status === "added" || status === "ignored";
+  // Set aside for good: said once it is done, as a banner where the card
+  // was, and a tap away from the setting that undoes it.
+  if (status === "ignored" && excluded.length)
+    return (
+      <div className="meeting-collapse">
+        <div className="meeting-collapse-inner -mx-4 -my-6 px-4 py-6">
+          <button
+            type="button"
+            onClick={onSettings}
+            className="push-banner exclusion-banner w-full text-left"
+          >
+            <Icon name="minus.circle" className="h-5 shrink-0 text-navy" />
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold">
+                {listOf(excluded)} dans les contacts exclus
+              </span>
+              <span className="mt-0.5 block text-xs text-[color:var(--muted)]">
+                Pour toute l'équipe. Réversible dans Réglages › Contacts exclus.
+              </span>
+            </span>
+            <svg
+              aria-hidden
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0 text-[color:var(--muted)]"
+            >
+              <path d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
   return (
     <div className={cn("meeting-collapse", !shown && "is-closed")}>
       <div className="meeting-collapse-inner">
@@ -393,9 +481,7 @@ function Outcome({
                 ? created
                   ? `${meeting.title} · ${created} contact${created > 1 ? "s" : ""} créé${created > 1 ? "s" : ""}`
                   : meeting.title
-                : excluded.length
-                  ? `Ne sera plus proposé : ${excluded.join(", ")}`
-                  : "Rien n'a été écrit dans Notion"}
+                : "Rien n'a été écrit dans Notion"}
             </span>
           </span>
           {status === "added" ? (
@@ -430,12 +516,7 @@ function RefuseSheet({
   onIgnore: (forever: boolean) => void;
   onCancel: () => void;
 }) {
-  const names =
-    people.length === 1
-      ? people[0].name
-      : people.length === 2
-        ? `${people[0].name} et ${people[1].name}`
-        : `ces ${people.length} personnes`;
+  const names = listOf(people.map((person) => person.name));
   return (
     <div>
       <h2 className="font-serif text-2xl">
@@ -460,11 +541,8 @@ function RefuseSheet({
             onClick={() => onIgnore(true)}
             className="mt-2 flex min-h-14 w-full items-center justify-center rounded-2xl bg-white-smoke px-4 py-3 text-center font-medium text-navy"
           >
-            Et ne plus proposer {names}
+            Toujours ignorer {names}
           </button>
-          <p className="mt-2 px-2 text-center text-xs text-[color:var(--muted)]">
-            Pour toute l'équipe. Réversible dans Réglages › Contacts exclus.
-          </p>
         </>
       )}
       <div className="mt-2 flex justify-center">
@@ -636,6 +714,8 @@ function ContactForm({
   onSave: () => void;
 }) {
   const [first, ...last] = row.name.split(" ");
+  const [country, setCountry] = useState("FR");
+  const [phone, setPhone] = useState("");
   return (
     <div>
       <Back onBack={onBack} />
@@ -660,7 +740,20 @@ function ContactForm({
             Société devinée d'après l'adresse.
           </p>
         )}
-        <input className={field} placeholder="Téléphone" inputMode="tel" />
+        <div className="flex gap-2">
+          <CountryPicker
+            value={country}
+            onChange={setCountry}
+            label="Indicatif"
+          />
+          <PhoneNumberInput
+            country={country}
+            value={phone}
+            onChange={setPhone}
+            label="Téléphone"
+            className="flex-1"
+          />
+        </div>
         <select className={field} defaultValue="">
           <option value="" disabled>
             Type
@@ -723,6 +816,98 @@ function Picker({
             Aucun contact ne correspond.
           </p>
         )}
+      </ul>
+    </div>
+  );
+}
+
+/** « A », « A et B », « ces 3 personnes ». */
+function listOf(names: string[]) {
+  return names.length === 1
+    ? names[0]
+    : names.length === 2
+      ? `${names[0]} et ${names[1]}`
+      : `ces ${names.length} personnes`;
+}
+
+// ---- The transcript ----------------------------------------------------------------
+
+function TranscriptSheet({
+  meeting,
+  onClose,
+}: {
+  meeting: Meeting;
+  onClose: () => void;
+}) {
+  return (
+    <div>
+      <header className="mb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="font-serif text-2xl leading-tight">{meeting.title}</h2>
+          <p className="mt-1 text-xs text-[color:var(--muted)]">
+            {meeting.when} · {meeting.organizer}
+          </p>
+        </div>
+        <TextButton onClick={onClose} className="-mr-3 shrink-0">
+          OK
+        </TextButton>
+      </header>
+      <ol className="flex flex-col gap-4">
+        {meeting.transcript.map((line, index) => (
+          <li key={index}>
+            <p className="text-xs">
+              <span className="font-medium">{line.speaker}</span>{" "}
+              <span className="tabular-nums text-[color:var(--muted)]">
+                {line.at}
+              </span>
+            </p>
+            <p className="mt-0.5 leading-relaxed">{line.text}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+// ---- Réglages › Contacts exclus, as the banner opens it ------------------------------
+
+function ExcludedSheet({
+  people,
+  onRemove,
+  onClose,
+}: {
+  people: Row[];
+  onRemove: (name: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div>
+      <header className="mb-2 flex items-start justify-between gap-3">
+        <h2 className="font-serif text-2xl">Contacts exclus</h2>
+        <TextButton onClick={onClose} className="-mr-3 shrink-0">
+          OK
+        </TextButton>
+      </header>
+      <p className="mb-4 text-xs text-[color:var(--muted)]">
+        Les personnes que vous avez refusé d'ajouter dans Notion ne vous sont
+        plus proposées, ni à vos collègues. Retirez-en une pour qu'elle le soit
+        à nouveau.
+      </p>
+      <ul className="flex flex-col gap-2">
+        {people.map((person) => (
+          <li
+            key={person.email}
+            className="flex min-h-14 items-center justify-between gap-3 rounded-2xl bg-white-smoke py-2 pl-4 pr-2"
+          >
+            <span className="min-w-0 truncate">{person.email}</span>
+            <TextButton
+              onClick={() => onRemove(person.name)}
+              className="shrink-0"
+            >
+              Retirer
+            </TextButton>
+          </li>
+        ))}
       </ul>
     </div>
   );
