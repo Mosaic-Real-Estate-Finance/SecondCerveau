@@ -107,7 +107,7 @@ export function PushBanner({ visible }: { visible: boolean }) {
       <div className="t-stack">
         <div ref={banner} className={cn("t-stack-banner push-banner", !entered && "is-enter", leaving && "is-leaving")} data-depth="0">
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Les notifications sont importantes</p>
+            <p className="font-semibold">Les notifications sont importantes</p>
             <p className="mt-0.5 text-xs text-[color:var(--muted)]">
               Elles permettent de valider l'ajout d'un résumé de Read AI dans Notion.
             </p>
@@ -115,7 +115,7 @@ export function PushBanner({ visible }: { visible: boolean }) {
           <button
             type="button"
             onClick={() => void ask()}
-            className="shrink-0 rounded-full bg-navy px-4 py-2.5 text-sm font-medium text-on-accent"
+            className="shrink-0 rounded-full bg-navy px-4 py-2.5 font-medium text-on-accent"
           >
             Activer →
           </button>

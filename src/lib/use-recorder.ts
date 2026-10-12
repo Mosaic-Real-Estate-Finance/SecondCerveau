@@ -172,12 +172,31 @@ export function useRecorder() {
     setHold(current.hold);
   }, []);
 
-  useEffect(() => teardown, [teardown]);
+  // Unmounted mid recording — signed out with the panel open: the recorder
+  // and the live stream stop with the screen. What was saved so far stays,
+  // and is transcribed at the next launch (resumePending).
+  useEffect(
+    () => () => {
+      const current = session.current;
+      if (current) {
+        if (current.recorder.state !== "inactive") current.recorder.stop();
+        dropStream(current.note.id);
+      }
+      teardown();
+    },
+    [teardown],
+  );
+
+  // Each press of the microphone, numbered: a start still waiting for the
+  // microphone when « Annuler » is pressed must not carry on behind the
+  // closed panel once it is granted.
+  const generation = useRef(0);
 
   // Called from pointerdown. The audio context is created before any await,
   // inside the gesture, which is what Safari requires to let it run.
   const start = useCallback(async () => {
     if (session.current) return;
+    const mine = ++generation.current;
     setError(null);
     setPaused(false);
     setMeter({ amplitudes: [], elapsed: 0 });
@@ -191,6 +210,10 @@ export function useRecorder() {
         stream = await warmMicrophone();
         if (!stream) stream = await navigator.mediaDevices.getUserMedia(CONSTRAINTS);
         warmStream = stream;
+      }
+      if (generation.current !== mine) {
+        context.close().catch(() => undefined);
+        return;
       }
 
       // Recording first; everything else follows without holding it back.
@@ -374,8 +397,21 @@ export function useRecorder() {
     apply(current);
   }, [apply]);
 
-  // Resolves with the saved note, ready for transcription.
-  const stop = useCallback(async (): Promise<Note | null> => {
+  // Resolves with the saved note, ready for transcription. A second press of
+  // « Terminer » while the first is finishing gets the same answer, not a
+  // second note.
+  const stopping = useRef<Promise<Note | null> | null>(null);
+  const stop = useCallback((): Promise<Note | null> => {
+    if (!stopping.current) {
+      stopping.current = finish().finally(() => {
+        stopping.current = null;
+      });
+    }
+    return stopping.current;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teardown]);
+
+  const finish = async (): Promise<Note | null> => {
     const current = session.current;
     if (!current) return null;
     clearInterval(current.saveTimer);
@@ -410,14 +446,17 @@ export function useRecorder() {
     setPaused(false);
     setState("idle");
     return note;
-  }, [teardown]);
+  };
 
   const cancel = useCallback(async () => {
     const current = session.current;
-    if (!current) return setState("idle");
+    if (!current) {
+      generation.current++;
+      return setState("idle");
+    }
     if (current.recorder.state !== "inactive") current.recorder.stop();
     dropStream(current.note.id);
-    await current.ready;
+    await current.ready.catch(() => undefined);
     teardown();
     await removeNote(current.note.id);
     setPaused(false);

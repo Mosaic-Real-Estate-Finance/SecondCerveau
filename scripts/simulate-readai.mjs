@@ -223,7 +223,14 @@ function stored(ds, key, value) {
 
 function addPage(ds, properties) {
   const id = randomUUID();
-  const page = { id, url: `https://www.notion.so/${id.replace(/-/g, "")}`, ds, in_trash: false, properties: {} };
+  const page = {
+    id,
+    url: `https://www.notion.so/${id.replace(/-/g, "")}`,
+    ds,
+    parent: { type: "data_source_id", data_source_id: ds },
+    in_trash: false,
+    properties: {},
+  };
   for (const [key, value] of Object.entries(properties)) {
     const [name, prop] = stored(ds, key, value);
     page.properties[name] = prop;
@@ -702,6 +709,19 @@ await scenario("auth : adresse hors liste → même réponse ; code faux 5 fois 
   }
   const blocked = await call(auth, "/api/auth/verify", { body: { email: "ob@mosaicfin.com", code: sentCode } });
   assert.equal(blocked.status, 401, "le bon code ne passe plus après cinq erreurs");
+});
+
+await scenario("auth : rafale de codes faux en parallèle → cinq essais comptés, pas un", async () => {
+  const sessionLib = await lib("functions/_lib/session.js");
+  store.delete("auth:cool:ob@mosaicfin.com");
+  const { code } = await sessionLib.requestCode(env, "ob@mosaicfin.com", true);
+  const wrong = String((Number(code) + 1) % 1_000_000).padStart(6, "0");
+  const burst = await Promise.all(
+    Array.from({ length: 30 }, () => call(auth, "/api/auth/verify", { body: { email: "ob@mosaicfin.com", code: wrong } })),
+  );
+  assert.ok(burst.every((response) => response.status === 401));
+  const after = await call(auth, "/api/auth/verify", { body: { email: "ob@mosaicfin.com", code } });
+  assert.equal(after.status, 401, "le bon code ne passe plus après une rafale");
 });
 
 await scenario("auth : renvoi limité à un par minute", async () => {

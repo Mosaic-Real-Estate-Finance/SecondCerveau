@@ -162,7 +162,16 @@ export type NoteFile = { id: string; name: string; size: number };
 // transcription is still running rather than after it. Notion drops an
 // upload that is never attached to a page after an hour, which is far
 // longer than the few seconds between this and the note being sent.
+//
+// Refused here past 4.2 MB: Vercel stops a request body at 4.5 MB with an
+// answer of its own, before the route can say anything useful (api/files).
+const UPLOAD_MAX = 4_200_000;
+
 export function uploadFile(file: File) {
+  if (file.size > UPLOAD_MAX) {
+    const mb = (bytes: number) => (bytes / 1_000_000).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+    return Promise.reject(new ApiError(`Fichier trop lourd : ${mb(file.size)} Mo, maximum ${mb(UPLOAD_MAX)} Mo.`, 413, false));
+  }
   const body = new FormData();
   body.append("file", file, file.name);
   return call<NoteFile>("/api/files", { method: "POST", body });

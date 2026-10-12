@@ -1,6 +1,10 @@
 @import "tailwindcss";
-@import "@fontsource/lora/400.css";
-@import "@fontsource/lora/600.css";
+/* French needs latin and latin-ext only; the package's default files would
+   also ship cyrillic, vietnamese, math and symbols. */
+@import "@fontsource/lora/latin-400.css";
+@import "@fontsource/lora/latin-ext-400.css";
+@import "@fontsource/lora/latin-600.css";
+@import "@fontsource/lora/latin-ext-600.css";
 @import "./transitions/_root.css";
 @import "./transitions/snippets.css";
 
@@ -464,26 +468,6 @@ a {
   transition: none !important;
 }
 
-/* ---- Voice note on the review screen --------------------------------
-   The Rare UI file stays untouched; its neutrals are mapped to the Mosaic
-   ones here, same as the recorder. The accent glow comes from the prop. */
-.voice-note-mosaic > div:first-child {
-  background: var(--color-white-smoke);
-}
-.voice-note-mosaic [data-slot="voice-note-control"] {
-  background: var(--color-white);
-  color: var(--color-midnight-blue);
-}
-.voice-note-mosaic [data-slot="voice-note-track"] > div:first-child > span {
-  background: var(--scrim-strong);
-}
-.voice-note-mosaic [data-slot="voice-note-track"] > div:last-child span {
-  background: var(--color-midnight-blue);
-}
-.voice-note-mosaic [data-slot="voice-note-time"] {
-  color: var(--muted);
-}
-
 /* ---- Contact list skeleton ------------------------------------------
    The list has no fixed height: the content layer stays in flow and sizes
    the wrapper, the skeleton lies over it while loading. */
@@ -497,10 +481,6 @@ a {
 }
 .contact-skel.is-revealed .t-skel-skeleton {
   pointer-events: none;
-}
-
-.voice-note-mosaic [data-slot="voice-note-time"] {
-  font-size: 12px;
 }
 
 /* Rows off screen are not rendered until they scroll in: the contact list

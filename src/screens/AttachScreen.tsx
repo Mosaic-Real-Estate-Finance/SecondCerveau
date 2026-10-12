@@ -20,9 +20,8 @@ function NotionLogo({ className }: { className?: string }) {
 // The last step. A document or a photo may be attached — it is optional —
 // and then the note goes to Notion.
 //
-// The transcription is very often still running when this screen opens: the
-// dictation is transcribed utterance by utterance while it is spoken, and
-// the tail is still in the engine. That is the point of this step being
+// The transcription is often still finishing when this screen opens: the
+// last words are still with Soniox. That is the point of this step being
 // here. Pressing the button while it runs does not fail and does not make
 // the user press again; the send waits for the text and goes by itself.
 
@@ -73,12 +72,19 @@ export function AttachScreen({
   const revert = useRef(0);
   const top = useRef<HTMLDivElement>(null);
 
+  // The note a press of « Envoyer » was for. A send waiting for its text is
+  // abandoned when the screen is left; without this, opening another note
+  // later found the screen still waiting and sent that note at once — with
+  // the attachments of the first.
+  const armed = useRef<string | null>(null);
+  const inFlight = useRef(false);
   useEffect(() => {
-    if (!active) return;
+    if (active) top.current?.closest(".t-page")?.scrollTo({ top: 0 });
+    if (inFlight.current) return;
+    armed.current = null;
     setPhase("idle");
     setConfirmDelete(false);
     setPageUrl(null);
-    top.current?.closest(".t-page")?.scrollTo({ top: 0 });
   }, [active, noteId]);
 
   // A different dictation is a different set of attachments.
@@ -140,9 +146,8 @@ export function AttachScreen({
   // the note, twice. A cleanup that cancelled on those would cancel the very
   // send that caused them, which it did: the note reached Notion and the
   // screen never heard about it.
-  const inFlight = useRef(false);
   useEffect(() => {
-    if (phase !== "waiting" || !note || inFlight.current) return;
+    if (phase !== "waiting" || !note || inFlight.current || armed.current !== note.id) return;
     if (note.status === "transcription-failed") {
       setPhase("idle");
       showError();
@@ -206,7 +211,7 @@ export function AttachScreen({
         <button
           type="button"
           onClick={onDone}
-          className={cn("text-sm text-[color:var(--muted)] underline underline-offset-2", pageUrl ? "mt-4" : "mt-8")}
+          className={cn("text-[color:var(--muted)] underline underline-offset-2", pageUrl ? "mt-4" : "mt-8")}
         >
           Fermer
         </button>
@@ -260,6 +265,7 @@ export function AttachScreen({
       <button
         type="button"
         onClick={() => picker.current?.click()}
+        disabled={busy}
         className="mt-4 flex min-h-16 w-full items-center gap-3 rounded-2xl bg-white-smoke px-4 py-3 text-left"
       >
         <svg aria-hidden viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-navy" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -292,6 +298,7 @@ export function AttachScreen({
               </span>
               <TextButton
                 onClick={() => setFiles((current) => current.filter((item) => item.key !== file.key))}
+                disabled={busy}
                 className="-mr-3 shrink-0 text-xs"
                 aria-label={`Retirer ${file.name}`}
               >
@@ -325,7 +332,13 @@ export function AttachScreen({
         </p>
         <div ref={wrap} className="t-input-wrap">
           <div ref={button} className="send-button t-input rounded-[18px]">
-            <PrimaryButton onClick={() => setPhase("waiting")} disabled={busy || uploading || failed}>
+            <PrimaryButton
+              onClick={() => {
+                armed.current = note.id;
+                setPhase("waiting");
+              }}
+              disabled={busy || uploading || failed}
+            >
               {uploading ? "Fichier en cours d'envoi" : label}
             </PrimaryButton>
           </div>

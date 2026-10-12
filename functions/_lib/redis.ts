@@ -67,3 +67,21 @@ export async function release(env: Env, key: string, held: string): Promise<void
     .eval(RELEASE, [key], [held])
     .catch(() => undefined);
 }
+
+/**
+ * Runs `work` alone for this key — two sends of the same note, a double tap
+ * or a retry over a request still running, never both check and write at
+ * once (principle V). Null when the other one kept the key the whole wait.
+ */
+export async function exclusive<T>(env: Env, key: string, work: () => Promise<T>, waitMs = 10_000): Promise<T | null> {
+  // The store down is no reason to refuse a note: Notion is the source of
+  // truth, and its own client-id check still holds for a sequential retry.
+  const held = await acquire(env, key, 120, waitMs).catch(() => "none");
+  if (!held) return null;
+  if (held === "none") return work();
+  try {
+    return await work();
+  } finally {
+    await release(env, key, held);
+  }
+}

@@ -179,7 +179,7 @@ export async function fetchThread(
 
 /** Metadata only, for a message whose expand came back without it. */
 async function fetchAttachments(token: string, messageId: string): Promise<GraphAttachment[]> {
-  const response = await fetch(`${GRAPH}/me/messages/${messageId}/attachments?$select=${ATTACHMENT_FIELDS}`, {
+  const response = await fetch(`${GRAPH}/me/messages/${encodeURIComponent(messageId)}/attachments?$select=${ATTACHMENT_FIELDS}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) return [];

@@ -199,6 +199,9 @@ export function openStream({
     setState("failed");
     settle?.reject(error);
     settle = null;
+    // Nothing more will happen on a failed stream: its watch, its retry and
+    // its network listeners go with it.
+    close();
   };
 
   // The link is gone or unusable: start over, from what Soniox confirmed.

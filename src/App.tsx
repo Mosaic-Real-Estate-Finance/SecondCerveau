@@ -56,13 +56,18 @@ function linkedReview(): string | null {
 const QR = "connexion";
 const INSTALL = "installer";
 const params = new URLSearchParams(window.location.search);
-const qrToken = params.get(QR);
+const fragment = new URLSearchParams(window.location.hash.slice(1));
+// In the fragment (QR codes made from now on), or the query (older ones).
+const qrToken = fragment.get(QR) ?? params.get(QR);
 const installToken = params.get(INSTALL);
 
 function forgetParam(name: string) {
   const url = new URL(window.location.href);
   url.searchParams.delete(name);
-  window.history.replaceState(null, "", url.pathname + url.search);
+  const hash = new URLSearchParams(url.hash.slice(1));
+  hash.delete(name);
+  url.hash = hash.toString();
+  window.history.replaceState(null, "", url.pathname + url.search + url.hash);
 }
 
 export default function App() {
@@ -72,6 +77,9 @@ export default function App() {
   const [reviewCount, setReviewCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
+  // A new key at every opening: the settings start on their first page, with
+  // nothing left over from the last visit.
+  const [settingsKey, setSettingsKey] = useState(0);
   const [noteId, setNoteId] = useState<string | null>(null);
   const noteIdRef = useRef(noteId);
   noteIdRef.current = noteId;
@@ -267,7 +275,10 @@ export default function App() {
             onRecorded={recorded}
             onOpen={openNote}
             onReview={() => setPage(4)}
-            onSettings={() => setSettingsOpen(true)}
+            onSettings={() => {
+              setSettingsKey((key) => key + 1);
+              setSettingsOpen(true);
+            }}
           />
         </section>
         <section className="t-page" data-page-id="2" inert={page !== 2}>
@@ -310,6 +321,7 @@ export default function App() {
       <PushBanner visible={page === 1 && !settingsOpen} />
       <Sheet open={settingsOpen} onClose={closeSettings} label="Réglages" full={settingsExpanded}>
         <SettingsScreen
+          key={settingsKey}
           active={settingsOpen}
           email={user.email}
           onBack={closeSettings}

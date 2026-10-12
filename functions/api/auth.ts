@@ -1,5 +1,5 @@
 import { later } from "../_lib/background.js";
-import { mailEnabled, sendCode } from "../_lib/mail.js";
+import { MANIFEST } from "../_lib/manifest.js";
 import { guard, json, type Handler } from "../_lib/notion.js";
 import {
   checkCode,
@@ -30,6 +30,9 @@ async function code(request: Request, env: Parameters<Handler>[0]["env"]) {
   const body = (await request.json().catch(() => ({}))) as { email?: unknown };
   const email = cleanEmail(body.email);
   if (!validEmail(email)) return json({ error: "Adresse invalide" }, 400);
+  // Loaded here only: nodemailer and the mail's logo are the heaviest part of
+  // this function, and no other action of it sends a mail.
+  const { mailEnabled, sendCode } = await import("../_lib/mail.js");
   const user = findUser(email);
   if (user && !mailEnabled(env)) console.error("[auth] SMTP non configuré : aucun code ne peut partir");
   let result;
@@ -147,7 +150,11 @@ async function handoff(request: Request, env: Parameters<Handler>[0]["env"]) {
   const kind: HandoffKind = body.install === true ? "install" : "qr";
   try {
     const { token, expiresIn } = await createHandoff(env, denied.user.email, kind);
-    const url = new URL(`/?${PARAM[kind]}=${token}`, new URL(request.url).origin).href;
+    // The QR code's token rides in the fragment, which no request carries:
+    // it never reaches a server log. The install token cannot: it has to be
+    // part of the address iOS starts the installed app on.
+    const path = kind === "qr" ? `/#${PARAM.qr}=${token}` : `/?${PARAM.install}=${token}`;
+    const url = new URL(path, new URL(request.url).origin).href;
     return json({ url, expiresIn });
   } catch {
     return unavailable();
@@ -183,16 +190,12 @@ async function redeem(request: Request, env: Parameters<Handler>[0]["env"]) {
   return response;
 }
 
-async function manifest(request: Request) {
-  const url = new URL(request.url);
-  const token = url.searchParams.get("t");
-  const response = await fetch(new URL("/manifest.webmanifest", url.origin)).catch(() => null);
-  const base = response?.ok ? ((await response.json().catch(() => null)) as Record<string, unknown> | null) : null;
-  if (!base) return json({ error: "Manifeste indisponible" }, 502);
+function manifest(request: Request) {
+  const token = new URL(request.url).searchParams.get("t");
   // Same app, same identity: only where it starts changes. The token is not
   // checked here; it is checked when the app spends it.
   const start = handoffShape(token) ? `/?${PARAM.install}=${token}` : "/";
-  return new Response(JSON.stringify({ ...base, id: "/", start_url: start }), {
+  return new Response(JSON.stringify({ ...MANIFEST, start_url: start }), {
     headers: { "Content-Type": "application/manifest+json", "Cache-Control": "no-store" },
   });
 }

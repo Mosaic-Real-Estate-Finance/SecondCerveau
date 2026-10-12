@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 
 // Long enough to cover --sheet-dur.
 const CLOSE_MS = 520;
-export const SHEET_CLOSE_MS = CLOSE_MS;
 // Pulled down further than this, or flicked faster, the sheet lets go.
 const DISMISS_PX = 120;
 const DISMISS_SPEED = 0.5; // px per ms

@@ -120,7 +120,9 @@ La transcription tournait sur le téléphone, avec Whisper en WASM. Sur WebKit
 elle n'avait droit qu'à un seul thread, et il fallait 10 à 20 s entre le
 dernier mot et le texte. Elle part désormais chez Soniox en temps réel : le
 texte s'écrit pendant qu'on parle, et « terminer » ne fait plus qu'arrêter ce
-qui est déjà là.
+qui est déjà là. L'en-tête d'isolation `Cross-Origin-Embedder-Policy`, que
+le moteur WASM exigeait, est retiré ; `Cross-Origin-Opener-Policy` reste sur
+la PWA par précaution.
 
 **Le navigateur ne voit jamais la clé du compte.** Il demande à
 `POST /api/auth/stt-token` une clé temporaire, valable une minute et pour un

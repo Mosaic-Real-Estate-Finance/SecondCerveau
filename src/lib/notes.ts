@@ -221,6 +221,11 @@ export function updateNote(id: string, patch: Partial<Note>, { durable = true } 
       return saveNote({ ...note, ...patch }, { durable });
     });
   pending.set(id, run);
+  // Let go once it is the last one: the chain would otherwise hold the note,
+  // its recording included, for as long as the app runs.
+  void run.finally(() => {
+    if (pending.get(id) === run) pending.delete(id);
+  });
   return run;
 }
 

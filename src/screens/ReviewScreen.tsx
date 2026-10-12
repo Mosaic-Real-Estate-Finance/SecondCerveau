@@ -87,13 +87,12 @@ export function ReviewScreen({
       const data = await fetchReview();
       setItems(data.items);
       setStatus("ready");
-      onCount(data.count);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) return onUnauthorized();
       setError((cause as Error).message);
       setStatus("error");
     }
-  }, [onCount, onUnauthorized]);
+  }, [onUnauthorized]);
 
   useEffect(() => {
     if (active) void load();
@@ -105,12 +104,13 @@ export function ReviewScreen({
   }, [active, focusId, status]);
 
   const replace = (item: ReviewItem) => setItems((list) => list.map((one) => (one.id === item.id ? item : one)));
-  const drop = (id: string) =>
-    setItems((list) => {
-      const next = list.filter((one) => one.id !== id);
-      onCount(next.length);
-      return next;
-    });
+  const drop = (id: string) => setItems((list) => list.filter((one) => one.id !== id));
+  // The count on the home screen follows the list — reported after the
+  // render, never from inside a state updater.
+  const loaded = status === "ready";
+  useEffect(() => {
+    if (loaded) onCount(items.length);
+  }, [loaded, items.length, onCount]);
 
   const closed = (id: string, result: Closed) => {
     drop(id);
@@ -303,7 +303,7 @@ function CallCard({
 
       {item.status === "error" && (
         <div className="mt-3 rounded-xl bg-white p-3">
-          <p className="text-sm font-medium">Réunion non enregistrée</p>
+          <p className="font-medium">Réunion non enregistrée</p>
           {item.error && <p className="mt-1 text-xs text-[color:var(--muted)]">{item.error}</p>}
           <TextButton onClick={() => void onRetry(item)} disabled={busy === item.id} className="-ml-3 mt-1">
             {busy === item.id ? "Nouvel essai…" : "Réessayer"}
@@ -314,7 +314,7 @@ function CallCard({
       {item.recognized.length > 0 && (
         <div className="mt-3">
           <h3 className="text-2xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Déjà dans le CRM</h3>
-          <p className="mt-1 text-sm">
+          <p className="mt-1">
             {item.recognized.map((contact) => [contact.name, contact.company].filter(Boolean).join(", ")).join(" · ")}
           </p>
         </div>
@@ -322,10 +322,10 @@ function CallCard({
 
       {meeting.summary && (
         <div className="mt-3">
-          <TextButton onClick={() => setSummary((on) => !on)} className="-ml-3 text-sm" aria-expanded={summary}>
+          <TextButton onClick={() => setSummary((on) => !on)} className="-ml-3" aria-expanded={summary}>
             {summary ? "Masquer le résumé" : "Lire le résumé"}
           </TextButton>
-          {summary && <p className="mt-1 whitespace-pre-line text-sm leading-relaxed">{meeting.summary}</p>}
+          {summary && <p className="mt-1 whitespace-pre-line leading-relaxed">{meeting.summary}</p>}
         </div>
       )}
 
@@ -355,13 +355,13 @@ function CallCard({
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         {meeting.reportUrl ? (
-          <a href={meeting.reportUrl} target="_blank" rel="noreferrer" className="text-sm">
+          <a href={meeting.reportUrl} target="_blank" rel="noreferrer">
             Rapport Read AI
           </a>
         ) : (
           <span />
         )}
-        <TextButton onClick={() => void onIgnore(item)} disabled={busy === item.id} className="-mr-3 text-sm">
+        <TextButton onClick={() => void onIgnore(item)} disabled={busy === item.id} className="-mr-3">
           Ignorer cet appel
         </TextButton>
       </div>
@@ -414,7 +414,7 @@ function PersonRow({
       {suggestion && <p className="mt-1 text-xs">{suggestion}</p>}
 
       {person.decision ? (
-        <p className="mt-2 text-sm text-[color:var(--muted)]">✓ {decisionText(person)}</p>
+        <p className="mt-2 text-[color:var(--muted)]">✓ {decisionText(person)}</p>
       ) : (
         <div className="mt-2 flex items-end gap-3">
           <div className="flex flex-col items-center gap-1">
@@ -465,7 +465,7 @@ function PersonRow({
           <TextButton
             onClick={() => void onDecide(item, person, { action: "exclude" })}
             disabled={busy}
-            className="-mr-3 text-sm"
+            className="-mr-3"
           >
             Pas nécessaire
           </TextButton>
@@ -564,7 +564,7 @@ function ContactPicker({
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Tous les contacts</h3>
           )}
           <ul className="flex flex-col gap-2">{rest.map(row)}</ul>
-          {contacts.status === "loading" && <p className="text-sm text-[color:var(--muted)]">Chargement des contacts…</p>}
+          {contacts.status === "loading" && <p className="text-[color:var(--muted)]">Chargement des contacts…</p>}
         </section>
       </div>
     </div>

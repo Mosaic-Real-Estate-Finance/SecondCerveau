@@ -137,15 +137,40 @@ export async function notion<T = any>(
 // in the body, so the header is left to it.
 // https://developers.notion.com/reference/send-a-file-upload
 export async function notionSend<T = any>(env: Env, path: string, form: FormData): Promise<T> {
-  const response = await fetch(`${API}${path}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.NOTION_TOKEN}`, "Notion-Version": NOTION_VERSION },
-    body: form,
-  });
-  const data: any = await response.json().catch(() => ({}));
-  if (!response.ok) throw new NotionError(response.status, data?.message ?? `Notion ${response.status}`);
-  return data as T;
+  // Rate limited like any other call: a part refused with a 429 is sent again
+  // rather than failing the whole file.
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(`${API}${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.NOTION_TOKEN}`, "Notion-Version": NOTION_VERSION },
+      body: form,
+    });
+    if ((response.status === 429 || response.status === 529) && attempt < 4) {
+      const seconds = Number(response.headers.get("Retry-After")) || 2 ** attempt;
+      await sleep(seconds * 1000 + Math.random() * 300);
+      continue;
+    }
+    const data: any = await response.json().catch(() => ({}));
+    if (!response.ok) throw new NotionError(response.status, data?.message ?? `Notion ${response.status}`);
+    return data as T;
+  }
 }
+
+// Page ids that come from a client are checked before they reach a path:
+// `/pages/${id}` with "../blocks/x" would otherwise address another endpoint.
+export const isNotionId = (value: unknown): value is string =>
+  typeof value === "string" && /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(value);
+
+const bare = (id: string | undefined) => (id ?? "").replace(/-/g, "").toLowerCase();
+
+/** Whether a page read from Notion lives in this database — not any page the integration can see. */
+export const inDatabase = (
+  page: { parent?: { database_id?: string; data_source_id?: string } },
+  databaseId: string,
+  sourceId?: string,
+) =>
+  bare(page.parent?.database_id) === bare(databaseId) ||
+  (sourceId !== undefined && bare(page.parent?.data_source_id) === bare(sourceId));
 
 // What this workspace allows per file: 5 MiB on a free plan, 5 GiB on a paid
 // one. Asked of Notion rather than assumed, so the message the user gets is
@@ -243,6 +268,14 @@ export function json(body: unknown, status = 200): Response {
 export async function guard(request: Request, env: Env): Promise<{ user: User } | Response> {
   if (!env.NOTION_TOKEN || !env.NOTION_CONTACTS_DB || !env.NOTION_NOTES_DB) {
     return json({ error: "Configuration serveur incomplète" }, 500);
+  }
+  // A request a browser sends from another site carries its Origin. The
+  // session cookie is SameSite=Strict, but a sibling subdomain counts as the
+  // same site; the host is the one answer that only this app can give.
+  const origin = request.headers.get("origin");
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  if (origin && host && origin !== "null" && new URL(origin).host !== host) {
+    return json({ error: "Origine refusée" }, 403);
   }
   const identity = await identify(request, env);
   // The message is the dictation's, which addresses its reader as "vous"; the

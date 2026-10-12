@@ -67,7 +67,7 @@ export function NotificationsCta() {
           type="button"
           onClick={() => void enable()}
           disabled={busy}
-          className="mt-3 flex h-10 w-full items-center justify-center rounded-xl bg-white text-sm font-medium text-navy disabled:opacity-60"
+          className="mt-3 flex h-10 w-full items-center justify-center rounded-xl bg-white font-medium text-navy disabled:opacity-60"
         >
           {busy ? "Activation…" : "Activer les notifications"}
         </button>

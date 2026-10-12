@@ -61,6 +61,9 @@ export const onRequestPost: Handler = async ({ request, env }) => {
     return json({ ok: true, ignored: "payload" });
   }
 
-  later("readai", processMeeting(env, meeting));
+  // The lock is waited for at most three minutes of the five this function
+  // has (vercel.json): the rest is for the Notion writes, so that a meeting
+  // behind another one fails into a retryable item rather than being cut off.
+  later("readai", processMeeting(env, meeting, 180_000));
   return json({ ok: true });
 };

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { renderSVG } from "uqr";
 import { PrimaryButton, TextButton } from "@/components/screen";
-import { SHEET_CLOSE_MS, SheetPages } from "@/components/sheet";
+import { SheetPages } from "@/components/sheet";
 import { Shimmer } from "@/components/shimmer";
 import { useToast } from "@/components/toast";
 import { openInstallInvite } from "@/components/install-invite";
@@ -32,14 +31,6 @@ export function SettingsScreen({
     setView(next);
     onExpand(next === "excluded");
   };
-  // Back to the first view whenever the sheet is opened again — once it is
-  // out of sight, so the closing sheet does not slide its pages on the way.
-  useEffect(() => {
-    if (active) return;
-    onExpand(false);
-    const timer = window.setTimeout(() => setView("main"), SHEET_CLOSE_MS);
-    return () => window.clearTimeout(timer);
-  }, [active, onExpand]);
   const [push, setPush] = useState<"unknown" | "on" | "off">("unknown");
   const [busy, setBusy] = useState(false);
   const installed = isStandalone();
@@ -256,17 +247,17 @@ function ExcludedContacts({ onBack, onUnauthorized }: { onBack: () => void; onUn
       </p>
 
       {error ? (
-        <p className="text-sm text-[color:var(--muted)]">{error}</p>
+        <p className="text-[color:var(--muted)]">{error}</p>
       ) : emails === null ? (
-        <p className="text-sm text-[color:var(--muted)]">Chargement…</p>
+        <p className="text-[color:var(--muted)]">Chargement…</p>
       ) : emails.length === 0 ? (
-        <p className="rounded-2xl bg-white-smoke p-4 text-sm text-[color:var(--muted)]">Aucun contact exclu.</p>
+        <p className="rounded-2xl bg-white-smoke p-4 text-[color:var(--muted)]">Aucun contact exclu.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {emails.map((email) => (
             <li key={email} className="flex min-h-14 items-center justify-between gap-3 rounded-2xl bg-white-smoke py-2 pl-4 pr-2">
-              <span className="min-w-0 truncate text-sm">{email}</span>
-              <TextButton onClick={() => void remove(email)} disabled={removing !== null} className="shrink-0 text-sm">
+              <span className="min-w-0 truncate">{email}</span>
+              <TextButton onClick={() => void remove(email)} disabled={removing !== null} className="shrink-0">
                 {removing === email ? "Retrait…" : "Retirer"}
               </TextButton>
             </li>
@@ -279,10 +270,11 @@ function ExcludedContacts({ onBack, onUnauthorized }: { onBack: () => void; onUn
 
 // The computer's way onto the phone: a QR code that opens the app there,
 // signed in as the same person, on the install guide. The link inside is a
-// sign-in, short-lived and good twice (Safari, then the installed app on an
-// iPhone — see functions/_lib/session.ts), hence the warning under it.
+// sign-in, short-lived and good once (see functions/_lib/session.ts), hence
+// the warning under it. The QR encoder is loaded here only: a computer's
+// settings are the one place it is drawn.
 function PhoneHandoff({ onBack, onUnauthorized }: { onBack: () => void; onUnauthorized: () => void }) {
-  const [link, setLink] = useState<{ url: string; until: number } | null>(null);
+  const [link, setLink] = useState<{ svg: string; until: number } | null>(null);
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
@@ -290,10 +282,11 @@ function PhoneHandoff({ onBack, onUnauthorized }: { onBack: () => void; onUnauth
     setError("");
     setLink(null);
     try {
-      const { url, expiresIn } = await createHandoff();
+      const [{ url, expiresIn }, { renderSVG }] = await Promise.all([createHandoff(), import("uqr")]);
+      const svg = renderSVG(url, { ecc: "M", border: 2, blackColor: "#020342", whiteColor: "#ffffff" });
       const at = Date.now();
       setNow(at);
-      setLink({ url, until: at + expiresIn * 1000 });
+      setLink({ svg, until: at + expiresIn * 1000 });
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) return onUnauthorized();
       setError((cause as Error).message || "Le QR code n'a pas pu être créé.");
@@ -309,10 +302,7 @@ function PhoneHandoff({ onBack, onUnauthorized }: { onBack: () => void; onUnauth
 
   const expired = link !== null && now >= link.until;
   const left = link ? Math.max(0, Math.ceil((link.until - now) / 60000)) : 0;
-  const svg = useMemo(
-    () => (link ? renderSVG(link.url, { ecc: "M", border: 2, blackColor: "#020342", whiteColor: "#ffffff" }) : ""),
-    [link],
-  );
+  const svg = link?.svg ?? "";
 
   return (
     <div>
@@ -344,12 +334,12 @@ function PhoneHandoff({ onBack, onUnauthorized }: { onBack: () => void; onUnauth
               {error ? (
                 <p className="px-3 text-xs text-[color:var(--muted)]">{error}</p>
               ) : expired ? (
-                <p className="px-3 text-sm text-[color:var(--muted)]">Ce code a expiré.</p>
+                <p className="px-3 text-[color:var(--muted)]">Ce code a expiré.</p>
               ) : (
-                <Shimmer className="text-sm">Création du code…</Shimmer>
+                <Shimmer>Création du code…</Shimmer>
               )}
               {(error || expired) && (
-                <TextButton onClick={() => void make()} className="text-sm">
+                <TextButton onClick={() => void make()}>
                   Nouveau code
                 </TextButton>
               )}

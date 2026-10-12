@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { createContact, titleOf, type NewContact } from "../contact.js";
-import { notion, props, type Env } from "../notion.js";
+import { dataSourceId, inDatabase, isNotionId, notion, props, type Env } from "../notion.js";
 import { acquire, redis, release } from "../redis.js";
 import type { User } from "../users.js";
 import type { CompanyRef, ContactRef } from "./match.js";
@@ -155,8 +155,16 @@ export async function locked<T>(env: Env, waitMs: number, work: () => Promise<T>
  * The column holds a comma separated string whatever its type (research A-1).
  */
 export async function appendEmail(env: Env, contactId: string, email: string): Promise<string> {
+  if (!isNotionId(contactId)) throw new QueueError(400, "Contact introuvable");
   const column = props(env).contactEmail;
-  const page = await notion<{ properties: Record<string, any> }>(env, `/pages/${contactId}`);
+  const page = await notion<{ properties: Record<string, any>; parent?: { database_id?: string; data_source_id?: string } }>(
+    env,
+    `/pages/${contactId}`,
+  );
+  // A contact of the Contacts base, not any page the integration can reach.
+  if (!inDatabase(page, env.NOTION_CONTACTS_DB, await dataSourceId(env, env.NOTION_CONTACTS_DB))) {
+    throw new QueueError(404, "Contact introuvable");
+  }
   const property = page.properties[column];
   if (!property) throw new QueueError(500, `La base Contacts n'a pas de propriété « ${column} »`);
   const raw =

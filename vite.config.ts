@@ -5,102 +5,43 @@ import basicSsl from "@vitejs/plugin-basic-ssl";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { getHttpsServerOptions } from "office-addin-dev-certs";
+import { MANIFEST } from "./functions/_lib/manifest.js";
 
-// Cross origin isolation. It unlocked SharedArrayBuffer for the multithreaded
-// WASM engine that used to transcribe on the device; nothing needs it since
-// transcription moved to Soniox, and it can go — here and in vercel.json
-// together. Same values as vercel.json.
-const isolation = {
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Embedder-Policy": "require-corp",
-};
-
-// The taskpane is the one place that must NOT be isolated: COEP require-corp
-// blocks office.js, which Microsoft only serves from its own CDN and does not
-// support being bundled, and COOP breaks the sign-in window. In production
-// vercel.json leaves the two headers off /outlook*; the dev and
-// preview servers put them on every path through `server.headers`, so they
-// have to come back off here.
+// Private Network Access, for `npm run dev:outlook`: Outlook on the web is a
+// public origin asking a loopback one for the taskpane, and Chromium guards
+// that.
 //
-// Removing them in a later middleware does not work: `server.headers` is
-// applied after this plugin's middlewares, so there is nothing to remove yet.
-// What works regardless of order is to make the header unsettable — the two
-// names are dropped at the source, so whoever writes them later cannot.
+// Under the old PNA model the browser sends a preflight carrying
+// `Access-Control-Request-Private-Network` and expects this answer, so the
+// answer is given. Under Local Network Access, which replaced PNA in Chrome
+// 141, no header helps at all: the gate is a user permission that the
+// *embedding* site has to hold, and that is Microsoft's page, not ours. This
+// block therefore only covers Chromium builds still on PNA.
 //
-// Deliberately narrow: it only ever touches a /outlook request, and only these
-// two names. The dictation's own responses keep them for as long as they are
-// set, so nothing here may be able to reach those.
+// Connect runs its layers in order, and Vite installs its own CORS middleware
+// before any plugin's; it answers an OPTIONS preflight and ends it, so a
+// middleware added normally never sees one. This layer is moved to the front
+// of the stack.
 function taskpaneHeaders(): Plugin {
-  const banned = Object.keys(isolation).map((name) => name.toLowerCase());
-
-  type Res = {
-    setHeader(name: string, value: unknown): unknown;
-    removeHeader(name: string): unknown;
-    writeHead(...args: unknown[]): unknown;
-  };
-
-  const strip = (
-    req: { url?: string; method?: string; headers: Record<string, string | string[] | undefined> },
-    res: Res,
+  const allowPrivateNetwork = (
+    req: { url?: string; headers: Record<string, string | string[] | undefined> },
+    res: { setHeader(name: string, value: string | string[]): unknown },
     next: () => void,
   ) => {
-    if (!(req.url ?? "").startsWith("/outlook")) return next();
-
-    // Private Network Access: Outlook on the web is a public origin asking a
-    // loopback one for the taskpane, and Chromium guards that.
-    //
-    // Under the old PNA model the browser sends a preflight carrying
-    // `Access-Control-Request-Private-Network` and expects this answer, so the
-    // answer is given. Under Local Network Access, which replaced PNA in
-    // Chrome 141, no header helps at all: the gate is a user permission that
-    // the *embedding* site has to hold, and that is Microsoft's page, not
-    // ours. This block therefore only covers Chromium builds still on PNA.
-    //
-    // It costs one branch and runs only when a browser actually asks.
-    if (req.headers["access-control-request-private-network"]) {
+    if ((req.url ?? "").startsWith("/outlook") && req.headers["access-control-request-private-network"]) {
       res.setHeader("Access-Control-Allow-Private-Network", "true");
       res.setHeader("Access-Control-Allow-Origin", req.headers.origin ?? "*");
       res.setHeader("Access-Control-Allow-Headers", req.headers["access-control-request-headers"] ?? "*");
       res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
       res.setHeader("Access-Control-Max-Age", "600");
     }
-
-    // Whichever side of this middleware `server.headers` lands on: take them
-    // off if they are already there, and keep them off if they are not yet.
-    for (const name of banned) res.removeHeader(name);
-
-    const setHeader = res.setHeader.bind(res);
-    res.setHeader = (name: string, value: unknown) =>
-      banned.includes(String(name).toLowerCase()) ? res : setHeader(name, value);
-
-    // Node also allows the whole header map to be passed at write time.
-    const writeHead = res.writeHead.bind(res);
-    res.writeHead = (...args: unknown[]) => {
-      const last = args[args.length - 1];
-      if (last && typeof last === "object" && !Array.isArray(last)) {
-        for (const name of Object.keys(last)) {
-          if (banned.includes(name.toLowerCase())) delete (last as Record<string, unknown>)[name];
-        }
-      }
-      return writeHead(...args);
-    };
-
     next();
   };
-
-  // Connect runs its layers in order, and Vite installs its own CORS and
-  // header middlewares before any plugin's. The CORS one answers an OPTIONS
-  // preflight and ends it, so a middleware added normally never sees one.
-  // Moving this layer to the front of the stack is the only way to be ahead of
-  // both — and it is why the isolation headers are handled by intercepting
-  // `setHeader` as well as by removing them: from the front, there is nothing
-  // to remove yet.
   const first = (middlewares: { use(fn: unknown): unknown; stack: unknown[] }) => {
-    middlewares.use(strip);
+    middlewares.use(allowPrivateNetwork);
     const layer = middlewares.stack.pop();
     if (layer) middlewares.stack.unshift(layer);
   };
-
   return {
     name: "taskpane-headers",
     configureServer: (server) => first(server.middlewares as never),
@@ -125,6 +66,8 @@ function pagesFunctions(env: Record<string, string>): Plugin {
       name: "onRequestPost",
     },
     "POST /api/outlook/contacts": { file: "/functions/api/outlook/contacts/index.ts", name: "onRequestPost" },
+    "GET /api/outlook/attachments": { file: "/functions/api/outlook/attachments.ts", name: "onRequestGet" },
+    "POST /api/outlook/attachments": { file: "/functions/api/outlook/attachments.ts", name: "onRequestPost" },
     "GET /api/outlook/notes": { file: "/functions/api/outlook/notes.ts", name: "onRequestGet" },
     "POST /api/outlook/notes": { file: "/functions/api/outlook/notes.ts", name: "onRequestPost" },
     "PATCH /api/outlook/notes": { file: "/functions/api/outlook/notes.ts", name: "onRequestPatch" },
@@ -166,7 +109,10 @@ function pagesFunctions(env: Record<string, string>): Plugin {
             if (key.startsWith(":") || value === undefined) continue;
             headers.set(key, Array.isArray(value) ? value.join(", ") : value);
           }
-          const request = new Request(`http://localhost${req.url}`, {
+          // The real host, so that a link the server builds (the QR code's)
+          // points at this server, phone included in `dev:mobile`.
+          const scheme = (server.config.server.https ? "https" : "http");
+          const request = new Request(`${scheme}://${req.headers.host ?? "localhost"}${req.url}`, {
             method: req.method,
             headers,
             body: chunks.length ? Buffer.concat(chunks) : undefined,
@@ -243,9 +189,8 @@ export default defineConfig(async ({ mode }) => {
   const https = await trustedHttps(mode);
   return {
     resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
-    server: { headers: isolation, ...(https ? { https } : {}) },
-    preview: { headers: isolation, ...(https ? { https } : {}) },
-    worker: { format: "es" as const },
+    server: https ? { https } : {},
+    preview: https ? { https } : {},
     // Two entries: the dictation PWA, and the Outlook taskpane. They share the
     // components and the brand, nothing else.
     build: {
@@ -269,33 +214,17 @@ export default defineConfig(async ({ mode }) => {
       pagesFunctions(env),
       VitePWA({
         registerType: "autoUpdate",
-        includeAssets: ["favicon.svg", "apple-touch-icon.png"],
-        manifest: {
-          name: "Mosaic",
-          short_name: "Mosaic",
-          description: "Dictée, réunions et contacts vers Notion.",
-          lang: "fr",
-          // Fixed, so a start address that varies (the sign-in handed over
-          // from a computer, api/auth manifest) is still the same app.
-          id: "/",
-          start_url: "/",
-          display: "standalone",
-          orientation: "portrait",
-          background_color: "#ffffff",
-          theme_color: "#ffffff",
-          icons: [
-            { src: "icon-192.png", sizes: "192x192", type: "image/png" },
-            { src: "icon-512.png", sizes: "512x512", type: "image/png" },
-            { src: "icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-          ],
-        },
+        // Shared with /api/auth/manifest, which serves it with another start address.
+        manifest: { ...MANIFEST, icons: [...MANIFEST.icons] },
         workbox: {
           // The push and notification click listeners (feature 002). Added
           // to the generated worker rather than switching to injectManifest,
           // so every caching rule below stays exactly as it was.
           importScripts: ["push-sw.js"],
           globPatterns: ["**/*.{js,css,html,svg,png,webp,woff2}"],
-          // The launch screens are only read by iOS, never by the app.
+          // The launch screens are only read by iOS, never by the app; the
+          // install animation only plays in the install guide, in the
+          // browser, online — not worth a place in every install's cache.
           //
           // The Outlook taskpane is excluded too, and that one matters: this
           // service worker has scope "/", so it controls /outlook whether the
@@ -303,8 +232,7 @@ export default defineConfig(async ({ mode }) => {
           // served from the dictation's cache — the denylist below only governs
           // the navigation fallback, never an exact precache hit — and the
           // add-in would run on a stale build with no way to notice.
-          globIgnores: ["splash/**", "outlook.html", "outlook/**", "assets/outlook-*.js", "assets/outlook-*.css"],
-          maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+          globIgnores: ["splash/**", "pwa-install-animation.html", "pwa-anim/**", "outlook.html", "outlook/**", "assets/outlook-*.js", "assets/outlook-*.css"],
           navigateFallback: "index.html",
           // The dictation's service worker has scope "/", so without /outlook
           // on this list it answers a taskpane navigation with the dictation

@@ -236,7 +236,7 @@ export function InstallInvite() {
           ) : (
             <>
               <p className="mt-2 text-base text-[color:var(--muted)]">
-                Dictez une note en un geste, hors ligne.
+                Dictez une note en un geste.
               </p>
               {ios ? (
                 <ol className="mt-4 flex flex-col gap-2">

@@ -2,10 +2,7 @@
 // specs/001-outlook-vers-notion/contracts/, and nothing else talks to them.
 //
 // A Microsoft bearer token authenticates every call: it proves who the caller
-// is. Without Entra configured (local development), the panel still sends the
-// x-user-email header it used before the bearer existed — but since feature
-// 002 the server no longer reads that header (constitution 2.0.0, IV), so such
-// a panel is answered 401. Configure Entra to test against the API.
+// is. Without Entra configured the panel stops before any call ("unconfigured").
 
 export type ThreadMessage = {
   id: string;
@@ -117,15 +114,9 @@ export const AUTH_COPY: Record<AuthCode, string> = {
 // per call means a panel left open across a token expiry still works. Caching
 // the string here would make it stale exactly when nobody is watching.
 let provider: (() => Promise<string>) | null = null;
-let fallbackEmail = "";
 
 export const setTokenProvider = (fn: (() => Promise<string>) | null) => {
   provider = fn;
-};
-
-/** The address Outlook reports, used only while the bearer path is off. */
-export const setFallbackEmail = (email: string) => {
-  fallbackEmail = email;
 };
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -136,7 +127,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init,
       headers: {
         "Content-Type": "application/json",
-        ...(bearer ? { Authorization: `Bearer ${bearer}` } : { "x-user-email": fallbackEmail }),
+        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
         ...init.headers,
       },
     });

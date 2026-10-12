@@ -77,9 +77,9 @@ async function recentTraces(env: Env): Promise<Record<string, Trace>> {
  * Processes one meeting_end. Never throws: whatever fails after the webhook
  * has answered becomes an item in error, visible and retryable (principle VI).
  */
-export async function processMeeting(env: Env, meeting: Meeting): Promise<Outcome> {
+export async function processMeeting(env: Env, meeting: Meeting, lockWaitMs = 240_000): Promise<Outcome> {
   try {
-    const outcome = await run(env, meeting);
+    const outcome = await run(env, meeting, lockWaitMs);
     console.info(`[readai] ${outcome} session=${meeting.sessionId.slice(0, 12)}`);
     return outcome;
   } catch (error) {
@@ -95,7 +95,7 @@ export async function processMeeting(env: Env, meeting: Meeting): Promise<Outcom
   }
 }
 
-async function run(env: Env, meeting: Meeting): Promise<Outcome> {
+async function run(env: Env, meeting: Meeting, lockWaitMs: number): Promise<Outcome> {
   const excluded = await excludedSet(env);
   const { authors, externals } = split(meeting, internalDomains(env), excluded);
   // Only colleagues, or externals without an address, or all excluded:
@@ -124,7 +124,7 @@ async function run(env: Env, meeting: Meeting): Promise<Outcome> {
     });
   }
 
-  return locked(env, 240_000, async () => {
+  return locked(env, lockWaitMs, async () => {
     const trace = traceOf(
       meeting.title,
       meeting.start,
@@ -278,8 +278,13 @@ export async function retry(env: Env, itemId: string) {
   const item = await locked(env, 30_000, () => loadItem(env, itemId));
   if (!item) throw new QueueError(404, "Cet appel a déjà été traité.", "gone");
   if (item.stage === "process") {
+    // Replayed first, and the old item dropped only once the replay has an
+    // outcome — which, failed, is a new item in error of its own. Dropped
+    // first, a function stopped mid-replay would lose the meeting for good:
+    // Read AI does not send it again. The lock wait stays well inside the
+    // 120 s this route is given (vercel.json).
+    const outcome = await processMeeting(env, item.meeting as Meeting, 60_000);
     await locked(env, 30_000, () => deleteItem(env, item));
-    const outcome = await processMeeting(env, item.meeting as Meeting);
     return { outcome };
   }
   return locked(env, 30_000, async () => {

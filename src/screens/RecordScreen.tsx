@@ -180,6 +180,8 @@ export function RecordScreen({
     document.addEventListener("visibilitychange", sync);
     return () => document.removeEventListener("visibilitychange", sync);
   }, [active, recording]);
+  // Signed out, the screen is gone: the microphone with it.
+  useEffect(() => coolMicrophone, []);
 
   return (
     <Screen>

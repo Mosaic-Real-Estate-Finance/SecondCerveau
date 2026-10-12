@@ -8,8 +8,8 @@
     <!--
       office.js comes from the Microsoft CDN and is never bundled: Microsoft
       does not support a local copy, and the host injects its own bridge into
-      this page. It is also why the isolation headers of the dictation must not
-      reach /outlook — COEP require-corp would block this very script.
+      this page. The dictation's Cross-Origin-Opener-Policy stays off /outlook
+      (vercel.json): it would break the sign-in window.
     -->
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   </head>

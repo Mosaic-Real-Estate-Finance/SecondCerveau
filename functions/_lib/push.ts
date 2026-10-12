@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import webpush from "web-push";
 import { redis } from "./redis.js";
 import type { Env } from "./notion.js";
 
@@ -47,6 +46,9 @@ export async function unsubscribe(env: Env, endpoint: string) {
 export async function notifyAll(env: Env, notice: Notice): Promise<void> {
   if (!pushEnabled(env)) return;
   try {
+    // Loaded when a notification actually leaves, not by every route that
+    // imports this module for the subscriptions.
+    const { default: webpush } = await import("web-push");
     webpush.setVapidDetails(env.VAPID_SUBJECT!, env.VAPID_PUBLIC_KEY!, env.VAPID_PRIVATE_KEY!);
     const all = (await redis(env).hgetall<Record<string, Stored>>(SUBS)) ?? {};
     const payload = JSON.stringify(notice);

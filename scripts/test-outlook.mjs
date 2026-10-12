@@ -95,6 +95,8 @@ const addAttachment = (id, meta, bytes) => mailbox.set(id, { meta, bytes });
 let log = [];
 let uploads = new Map();
 let page = null;
+// A real page id: the route refuses anything else in a Notion path.
+const NOTE_ID = "2f1c9a3e-8b7d-4c6e-9f00-1a2b3c4d5e6f";
 let refuseHeldFiles = false;
 let workspaceMax = MAX;
 
@@ -364,7 +366,7 @@ const patchRequest = (files) =>
     method: "PATCH",
     headers: { authorization: `Bearer ${apiToken}`, "content-type": "application/json" },
     body: JSON.stringify({
-      noteId: "note-1",
+      noteId: NOTE_ID,
       conversationId: "conv",
       sinceMessageId: "m1",
       contactIds: ["contact-1"],
@@ -377,8 +379,9 @@ const patchRequest = (files) =>
   });
 
 const notePage = () => ({
-  id: "note-1",
-  url: "https://notion.so/note-1",
+  id: NOTE_ID,
+  url: `https://notion.so/${NOTE_ID}`,
+  parent: { type: "data_source_id", data_source_id: "notes-src", database_id: "notes-db" },
   patches: [],
   properties: {
     "Dernier message": { rich_text: [{ plain_text: "m1" }] },
