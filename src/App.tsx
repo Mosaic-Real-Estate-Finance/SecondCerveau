@@ -3,7 +3,7 @@ import { AccessGate } from "@/screens/AccessGate";
 import { ContactScreen } from "@/screens/ContactScreen";
 import { RecordScreen } from "@/screens/RecordScreen";
 import { AttachScreen } from "@/screens/AttachScreen";
-import { ReviewScreen } from "@/screens/ReviewScreen";
+import { NotificationsScreen } from "@/screens/NotificationsScreen";
 import { SettingsScreen } from "@/screens/SettingsScreen";
 import { Sheet } from "@/components/sheet";
 import { InstallInvite } from "@/components/install-invite";
@@ -75,6 +75,8 @@ function forgetParam(name: string) {
 export default function App() {
   const [user, setUser] = useState<Session | null>(session.get());
   const [focusId, setFocusId] = useState<string | null>(linkedReview);
+  // Changes with every notification tapped, the same one twice included.
+  const [focusKey, setFocusKey] = useState(0);
   const [page, setPage] = useState<Page>(focusId !== null ? 4 : 1);
   const [reviewCount, setReviewCount] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -83,6 +85,12 @@ export default function App() {
   // A new key at every opening: the settings start on their first page, with
   // nothing left over from the last visit.
   const [settingsKey, setSettingsKey] = useState(0);
+  const [settingsView, setSettingsView] = useState<"main" | "excluded">("main");
+  const openSettings = (view: "main" | "excluded" = "main") => {
+    setSettingsView(view);
+    setSettingsKey((key) => key + 1);
+    setSettingsOpen(true);
+  };
   const [noteId, setNoteId] = useState<string | null>(null);
   const noteIdRef = useRef(noteId);
   noteIdRef.current = noteId;
@@ -195,6 +203,7 @@ export default function App() {
       const id = url?.searchParams.get("valider");
       if (id === null || id === undefined) return;
       setFocusId(id);
+      setFocusKey((key) => key + 1);
       setSettingsOpen(false);
       setPage(4);
     };
@@ -276,12 +285,8 @@ export default function App() {
             firstName={user.firstName}
             reviewCount={reviewCount}
             onRecorded={recorded}
-            onOpen={openNote}
             onReview={() => setPage(4)}
-            onSettings={() => {
-              setSettingsKey((key) => key + 1);
-              setSettingsOpen(true);
-            }}
+            onSettings={() => openSettings()}
           />
         </section>
         <section className="t-page" data-page-id="2" inert={page !== 2}>
@@ -305,16 +310,18 @@ export default function App() {
           />
         </section>
         <section className="t-page" data-page-id="4" inert={page !== 4}>
-          <ReviewScreen
+          <NotificationsScreen
             active={page === 4}
             contacts={contacts}
             focusId={focusId}
+            focusKey={focusKey}
             onBack={() => {
               setFocusId(null);
               setPage(1);
             }}
             onCount={setReviewCount}
-            onContactCreated={addContact}
+            onOpenNote={openNote}
+            onOpenExcluded={() => openSettings("excluded")}
             onUnauthorized={signOut}
           />
         </section>
@@ -327,6 +334,7 @@ export default function App() {
       <Sheet open={settingsOpen} onClose={closeSettings} label="Réglages" full={settingsExpanded}>
         <SettingsScreen
           key={settingsKey}
+          initialView={settingsView}
           active={settingsOpen}
           email={user.email}
           onBack={closeSettings}

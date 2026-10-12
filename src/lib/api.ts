@@ -218,7 +218,7 @@ export type CompanyRef = { id: string; name: string };
 
 export type Decision =
   | { action: "attach" | "create"; contactId: string; name: string; by: string; at: string }
-  | { action: "exclude"; by: string; at: string };
+  | { action: "skip" | "exclude"; by: string; at: string };
 
 export type PendingPerson = {
   email: string;
@@ -265,7 +265,15 @@ export const fetchReviewCount = () => call<{ count: number }>("/api/readai/items
 export type DecideBody =
   | { action: "attach"; contactId: string }
   | { action: "create"; contact: NewContact }
+  | { action: "skip" }
   | { action: "exclude" };
+
+/** « Ajouter cette note »: every person still open, settled in one request. */
+export const settleCall = (itemId: string, people: ({ email: string } & Exclude<DecideBody, { action: "exclude" }>)[]) =>
+  call<{ item: ReviewItem } | Closed>("/api/readai/settle", {
+    method: "POST",
+    body: JSON.stringify({ itemId, people }),
+  });
 
 export const decidePerson = (itemId: string, email: string, decision: DecideBody) =>
   call<{ item: ReviewItem } | Closed>("/api/readai/decide", {
@@ -273,8 +281,9 @@ export const decidePerson = (itemId: string, email: string, decision: DecideBody
     body: JSON.stringify({ itemId, email, ...decision }),
   });
 
-export const ignoreCall = (itemId: string) =>
-  call<Closed>("/api/readai/ignore", { method: "POST", body: JSON.stringify({ itemId }) });
+/** Set aside; the addresses in `exclude` (« Toujours ignorer ») are not proposed again. */
+export const ignoreCall = (itemId: string, exclude: string[] = []) =>
+  call<Closed>("/api/readai/ignore", { method: "POST", body: JSON.stringify({ itemId, exclude }) });
 
 export const retryCall = (itemId: string) =>
   call<Closed | { outcome: string }>("/api/readai/retry", { method: "POST", body: JSON.stringify({ itemId }) });

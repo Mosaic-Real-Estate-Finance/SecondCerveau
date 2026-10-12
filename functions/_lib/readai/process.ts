@@ -184,11 +184,12 @@ async function run(env: Env, meeting: Meeting, lockWaitMs: number): Promise<Outc
 
     // ---- New meeting. ----
     if (!people.length) {
-      await createMeetingNote(env, { meeting, key, authorIds, contactIds: recognized.map((c) => c.id) });
+      const created = await createMeetingNote(env, { meeting, key, authorIds, contactIds: recognized.map((c) => c.id) });
       await notifyAll(env, {
         title: `Réunion ajoutée — ${titleOf(meeting)}`,
         body: recognized.map((contact) => contact.name).filter(Boolean).join(", "),
-        url: valider(),
+        // Nothing to decide: the tap opens the note itself, in Notion.
+        url: created.url || valider(),
         tag: key,
       });
       return "noted";

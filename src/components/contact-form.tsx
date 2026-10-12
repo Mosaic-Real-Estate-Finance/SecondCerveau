@@ -57,31 +57,53 @@ const plusIcon = (
 
 const asCompany = (ref: CompanyRef): Company => ({ id: ref.id, name: ref.name, type: "" });
 
+/** A contact typed but not created yet, as the form hands it back to be edited again. */
+export type ContactDraft = { contact: NewContact; company: Company | null };
+
 export function ContactForm({
   typeOptions = [],
   initialName,
+  initial,
   onCancel,
+  onBack,
   onCreated,
   email,
   companyChoices = [],
+  title = "Nouveau contact",
+  submitLabel = "Créer le contact",
+  footnote,
   submit: deliver,
 }: {
   typeOptions: string[];
   initialName: string;
+  /** A draft saved earlier, to edit rather than start over. */
+  initial?: ContactDraft;
   onCancel: () => void;
+  /** A page of a sheet: a way back on the left, instead of « Annuler ». */
+  onBack?: () => void;
   onCreated: (contact: Contact) => void;
   /** Shown, not editable: the address the contact is created for (« À valider »). */
   email?: string;
   /** Companies suggested by the address's domain; the first is preselected. */
   companyChoices?: CompanyRef[];
+  title?: string;
+  submitLabel?: string;
+  /** Under the button: what happens next. */
+  footnote?: string;
   /** Where the contact goes. By default the dictation's own route. */
-  submit?: (contact: NewContact) => Promise<Contact>;
+  submit?: (contact: NewContact, company: Company | null) => Promise<Contact>;
 }) {
-  const [name, setName] = useState(initialName);
-  const [role, setRole] = useState("");
-  const [phones, setPhones] = useState<Phone[]>([{ country: "FR", number: "" }]);
-  const [types, setTypes] = useState<string[]>([]);
-  const [company, setCompany] = useState<Company | null>(companyChoices[0] ? asCompany(companyChoices[0]) : null);
+  const [name, setName] = useState(initial?.contact.name ?? initialName);
+  const [role, setRole] = useState(initial?.contact.role ?? "");
+  const [phones, setPhones] = useState<Phone[]>(
+    initial?.contact.phones.length
+      ? initial.contact.phones.map(({ country, number }) => ({ country, number }))
+      : [{ country: "FR", number: "" }],
+  );
+  const [types, setTypes] = useState<string[]>(initial?.contact.types ?? []);
+  const [company, setCompany] = useState<Company | null>(
+    initial ? initial.company : companyChoices[0] ? asCompany(companyChoices[0]) : null,
+  );
   const [companyQuery, setCompanyQuery] = useState("");
   const [creatingCompany, setCreatingCompany] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -123,7 +145,7 @@ export function ContactForm({
         types,
         companyId: company?.id,
       };
-      onCreated(deliver ? await deliver(draft) : (await createContact(draft)).contact);
+      onCreated(deliver ? await deliver(draft, company) : (await createContact(draft)).contact);
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -133,12 +155,24 @@ export function ContactForm({
 
   return (
     <form onSubmit={submit} className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between pb-4">
-        <h2 className="font-serif text-xl">Nouveau contact</h2>
-        <TextButton onClick={onCancel} className="-mr-3">
-          Annuler
-        </TextButton>
-      </div>
+      {onBack ? (
+        <div className="shrink-0 pb-4">
+          <TextButton onClick={onBack} className="-ml-3 flex items-center gap-1">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M15 5l-7 7 7 7" />
+            </svg>
+            Retour
+          </TextButton>
+          <h2 className="mt-1 font-serif text-2xl">{title}</h2>
+        </div>
+      ) : (
+        <div className="flex shrink-0 items-center justify-between pb-4">
+          <h2 className="font-serif text-xl">{title}</h2>
+          <TextButton onClick={onCancel} className="-mr-3">
+            Annuler
+          </TextButton>
+        </div>
+      )}
 
       {/* The one scroller of the panel: the header and the submit button stay
           put, and reaching the end does not drag the screen behind it. */}
@@ -246,12 +280,17 @@ export function ContactForm({
           )}
           {company ? (
             // Chosen: the rest of the base is out of the way.
-            <div className="flex min-h-12 items-center justify-between gap-2 rounded-2xl bg-white-smoke px-4">
-              <span className="truncate text-base">{company.name}</span>
-              <TextButton onClick={() => setCompany(null)} className="-mr-3 shrink-0">
-                Changer
-              </TextButton>
-            </div>
+            <>
+              <div className="flex min-h-12 items-center justify-between gap-2 rounded-2xl bg-white-smoke px-4">
+                <span className="truncate text-base">{company.name}</span>
+                <TextButton onClick={() => setCompany(null)} className="-mr-3 shrink-0">
+                  Changer
+                </TextButton>
+              </div>
+              {companyChoices.some((choice) => choice.id === company.id) && (
+                <p className="mt-1 px-2 text-xs text-[color:var(--muted)]">Société suggérée d'après le mail.</p>
+              )}
+            </>
           ) : (
             <>
               {/* Two columns: the search, and the button that opens the
@@ -320,8 +359,9 @@ export function ContactForm({
 
       <div className="shrink-0 pt-2">
         <PrimaryButton type="submit" disabled={busy || !name.trim()}>
-          {busy ? "Création" : "Créer le contact"}
+          {busy ? "Création" : submitLabel}
         </PrimaryButton>
+        {footnote && <p className="mt-2 text-center text-xs text-[color:var(--muted)]">{footnote}</p>}
       </div>
     </form>
   );

@@ -40,7 +40,7 @@ Les réunions avec des contacts externes enregistrées par Read AI arrivent seul
 - Read AI pousse le rapport de chaque réunion terminée vers `POST /api/readai/webhook`, signé (HMAC-SHA256 du corps, clé `READAI_WEBHOOK_SECRET` décodée en base64). La réponse part tout de suite ; le traitement continue après.
 - Les participants internes (`INTERNAL_DOMAINS`) ne sont jamais des contacts ; ceux de `users.ts` deviennent les `Auteur`. Les externes sont rapprochés de Contacts en **une** requête, par email exact.
 - Tous reconnus : la note est créée (titre, date et heure, `Source` = `ReadAI`, contacts, `ID client` = clé de réunion), avec deux encadrés, « Résumé » et « Transcription ».
-- Une personne inconnue : **rien n'est écrit dans Notion**. L'appel attend dans l'écran « Notifications » (la cloche en haut de l'accueil) : rattacher à un contact existant, créer un contact, ou « pas nécessaire ». La note part quand tout le monde est tranché.
+- Une personne inconnue : **rien n'est écrit dans Notion**. L'appel attend dans l'écran « Notifications » (la cloche en haut de l'accueil). Par défaut, chaque inconnu devient un contact (nom, mail, société suggérée d'après le mail) ; sa ligne permet de compléter la fiche, de l'associer à un contact existant ou de ne pas l'ajouter au CRM pour cette note. « Ajouter cette note » envoie tous ces choix en une requête (`/api/readai/settle`) et écrit la note. « Ne pas ajouter » ignore la réunion, ou l'ignore et met ses inconnus dans les contacts exclus de l'équipe (« Toujours ignorer »).
 - Deux collaborateurs qui enregistrent la même réunion produisent une seule note.
 - La file d'attente vit dans Upstash Redis (Vercel Marketplace). Un appel en attente y est conservé en entier jusqu'à la décision, puis effacé (constitution 2.0.0, principe II). Aucun contenu de réunion, nom ni email n'est journalisé.
 
@@ -81,7 +81,8 @@ Dans l'app installée (iOS 16.4 et plus), « Recevoir les notifications » dans 
 | `functions/api/readai/` | Le webhook Read AI et les routes de l'écran « Notifications » (une seule fonction Vercel pour toutes, le plan Hobby s'arrête à 12) |
 | `functions/_lib/readai/` | Signature, répartition des participants, rapprochement, clé de réunion, note, file d'attente |
 | `functions/_lib/session.ts` | Codes de connexion et sessions |
-| `src/screens/ReviewScreen.tsx` | L'écran « Notifications » (anciennement « À valider ») |
+| `src/screens/NotificationsScreen.tsx` | L'écran « Notifications » : les notes pas encore envoyées et les réunions Read AI à valider, en trois vues (Tout, Notes à envoyer, Réunions Read AI à valider) |
+| `src/screens/notifications/` | Les cartes de cet écran : réunion Read AI, note en attente, choix d'un contact |
 | `src/screens/SettingsScreen.tsx` | Notifications et déconnexion |
 | `src/components/voice-recorder.tsx` | Design Rare UI d'origine, adapté à l'enregistrement |
 | `src/screens/AttachScreen.tsx` | Dernière étape : la pièce jointe, facultative, puis l'envoi — qui attend la transcription si elle tourne encore |

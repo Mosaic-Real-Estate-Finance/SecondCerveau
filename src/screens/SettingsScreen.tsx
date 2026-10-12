@@ -19,6 +19,7 @@ export function SettingsScreen({
   onBack,
   onSignedOut,
   onExpand,
+  initialView = "main",
 }: {
   active: boolean;
   email: string;
@@ -26,9 +27,16 @@ export function SettingsScreen({
   onSignedOut: () => void;
   /** The excluded contacts want the sheet's large detent. */
   onExpand: (expanded: boolean) => void;
+  /** Opened on a page other than the first: the « contacts exclus » banner. */
+  initialView?: "main" | "excluded";
 }) {
   const toast = useToast();
-  const [view, setView] = useState<"main" | "excluded" | "phone">("main");
+  const [view, setView] = useState<"main" | "excluded" | "phone">(initialView);
+  useEffect(() => {
+    if (initialView === "excluded") onExpand(true);
+    // At the opening only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const show = (next: "main" | "excluded" | "phone") => {
     setView(next);
     onExpand(next === "excluded");

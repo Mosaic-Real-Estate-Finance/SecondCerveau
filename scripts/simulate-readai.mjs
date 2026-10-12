@@ -579,6 +579,43 @@ await scenario("décisions : déjà traité → 409 ; ignorer → rien et person
   assert.equal(store.has(`readai:item:${other.id}`), false);
 });
 
+await scenario("ajouter la réunion : créer + pas dans le CRM en une requête → note, personne exclu", async () => {
+  await processMeeting(
+    env,
+    parseMeeting(report({ title: "Tout d'un coup", people: [["Théo", "theo@gouman.fr"], ["Rémi", "remi@neuf.fr"], ["Sacha", "sacha@neuf.fr"]], platformId: "s-1" })),
+  );
+  const item = (await items()).find((one) => one.key === "readai:zoom:s-1");
+  const result = await queue.settle(env, user, item.id, [
+    { email: "remi@neuf.fr", decision: { action: "create", contact: { name: "Rémi" } } },
+    { email: "sacha@neuf.fr", decision: { action: "skip" } },
+  ]);
+  assert.equal(result.closed, true);
+  const [note] = notesFor("readai:zoom:s-1");
+  const remi = [...pages.values()].find((page) => page.ds === "ds-contacts" && plainOf(page.properties[""]) === "Rémi");
+  assert.deepEqual(contactIdsOf(note), [theo.id, remi.id].sort(), "Sacha n'est pas sur la note");
+  assert.equal((await queue.excludedList(env)).includes("sacha@neuf.fr"), false, "« pas dans le CRM » n'exclut pas");
+  const next = report({ title: "Encore Sacha", people: [["Sacha", "sacha@neuf.fr"]], platformId: "s-2" });
+  assert.equal(await processMeeting(env, parseMeeting(next)), "queued", "Sacha est proposé de nouveau");
+});
+
+await scenario("ajouter la réunion : une personne oubliée par l'écran → 409, rien d'écrit", async () => {
+  await processMeeting(env, parseMeeting(report({ title: "Incomplète", people: [["A", "a@neuf2.fr"], ["B", "b@neuf2.fr"]], platformId: "s-3" })));
+  const item = (await items()).find((one) => one.key === "readai:zoom:s-3");
+  await assert.rejects(queue.settle(env, user, item.id, [{ email: "a@neuf2.fr", decision: { action: "skip" } }]), /changé/);
+  assert.equal(notesFor("readai:zoom:s-3").length, 0);
+  assert.equal((await items()).find((one) => one.id === item.id).people.every((p) => !p.decision), true);
+});
+
+await scenario("toujours ignorer : réunion supprimée, ses inconnus exclus, pas une adresse étrangère", async () => {
+  const item = (await items()).find((one) => one.key === "readai:zoom:s-3");
+  await queue.ignore(env, item.id, ["a@neuf2.fr", "B@NEUF2.fr", "intrus@ailleurs.fr"]);
+  const excluded = await queue.excludedList(env);
+  assert.ok(excluded.includes("a@neuf2.fr") && excluded.includes("b@neuf2.fr"));
+  assert.equal(excluded.includes("intrus@ailleurs.fr"), false);
+  assert.equal(store.has(`readai:item:${item.id}`), false);
+  assert.equal(notesFor("readai:zoom:s-3").length, 0);
+});
+
 // ---- Concurrency ---------------------------------------------------------------
 
 await scenario("concurrence : deux validations simultanées → un seul contact, l'autre « Déjà traité »", async () => {
