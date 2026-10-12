@@ -51,7 +51,7 @@ export function NoteCard({
         <article className="rounded-2xl bg-white-smoke p-4">
           <header>
             <h3 className="truncate text-base font-semibold leading-snug">
-              {note.contact ? note.contact.name : note.contact === null ? "Note sans contact" : "Note dictée"}
+              {note.contact ? note.contact.name : note.contact === null ? "Dictée sans contact" : "Dictée"}
             </h3>
             <p className="mt-0.5 text-xs text-[color:var(--muted)]">
               {formatWhen(new Date(note.createdAt))} · {formatTime(note.duration)}
@@ -95,19 +95,19 @@ export function NoteCard({
         </article>
       </div>
 
-      <Sheet open={confirming} onClose={() => setConfirming(false)} label="Supprimer la note">
+      <Sheet open={confirming} onClose={() => setConfirming(false)} label="Supprimer la dictée">
         <div>
-          <h2 className="font-serif text-2xl">Supprimer cette note&nbsp;?</h2>
+          <h2 className="font-serif text-2xl">Supprimer cette dictée&nbsp;?</h2>
           <p className="mt-2 text-[color:var(--muted)]">
             L'enregistrement et sa transcription sont effacés de ce téléphone. Rien n'a encore été envoyé dans Notion :
-            la note ne pourra pas être récupérée.
+            elle ne pourra pas être récupérée.
           </p>
           <button
             type="button"
             onClick={remove}
             className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-danger px-5 text-base font-medium text-on-accent"
           >
-            Supprimer la note
+            Supprimer la dictée
           </button>
           <div className="mt-2 flex justify-center">
             <TextButton onClick={() => setConfirming(false)}>Annuler</TextButton>

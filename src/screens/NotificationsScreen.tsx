@@ -129,8 +129,8 @@ export function NotificationsScreen({
 
   const tabs: Tab<View>[] = [
     { id: "all", label: "Tout", count: notes.length + waiting },
-    { id: "notes", label: "Notes à envoyer", count: notes.length },
-    { id: "meetings", label: "Réunions Read AI à valider", count: waiting },
+    { id: "notes", label: "Dictées", count: notes.length },
+    { id: "meetings", label: "ReadAI", count: waiting },
   ];
 
   const renderEntry = (entry: Entry) =>
@@ -159,7 +159,7 @@ export function NotificationsScreen({
     <Screen>
       <TopBar title="Notifications" onBack={onBack} backLabel="Accueil" />
       <p className="-mt-3 mb-4 text-xs text-[color:var(--muted)]">
-        Les notes pas encore envoyées et les réunions Read AI à valider. Rien n'est écrit dans Notion avant votre
+        Les dictées pas encore envoyées et les réunions Read AI à valider. Rien n'est écrit dans Notion avant votre
         décision.
       </p>
       <NotificationsCta />
@@ -217,9 +217,9 @@ export function NotificationsScreen({
 function Empty({ view }: { view: View }) {
   const text =
     view === "notes"
-      ? "Aucune note à envoyer. Une dictée qui n'est pas encore dans Notion apparaît ici."
+      ? "Aucune dictée à envoyer. Une dictée qui n'est pas encore dans Notion apparaît ici."
       : view === "meetings"
         ? "Aucune réunion à valider. Une réunion Read AI avec une personne que le CRM ne connaît pas apparaît ici."
-        : "Rien en attente. Les notes pas encore envoyées et les réunions Read AI à valider apparaissent ici.";
+        : "Rien en attente. Les dictées pas encore envoyées et les réunions Read AI à valider apparaissent ici.";
   return <p className="rounded-2xl bg-white-smoke p-4 text-[color:var(--muted)]">{text}</p>;
 }

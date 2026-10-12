@@ -1,6 +1,7 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@/styles/index.css";
+import { InstallInvite } from "@/components/install-invite";
 import { ToastProvider, useToast } from "@/components/toast";
 import type { ContactsState } from "@/App";
 import type { ReviewItem } from "@/lib/api";
@@ -76,6 +77,7 @@ function Maquette() {
   const [round, setRound] = useState(0);
   return (
     <ToastProvider>
+      <InstallInvite auto={false} />
       <div className="mx-auto min-h-full max-w-[480px]">
         <div
           className="mx-4 flex items-center justify-between gap-3 rounded-2xl border border-dashed border-[color:var(--hairline)] px-4 py-2.5"

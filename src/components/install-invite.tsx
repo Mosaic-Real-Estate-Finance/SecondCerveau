@@ -74,7 +74,8 @@ const OPEN_EVENT = "mosaic:install-invite";
 /** Opens the invitation from anywhere in the app. */
 export const openInstallInvite = () => window.dispatchEvent(new Event(OPEN_EVENT));
 
-export function InstallInvite() {
+/** `auto`: opens by itself on a phone's browser; the mockup only on request. */
+export function InstallInvite({ auto = true }: { auto?: boolean } = {}) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const scheme = useColorScheme();
@@ -103,14 +104,14 @@ export function InstallInvite() {
   }, []);
 
   useEffect(() => {
-    if (isStandalone() || !isMobile() || installPrompt.dismissed()) return;
+    if (!auto || isStandalone() || !isMobile() || installPrompt.dismissed()) return;
     // Mounted at once but closed, so the animation is loaded and paused by the
     // time the sheet slides up; opened after the app has had a moment.
     setPlatform(detectPlatform());
     setMounted(true);
     const timer = window.setTimeout(() => setOpen(true), OPEN_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [auto]);
 
   const close = useCallback(() => {
     installPrompt.dismiss();
