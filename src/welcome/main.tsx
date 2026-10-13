@@ -96,7 +96,7 @@ function Welcome() {
         <Progress step={step} onPick={go} />
       </header>
 
-      <main className="relative flex flex-1 flex-col pt-10 sm:pt-14">
+      <main className="relative flex flex-1 flex-col overflow-x-clip pt-10 sm:pt-14">
         <AnimatePresence mode="popLayout" initial={false} custom={dir}>
           <motion.section
             key={step}
