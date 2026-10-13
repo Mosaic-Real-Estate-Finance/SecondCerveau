@@ -274,7 +274,7 @@ export function MeetingCard({
                   onClick={() => setSummary(true)}
                   aria-label="Lire le résumé"
                   title="Lire le résumé"
-                  className="-mr-2 -mt-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-navy"
+                  className="tap-target -mr-2 -mt-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-navy"
                 >
                   <Icon name="quote.bubble" className="h-[18px]" />
                 </button>
@@ -472,7 +472,7 @@ function PersonRow({
           type="button"
           onClick={onOpen}
           aria-label={`${row.name || row.email} : options`}
-          className="flex min-h-11 w-full items-center px-3 py-2 text-left"
+          className="tap-target flex min-h-11 w-full items-center px-3 py-2 text-left"
         >
           {line}
         </button>
@@ -495,14 +495,14 @@ function PersonRow({
             <button
               type="button"
               onClick={() => onAnswer(true)}
-              className="h-6 rounded-full bg-white-smoke px-2.5 text-[11px] font-medium text-navy"
+              className="tap-target h-6 rounded-full bg-white-smoke px-2.5 text-[11px] font-medium text-navy"
             >
               {candidates.length === 1 ? "Oui, même personne" : "Choisir la fiche"}
             </button>
             <button
               type="button"
               onClick={() => onAnswer(false)}
-              className="h-6 rounded-full bg-white-smoke px-2.5 text-[11px] font-medium text-navy"
+              className="tap-target h-6 rounded-full bg-white-smoke px-2.5 text-[11px] font-medium text-navy"
             >
               Non
             </button>
@@ -829,7 +829,7 @@ function PersonSheet({
 
   return (
     <Sheet open={open} onClose={close} label={row.name || row.email} full={page !== "menu"}>
-      <SheetPages id={page} depth={page === "menu" ? 0 : 1}>
+      <SheetPages id={page} depth={page === "menu" ? 0 : 1} onBack={() => setPage("menu")}>
         {content}
       </SheetPages>
     </Sheet>

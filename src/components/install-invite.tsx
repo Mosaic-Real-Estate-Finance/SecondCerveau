@@ -17,6 +17,7 @@ import {
   type Platform,
 } from "@/lib/standalone";
 import { cssVar, useColorScheme } from "@/lib/theme";
+import { useBackLayer } from "@/lib/back";
 import { cn } from "@/lib/utils";
 
 // Shown once, a moment after the app opens on a signed in phone that is still
@@ -135,6 +136,9 @@ export function InstallInvite({ auto = true }: { auto?: boolean } = {}) {
     return () => document.removeEventListener("keydown", onKey);
   }, [open, close]);
 
+  // Android's back closes the guide, as its own button does.
+  useBackLayer(open, close);
+
   if (!mounted) return null;
 
   const install = async () => {
@@ -196,7 +200,7 @@ export function InstallInvite({ auto = true }: { auto?: boolean } = {}) {
           type="button"
           onClick={close}
           aria-label="Fermer"
-          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-midnight-blue/10 text-midnight-blue"
+          className="tap-target absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-midnight-blue/10 text-midnight-blue"
         >
           <svg
             viewBox="0 0 24 24"

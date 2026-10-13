@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useBackLayer } from "@/lib/back";
 import { cn } from "@/lib/utils";
 
 // Long enough to cover --sheet-dur.
@@ -58,6 +59,9 @@ export function Sheet({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  // Android's back closes the sheet, as tapping outside it does.
+  useBackLayer(open, onClose);
 
   const sheet = useRef<HTMLDivElement>(null);
 
@@ -174,7 +178,19 @@ export function Sheet({
 // its slide is over.
 const PAGE_MS = 480;
 
-export function SheetPages({ id, depth, children }: { id: string; depth: number; children: ReactNode }) {
+export function SheetPages({
+  id,
+  depth,
+  onBack,
+  children,
+}: {
+  id: string;
+  depth: number;
+  /** Back to the first page: Android's back does it before closing the sheet. */
+  onBack?: () => void;
+  children: ReactNode;
+}) {
+  useBackLayer(depth > 0 && onBack !== undefined, () => onBack?.());
   const current = useRef({ id, depth, children });
   const leaving = useRef<{ id: string; children: ReactNode; forward: boolean } | null>(null);
   const [, redraw] = useReducer((count: number) => count + 1, 0);

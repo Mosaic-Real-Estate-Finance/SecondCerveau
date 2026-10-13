@@ -9,6 +9,7 @@ import { VoiceRecorder } from "@/components/voice-recorder";
 import { useConnectivity, type Connectivity } from "@/lib/connectivity";
 import { storageIsDurable, useNote, useNotes, type Note } from "@/lib/notes";
 import { pageSlideMs } from "@/lib/schedule";
+import { useBackLayer } from "@/lib/back";
 import { cssVar, useColorScheme } from "@/lib/theme";
 import { useMeter, useRecorder, type Hold } from "@/lib/use-recorder";
 
@@ -168,6 +169,15 @@ export function RecordScreen({
     setOpen(false);
   };
 
+  // Android's back with the panel open. A failed start just closes; a
+  // dictation under way is never dropped by a back gesture, which is too
+  // easy to make by accident: the panel stays and says how to leave it.
+  useBackLayer(open, () => {
+    if (recorder.state === "error") return void cancel();
+    toast.show("Terminez ou annulez l'enregistrement pour quitter.");
+    return false;
+  });
+
   // A dictation dropped by a transcription outage: the panel closes and the
   // banner explains (OutageBanner).
   useEffect(() => {
@@ -187,7 +197,7 @@ export function RecordScreen({
         <button
           type="button"
           onClick={onReview}
-          className="flex h-11 w-11 items-center justify-center rounded-full text-navy"
+          className="tap-target flex h-11 w-11 items-center justify-center rounded-full text-navy"
           aria-label={waiting ? `Notifications, ${waiting} en attente` : "Notifications"}
         >
           <Icon name={waiting > 0 ? "bell.badge" : "bell"} className="h-[22px]" />
@@ -196,7 +206,7 @@ export function RecordScreen({
           type="button"
           onClick={onSettings}
           aria-label="Réglages"
-          className="flex h-11 w-11 items-center justify-center rounded-full text-navy"
+          className="tap-target flex h-11 w-11 items-center justify-center rounded-full text-navy"
         >
           <Icon name="gear" className="h-[22px]" />
         </button>

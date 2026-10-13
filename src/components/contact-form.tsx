@@ -338,7 +338,7 @@ export function ContactForm({
                       <button
                         type="button"
                         onClick={() => setCompany(item)}
-                        className="flex min-h-11 w-full items-center rounded-xl px-3 text-left text-base hover:bg-white-smoke"
+                        className="tap-target flex min-h-11 w-full items-center rounded-xl px-3 text-left text-base hover:bg-white-smoke"
                       >
                         {item.name}
                       </button>

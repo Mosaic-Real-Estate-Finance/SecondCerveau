@@ -19,7 +19,7 @@ export function TopBar({ title, onBack, backLabel }: { title: string; onBack: ()
       <button
         type="button"
         onClick={onBack}
-        className="-ml-3 flex h-11 items-center gap-1 rounded-full px-3 text-base text-navy"
+        className="tap-target -ml-3 flex h-11 items-center gap-1 rounded-full px-3 text-base text-navy"
       >
         <svg aria-hidden viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 5l-7 7 7 7" />
@@ -60,7 +60,7 @@ export function TextButton({ className, ...props }: React.ComponentProps<"button
     <button
       type="button"
       {...props}
-      className={cn("inline-flex h-11 items-center rounded-full px-3 text-base font-medium text-navy", className)}
+      className={cn("tap-target inline-flex h-11 items-center rounded-full px-3 text-base font-medium text-navy", className)}
     />
   );
 }

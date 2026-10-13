@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { COUNTRIES, countryOf, flagOf, matchCountry } from "@/lib/phone";
+import { useBackLayer } from "@/lib/back";
 import { cn } from "@/lib/utils";
 
 // The indicatif is picked in the app, not in the operating system's own
@@ -81,6 +82,7 @@ function CountrySheet({
 }) {
   const [query, setQuery] = useState("");
   const [shown, setShown] = useState(false);
+  useBackLayer(true, onClose);
 
   const matches = useMemo(() => COUNTRIES.filter((country) => matchCountry(country, query)), [query]);
 
@@ -128,7 +130,7 @@ function CountrySheet({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-11 shrink-0 items-center rounded-full px-3 text-base font-medium text-navy"
+            className="tap-target inline-flex h-11 shrink-0 items-center rounded-full px-3 text-base font-medium text-navy"
           >
             Annuler
           </button>

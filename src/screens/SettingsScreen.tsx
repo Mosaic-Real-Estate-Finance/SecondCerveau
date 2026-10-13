@@ -99,7 +99,7 @@ export function SettingsScreen({
     ) : null;
 
   return (
-    <SheetPages id={view} depth={page ? 1 : 0}>
+    <SheetPages id={view} depth={page ? 1 : 0} onBack={() => show("main")}>
       {page ?? (
         <div>
           {/* A sheet's header: the title, and the way out on the right. */}

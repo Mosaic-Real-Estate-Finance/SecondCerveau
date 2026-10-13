@@ -69,7 +69,7 @@ export function NotificationsCta() {
           type="button"
           onClick={() => (state === "browser" ? openInstallInvite() : void enable())}
           disabled={busy}
-          className="mt-3 flex h-10 w-full items-center justify-center rounded-xl bg-on-accent font-medium text-navy disabled:opacity-60"
+          className="tap-target mt-3 flex h-10 w-full items-center justify-center rounded-xl bg-on-accent font-medium text-navy disabled:opacity-60"
         >
           {state === "browser" ? "Installer l'app" : busy ? "Activation…" : "Activer les notifications"}
         </button>

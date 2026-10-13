@@ -27,6 +27,7 @@ import { openInstallInvite } from "@/components/install-invite";
 import { persistStorage, updateNote, type Note, type NoteContact } from "@/lib/notes";
 import { resumePending, transcribeNote } from "@/lib/pipeline";
 import { afterTransition } from "@/lib/schedule";
+import { useBackLayer } from "@/lib/back";
 
 export type ContactsState = {
   status: "loading" | "ready" | "error";
@@ -240,6 +241,14 @@ export default function App() {
     },
     [],
   );
+
+  // Android's back, from any page past the home screen: back home, as each
+  // page's own « Retour » / « Accueil » does.
+  useBackLayer(page !== 1, () => {
+    setFocusId(null);
+    setNoteId(null);
+    setPage(1);
+  });
 
   if (!user) {
     return (

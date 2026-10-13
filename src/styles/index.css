@@ -672,6 +672,30 @@ a {
   pointer-events: auto;
 }
 
+/* ---- Touch targets ---------------------------------------------------
+   Android asks for 48 dp at least under a finger (iOS, 44 pt). Some of the
+   app's controls are drawn smaller on purpose — a pill, a tab, an icon —
+   and keep their drawing: an invisible layer around them takes the tap over
+   48 px each way, centred on them, never less than the control itself. */
+/* In the components layer: a control already placed (absolute, fixed) by a
+   utility keeps its placement, which positions the layer just as well. */
+@layer components {
+  .tap-target,
+  .chip {
+    position: relative;
+  }
+}
+.tap-target::after,
+.sliding-tabs > .t-tab::after,
+.chip::after {
+  content: "";
+  position: absolute;
+  top: min(0px, calc((100% - 48px) / 2));
+  bottom: min(0px, calc((100% - 48px) / 2));
+  left: min(0px, calc((100% - 48px) / 2));
+  right: min(0px, calc((100% - 48px) / 2));
+}
+
 /* ---- Sliding tabs, full width --------------------------------------
    The snippet's bar hugs its labels (inline-flex); here it spans the
    screen. Each tab is as wide as its label and the room left over is
