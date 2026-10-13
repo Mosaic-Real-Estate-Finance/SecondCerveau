@@ -19,7 +19,9 @@ self.addEventListener("push", (event) => {
       body: data.body || "",
       tag: data.tag || undefined,
       icon: "/icon-192.png",
-      badge: "/icon-192.png",
+      // Android draws the badge in the status bar from its alpha alone: the
+      // white symbol on nothing, not the opaque icon (a white square there).
+      badge: "/badge-96.png",
       lang: "fr",
       data: { url: data.url || "/" },
     }),

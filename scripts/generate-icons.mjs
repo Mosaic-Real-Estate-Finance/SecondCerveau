@@ -31,4 +31,13 @@ await icon("icon-512.png", 512, 0.62);
 await icon("icon-maskable-512.png", 512, 0.46);
 await icon("apple-touch-icon.png", 180, 0.6);
 await writeFile(out("favicon.svg"), svg.replace(/<title>.*<\/title>\n/, ""));
+// The notification badge: Android draws it in the status bar from its alpha
+// channel alone, so it is the white symbol on nothing — an opaque icon there
+// comes out as a plain white square. 96 px, the size Android asks for at its
+// densest, with the margin of its small icons.
+const badgeGlyph = await sharp(Buffer.from(glyphSvg), { density: 1200 }).resize({ height: 76 }).png().toBuffer();
+await sharp({ create: { width: 96, height: 96, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+  .composite([{ input: badgeGlyph, gravity: "center" }])
+  .png()
+  .toFile(out("badge-96.png"));
 console.log("icons written");

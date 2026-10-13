@@ -71,7 +71,15 @@
      cameras do not read one inverted. Its paper and ink stay put. */
   --qr-paper: #ffffff;
   --qr-ink: #020342;
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* The bottom inset, for paddings: its largest value, which does not move.
+     Chrome on Android (135 and up) slides its bottom bar away as the page
+     scrolls and the live inset follows it; a padding on the live value
+     relays the page out at every step and keeps the bar from retracting
+     (developer.chrome.com/docs/css-ui/edge-to-edge). Safari has no max
+     value and falls back to the inset itself, as before. */
+  --safe-bottom: env(safe-area-max-inset-bottom, env(safe-area-inset-bottom, 0px));
+  /* The live value, for what is fixed to the bottom and must follow the bar. */
+  --safe-bottom-live: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
   color-scheme: light dark;
 
@@ -643,7 +651,7 @@ a {
   position: fixed;
   left: 16px;
   right: 16px;
-  bottom: calc(var(--safe-bottom) + 16px);
+  bottom: calc(var(--safe-bottom-live) + 16px);
   z-index: 20;
   margin-inline: auto;
   max-width: 448px;
