@@ -35,7 +35,12 @@ writeFileSync(
       outDir: join(out, "dist"),
       rootDir: root,
     },
-    include: [join(root, "functions"), join(root, "src/outlook/attachments.ts")],
+    include: [
+      join(root, "functions"),
+      join(root, "src/outlook/attachments.ts"),
+      join(root, "src/outlook/entra-config.ts"),
+      join(root, "src/outlook/auth-detail.ts"),
+    ],
   }),
 );
 try {
@@ -53,6 +58,9 @@ const upload = await load("functions/_lib/upload.js");
 const panel = await load("src/outlook/attachments.js");
 const attachments = await load("functions/api/outlook/attachments.js");
 const notes = await load("functions/api/outlook/notes.js");
+const entra = await load("src/outlook/entra-config.js");
+const authDetail = await load("src/outlook/auth-detail.js");
+const auth = await load("functions/_lib/auth.js");
 
 // ---- Identity --------------------------------------------------------------
 
@@ -435,4 +443,112 @@ test("enrichissement : rien de nouveau, aucun fichier attaché", async () => {
   const body = await (await notes.onRequestPatch({ request: replay, env })).json();
   assert.equal(body.messagesAdded, 0);
   assert.equal(page.patches.length, 0);
+});
+
+// ---- Two Entra registrations: Mosaic's and the test tenant's ---------------
+
+const ENTRA_ENV = {
+  VITE_ENTRA_CLIENT_ID: "main-client",
+  VITE_ENTRA_API_SCOPE: "api://main-client/access_as_user",
+  VITE_ENTRA_AUTHORITY: "https://login.microsoftonline.com/common",
+  VITE_ENTRA_CLIENT_ID_TEST: "test-client",
+  VITE_ENTRA_API_SCOPE_TEST: "api://test-client/access_as_user",
+  VITE_ENTRA_AUTHORITY_TEST: "https://login.microsoftonline.com/test-tenant",
+  VITE_ENTRA_TEST_DOMAINS: "gouman.fr, @G0uman.onmicrosoft.com",
+};
+
+test("config : une adresse Mosaic prend l'inscription principale", () => {
+  const config = entra.chooseEntraConfig("ob@mosaicfin.com", ENTRA_ENV);
+  assert.deepEqual(config, {
+    clientId: "main-client",
+    authority: "https://login.microsoftonline.com/common",
+    apiScope: "api://main-client/access_as_user",
+    flavour: "main",
+  });
+});
+
+test("config : une adresse des domaines de test prend l'inscription _TEST, casse et @ ignorés", () => {
+  for (const email of ["theo@gouman.fr", "Theo@G0UMAN.onmicrosoft.com"]) {
+    const config = entra.chooseEntraConfig(email, ENTRA_ENV);
+    assert.equal(config.flavour, "test", email);
+    assert.equal(config.clientId, "test-client");
+    assert.equal(config.apiScope, "api://test-client/access_as_user");
+    assert.equal(config.authority, "https://login.microsoftonline.com/test-tenant");
+  }
+});
+
+test("config : correspondance exacte du domaine, pas de sous-domaine ni de suffixe", () => {
+  assert.equal(entra.chooseEntraConfig("x@mail.gouman.fr", ENTRA_ENV).flavour, "main");
+  assert.equal(entra.chooseEntraConfig("x@notgouman.fr", ENTRA_ENV).flavour, "main");
+  assert.equal(entra.chooseEntraConfig("", ENTRA_ENV).flavour, "main");
+  assert.equal(entra.chooseEntraConfig(null, ENTRA_ENV).flavour, "main");
+});
+
+test("config : sans variables _TEST, comportement inchangé même pour un domaine de test", () => {
+  const { VITE_ENTRA_CLIENT_ID_TEST, VITE_ENTRA_API_SCOPE_TEST, VITE_ENTRA_AUTHORITY_TEST, ...single } = ENTRA_ENV;
+  assert.equal(entra.chooseEntraConfig("theo@gouman.fr", single).clientId, "main-client");
+  // Half configured is not configured.
+  assert.equal(entra.chooseEntraConfig("theo@gouman.fr", { ...single, VITE_ENTRA_CLIENT_ID_TEST: "test-client" }).flavour, "main");
+});
+
+test("config : autorité _TEST absente, « common » par défaut", () => {
+  const { VITE_ENTRA_AUTHORITY_TEST, ...rest } = ENTRA_ENV;
+  assert.equal(entra.chooseEntraConfig("theo@gouman.fr", rest).authority, "https://login.microsoftonline.com/common");
+});
+
+test("audience : les deux inscriptions, chacune brute et en api://", () => {
+  assert.deepEqual(auth.audiencesOf({ ENTRA_API_CLIENT_ID: "main", ENTRA_API_CLIENT_ID_TEST: "test" }), [
+    "main",
+    "api://main",
+    "test",
+    "api://test",
+  ]);
+  assert.deepEqual(auth.audiencesOf({ ENTRA_API_CLIENT_ID: "main" }), ["main", "api://main"]);
+  assert.deepEqual(auth.audiencesOf({ ENTRA_API_CLIENT_ID: "main", ENTRA_API_CLIENT_ID_TEST: " " }), ["main", "api://main"]);
+});
+
+const TEST_CLIENT = "12121212-3434-5656-7878-909090909090";
+const tokenFor = (audience) =>
+  new SignJWT({ tid: TENANT, oid: OID, preferred_username: "theo@gouman.fr" })
+    .setProtectedHeader({ alg: "RS256", kid: "k1" })
+    .setIssuer(`https://login.microsoftonline.com/${TENANT}/v2.0`)
+    .setAudience(audience)
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(privateKey);
+const limitRequest = (token) =>
+  new Request("https://test/api/outlook/attachments", { headers: { authorization: `Bearer ${token}` } });
+
+test("audience : un jeton de l'inscription de test est accepté, brut ou en api://", async () => {
+  const both = { ...env, ENTRA_API_CLIENT_ID_TEST: TEST_CLIENT };
+  for (const audience of [TEST_CLIENT, `api://${TEST_CLIENT}`, CLIENT]) {
+    const response = await attachments.onRequestGet({ request: limitRequest(await tokenFor(audience)), env: both });
+    assert.equal(response.status, 200, audience);
+  }
+});
+
+test("audience : sans ENTRA_API_CLIENT_ID_TEST, le jeton de test est refusé ; une audience inconnue toujours", async () => {
+  const testToken = await tokenFor(TEST_CLIENT);
+  assert.equal((await attachments.onRequestGet({ request: limitRequest(testToken), env })).status, 401);
+  const both = { ...env, ENTRA_API_CLIENT_ID_TEST: TEST_CLIENT };
+  const stranger = await tokenFor("api://ffffffff-0000-0000-0000-000000000000");
+  assert.equal((await attachments.onRequestGet({ request: limitRequest(stranger), env: both })).status, 401);
+});
+
+// ---- Sign-in failure detail ------------------------------------------------
+
+test("détail de connexion : errorCode et errorMessage, coupé à 200 caractères sur une ligne", () => {
+  const long = `AADSTS50011: The redirect URI\nspecified ${"x".repeat(300)}`;
+  const detail = authDetail.authDetail({ errorCode: "invalid_request", errorMessage: long, message: "ignoré" });
+  assert.ok(detail.startsWith("invalid_request — AADSTS50011: The redirect URI specified x"));
+  assert.equal(detail.length, "invalid_request — ".length + 200);
+  assert.ok(!detail.includes("\n"));
+});
+
+test("détail de connexion : message à défaut d'errorMessage, code seul, rien du tout", () => {
+  assert.equal(authDetail.authDetail(new Error("popup_window_error")), "popup_window_error");
+  assert.equal(authDetail.authDetail({ errorCode: "user_cancelled", errorMessage: "" }), "user_cancelled");
+  assert.equal(authDetail.authDetail({}), null);
+  assert.equal(authDetail.authDetail(null), null);
+  assert.equal(authDetail.authDetail("chaîne"), null);
 });
