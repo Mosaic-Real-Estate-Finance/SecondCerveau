@@ -122,7 +122,11 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/|outlook).*)",
+      "source": "/welcome",
+      "destination": "/welcome.html"
+    },
+    {
+      "source": "/((?!api/|outlook|welcome).*)",
       "destination": "/index.html"
     }
   ]
