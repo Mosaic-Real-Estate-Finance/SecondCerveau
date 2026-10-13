@@ -42,22 +42,19 @@ body,
   transform: translateX(2px);
 }
 
-/* The hexagon's decorative dots appear from the centre outward. */
-.welcome-qr-dot {
-  animation: welcome-qr-dot 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  transform-box: fill-box;
-  transform-origin: center;
+/* The cube's side faces settle in after its top, the code. */
+.welcome-qr-face {
+  animation: welcome-qr-face 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-@keyframes welcome-qr-dot {
+@keyframes welcome-qr-face {
   from {
     opacity: 0;
-    transform: scale(0.2);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .welcome-float,
-  .welcome-qr-dot {
+  .welcome-qr-face {
     animation: none;
   }
   .welcome-next,

@@ -225,7 +225,10 @@ function AppStep() {
       <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <Video src={VIDEO_PWA} title="Installer et utiliser l'application Mosaic" />
         <div className="flex flex-col items-center rounded-3xl bg-white-smoke p-6 text-center">
-          <LogoQr value={APP_URL} className="w-full max-w-[240px]" />
+          {/* Dark on light in both themes: scanned inverted, a code fails on some cameras. */}
+          <div className="w-full max-w-[240px] rounded-2xl bg-[color:var(--qr-paper)] p-4">
+            <LogoQr value={APP_URL} className="w-full" />
+          </div>
           <p className="mt-5 text-base font-medium">Scannez avec votre téléphone</p>
           <p className="mt-1 text-base text-[color:var(--muted)]">
             Ouvrez l'appareil photo et visez le code : la page de connexion s'ouvre.
