@@ -6,6 +6,15 @@ body,
   min-height: 100%;
 }
 
+/* The app's screens scroll inside themselves, so index.css shuts the
+   document's own scrolling (body overflow: hidden). This page is a document:
+   it scrolls as one, rubber band included. Sideways overflow — the step
+   gliding in from the side — is clipped on the page's main, not here. */
+body {
+  overflow: visible;
+  overscroll-behavior: auto;
+}
+
 #root {
   display: flex;
   flex-direction: column;
