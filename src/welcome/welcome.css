@@ -1,0 +1,64 @@
+/* /welcome only. The page scrolls as a document, unlike the app's screens. */
+html,
+body,
+#root {
+  height: auto;
+  min-height: 100%;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+/* The symbol on the welcome step breathes, barely. */
+.welcome-float {
+  animation: welcome-float 6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes welcome-float {
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* The forward button: a small lift on hover, a press on tap. */
+.welcome-next {
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.welcome-next:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px -8px var(--color-navy);
+}
+.welcome-next:active {
+  transform: scale(0.97);
+}
+.welcome-next svg {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.welcome-next:hover svg {
+  transform: translateX(2px);
+}
+
+/* The cube's side faces settle in after its top, the code. */
+.welcome-qr-face {
+  animation: welcome-qr-face 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes welcome-qr-face {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-float,
+  .welcome-qr-face {
+    animation: none;
+  }
+  .welcome-next,
+  .welcome-next svg {
+    transition: none;
+  }
+}
