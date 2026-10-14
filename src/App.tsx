@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessGate } from "@/screens/AccessGate";
+import { InstallScreen } from "@/screens/InstallScreen";
 import { ContactScreen } from "@/screens/ContactScreen";
 import { RecordScreen } from "@/screens/RecordScreen";
 import { AttachScreen } from "@/screens/AttachScreen";
@@ -22,7 +23,7 @@ import {
   type Session,
 } from "@/lib/api";
 import { useOutage } from "@/lib/outage";
-import { isIOS, isStandalone } from "@/lib/standalone";
+import { isIOS, isMobile, isStandalone } from "@/lib/standalone";
 import { openInstallInvite } from "@/components/install-invite";
 import { persistStorage, updateNote, type Note, type NoteContact } from "@/lib/notes";
 import { resumePending, transcribeNote } from "@/lib/pipeline";
@@ -62,6 +63,10 @@ const fragment = new URLSearchParams(window.location.hash.slice(1));
 // In the fragment (QR codes made from now on), or the query (older ones).
 const qrToken = fragment.get(QR) ?? params.get(QR);
 const installToken = params.get(INSTALL);
+
+// A phone's browser only offers the install (screens/InstallScreen): the app
+// is used installed, and signed into once, there.
+const installFirst = isMobile() && !isStandalone();
 
 function forgetParam(name: string) {
   const url = new URL(window.location.href);
@@ -240,6 +245,9 @@ export default function App() {
     },
     [],
   );
+
+  // After every hook: the sign-in handed over by a QR code above still runs.
+  if (installFirst) return <InstallScreen />;
 
   if (!user) {
     return (
