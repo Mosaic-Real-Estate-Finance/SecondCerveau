@@ -807,6 +807,27 @@ await scenario("auth : code expiré → refusé", async () => {
   assert.equal((await call(auth, "/api/auth/verify", { body: { email: "pb@mosaicfin.com", code } })).status, 401);
 });
 
+await scenario("vocabulaire : les noms de Notion, sans jamais faire attendre la dictée", async () => {
+  const vocab = await lib("functions/_lib/vocabulary.js");
+  assert.deepEqual(vocab.subjectNames("Call - Mosaic x Alpha x Beta Lyon 3"), ["Mosaic", "Alpha", "Beta Lyon"]);
+  assert.deepEqual(vocab.subjectNames("Procédure Durand - Loi 48 Belleville"), ["Durand", "Belleville"]);
+  assert.deepEqual(vocab.subjectNames("RDV Update rentrée - dossiers en cours - (Vincennes, Montreuil)"), ["Vincennes", "Montreuil"]);
+  // No copy yet: the dictation starts with nothing more, the list is built behind.
+  assert.deepEqual(await vocab.dictationTerms(env), []);
+  for (let i = 0; i < 100 && !store.has("stt:terms"); i++) await new Promise((resolve) => setTimeout(resolve, 10));
+  const terms = await vocab.dictationTerms(env);
+  assert.ok(terms.includes("Gouman") && terms.includes("Holding"), "les sociétés");
+  assert.ok(terms.includes("Claire Client"), "les contacts");
+  assert.equal(new Set(terms.map((term) => term.toLowerCase())).size, terms.length, "chaque nom une fois");
+  // Notion down: the copy answers, nothing throws.
+  notionDown = true;
+  try {
+    assert.deepEqual(await vocab.dictationTerms(env), terms);
+  } finally {
+    notionDown = false;
+  }
+});
+
 await scenario("transcription : panne Soniox → une seule alerte, les personnes notées, lien « réglé » en POST seulement", async () => {
   const sessionLib = await lib("functions/_lib/session.js");
   const authGet = (await lib("functions/api/auth.js")).onRequestGet;
