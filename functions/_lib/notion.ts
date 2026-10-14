@@ -9,6 +9,10 @@ export type Env = {
   NOTION_TOKEN: string;
   NOTION_CONTACTS_DB: string;
   NOTION_NOTES_DB: string;
+  /** The companies base. Unset: the one Contacts' Société relation points at. */
+  NOTION_COMPANIES_DB?: string;
+  /** The template page every note is created from. Unset: the base's default. */
+  NOTION_NOTES_TEMPLATE?: string;
   // Property names, overridable when the client renames a column in Notion.
   CONTACTS_PROP_COMPANY_ROLLUP?: string;
   CONTACTS_PROP_COMPANY_RELATION?: string;

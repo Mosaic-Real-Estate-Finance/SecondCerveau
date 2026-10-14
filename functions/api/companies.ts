@@ -14,9 +14,10 @@ import {
 
 export type Company = { id: string; name: string; type: string };
 
-// The companies base is not configured: it is the one the Société relation of
-// the Contacts base points at.
+// The companies base: NOTION_COMPANIES_DB when set, otherwise the one the
+// Société relation of the Contacts base points at.
 export async function companiesSourceId(env: Env) {
+  if (env.NOTION_COMPANIES_DB?.trim()) return dataSourceId(env, env.NOTION_COMPANIES_DB.trim());
   const contacts = await dataSourceId(env, env.NOTION_CONTACTS_DB);
   const schema = await schemaOf(env, contacts);
   const relation = schema[props(env).companyRelation];

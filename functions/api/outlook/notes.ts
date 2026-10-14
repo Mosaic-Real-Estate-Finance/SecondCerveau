@@ -1,4 +1,4 @@
-import { contactProperty, defaultTemplateId, propertyItems } from "../../_lib/notes-db.js";
+import { contactProperty, noteTemplateId, propertyItems } from "../../_lib/notes-db.js";
 import { exclusive } from "../../_lib/redis.js";
 import { batches, blocksFor, type ThreadMessage } from "../../_lib/thread.js";
 import {
@@ -243,7 +243,7 @@ export const onRequestPost: Handler = async ({ request, env }) => {
       const files = splitFiles(schema, p.noteFile, body.files ?? [], 0);
       if (files.accepted.length) properties[p.noteFile] = { files: files.accepted.map(fileEntry) };
 
-      const templateId = await defaultTemplateId(env, sourceId);
+      const templateId = await noteTemplateId(env, sourceId);
 
       const create = () =>
         notion<{ id: string; url: string }>(env, "/pages", {
