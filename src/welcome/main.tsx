@@ -15,15 +15,20 @@ import { LogoQr } from "./logo-qr";
 const APP_URL = "https://mosaic.gouman.fr";
 const MANIFEST_URL = "https://mosaic.gouman.fr/outlook/manifest.xml";
 const ADMIN_URL = "https://admin.cloud.microsoft/#/Settings/IntegratedApps";
-const VIDEO_PWA =
-  "https://www.tella.tv/video/vid_cmv5tsxhm002t05kw486u5vvo/embed?b=0&title=0&a=1&loop=0&t=0&muted=0&wt=0&o=1";
-// The Outlook walkthrough is still to be recorded: null shows a placeholder.
-const VIDEO_OUTLOOK: string | null = null;
 const BOOKING_URL = "https://calendar.notion.so/meet/gouman/m4a54ybp";
 // Notion Calendar only lets notion.com frame its booking pages
 // (frame-ancestors), so here the page opens in a new tab. A booking tool that
 // allows embedding (Cal.com, Calendly…) goes here and shows in the page.
 const BOOKING_EMBED: string | null = null;
+
+// Tella embeds, without their autoplay parameter (set below), and the size of
+// each recording: the frame takes the video's own proportions, so the player
+// draws no bands around it.
+type VideoSource = { id: string; width: number; height: number; title: string };
+const VIDEO_APP: VideoSource = { id: "vid_cmv5tsxhm002t05kw486u5vvo", width: 1440, height: 1080, title: "Installer et utiliser l'application Mosaic" };
+const VIDEO_OUTLOOK: VideoSource = { id: "vid_cmv8am3ab006q02l1ebwd3mil", width: 1920, height: 1200, title: "Installer le complément Outlook" };
+const embed = (video: VideoSource, autoplay: boolean) =>
+  `https://www.tella.tv/video/${video.id}/embed?b=0&title=0&a=${autoplay ? 1 : 0}&loop=0&t=0&muted=0&wt=0&o=1`;
 
 const STEPS = [
   { id: "bienvenue", label: "Bienvenue" },
@@ -32,28 +37,38 @@ const STEPS = [
   { id: "rendez-vous", label: "Rendez-vous" },
 ] as const;
 
-// The step change glides like a page — out to one side, in from the other,
-// with a light blur — on the app's page easing (as the sign-in screen does).
+// Every step stays mounted, so a video loaded ahead of time is still there
+// when its step comes. The change glides like a page — out to one side, in
+// from the other, with a light blur — on the app's page easing.
 const EASE = [0.22, 1, 0.36, 1] as const;
-const STEP = {
-  enter: (dir: number) => ({ opacity: 0, x: 48 * dir, filter: "blur(6px)" }),
-  center: { opacity: 1, x: 0, filter: "blur(0px)", transition: { duration: 0.5, ease: EASE } },
-  exit: (dir: number) => ({ opacity: 0, x: -48 * dir, filter: "blur(6px)", transition: { duration: 0.26, ease: EASE } }),
-};
 
 const fromHash = () => {
   const index = STEPS.findIndex((step) => `#${step.id}` === location.hash);
   return index === -1 ? 0 : index;
 };
 
+function useMedia(query: string) {
+  const [matches, setMatches] = useState(() => matchMedia(query).matches);
+  useEffect(() => {
+    const list = matchMedia(query);
+    const update = () => setMatches(list.matches);
+    list.addEventListener("change", update);
+    return () => list.removeEventListener("change", update);
+  }, [query]);
+  return matches;
+}
+
 function Welcome() {
-  const [[step, dir], setStep] = useState<[number, number]>(() => [fromHash(), 1]);
+  const [step, setStep] = useState(fromHash);
+  // The furthest step reached: the video of the step after it loads ahead.
+  const [reached, setReached] = useState(step);
   const reduceMotion = useReducedMotion();
   const top = useRef<HTMLDivElement>(null);
 
   const go = useCallback((to: number) => {
     if (to < 0 || to >= STEPS.length) return;
-    setStep(([from]) => (to === from ? [from, 1] : [to, to > from ? 1 : -1]));
+    setStep(to);
+    setReached((at) => Math.max(at, to));
   }, []);
 
   // The step lives in the address, so a link can open on one and the
@@ -80,7 +95,13 @@ function Welcome() {
     };
   }, [go, step]);
 
-  const last = step === STEPS.length - 1;
+  const next = step + 1 < STEPS.length ? STEPS[step + 1] : null;
+  const pages = [
+    <Intro key="0" />,
+    <AppStep key="1" active={step === 1} load={reached >= 0} />,
+    <OutlookStep key="2" active={step === 2} load={reached >= 1} />,
+    <BookingStep key="3" />,
+  ];
 
   return (
     <div
@@ -97,23 +118,29 @@ function Welcome() {
       </header>
 
       <main className="relative flex flex-1 flex-col overflow-x-clip pt-10 sm:pt-14">
-        <AnimatePresence mode="popLayout" initial={false} custom={dir}>
-          <motion.section
-            key={step}
-            custom={dir}
-            variants={STEP}
-            initial={reduceMotion ? false : "enter"}
-            animate="center"
-            exit={reduceMotion ? undefined : "exit"}
-            className="flex flex-1 flex-col"
-            aria-labelledby={`titre-${STEPS[step].id}`}
-          >
-            {step === 0 && <Intro />}
-            {step === 1 && <AppStep />}
-            {step === 2 && <OutlookStep />}
-            {step === 3 && <BookingStep />}
-          </motion.section>
-        </AnimatePresence>
+        {pages.map((page, index) => {
+          const current = index === step;
+          return (
+            <motion.section
+              key={index}
+              initial={false}
+              animate={
+                current
+                  ? { opacity: 1, x: 0, filter: "blur(0px)", visibility: "visible" }
+                  : { opacity: 0, x: index < step ? -48 : 48, filter: "blur(6px)", transitionEnd: { visibility: "hidden" } }
+              }
+              transition={{ duration: reduceMotion ? 0 : current ? 0.5 : 0.26, delay: current && !reduceMotion ? 0.08 : 0, ease: EASE }}
+              // The step on show sets the height; the others lie over it,
+              // out of sight and out of reach.
+              className={cn("flex flex-col", current ? "relative flex-1" : "pointer-events-none absolute inset-x-0 top-10 sm:top-14")}
+              aria-hidden={!current}
+              inert={!current}
+              aria-labelledby={`titre-${STEPS[index].id}`}
+            >
+              {page}
+            </motion.section>
+          );
+        })}
       </main>
 
       <nav className="mt-10 flex items-center justify-between gap-3" aria-label="Étapes">
@@ -129,13 +156,13 @@ function Welcome() {
           <Chevron left />
           Précédent
         </button>
-        {!last && (
+        {next && (
           <button
             type="button"
             onClick={() => go(step + 1)}
             className="welcome-next inline-flex h-12 items-center gap-2 rounded-full bg-navy pr-5 pl-6 text-base font-medium text-on-accent"
           >
-            {step === 0 ? "Commencer" : `Suivant : ${STEPS[step + 1].label}`}
+            {step === 0 ? "Commencer" : step === STEPS.length - 2 ? "Terminé" : `Suivant : ${next.label}`}
             <Chevron />
           </button>
         )}
@@ -169,10 +196,10 @@ function Progress({ step, onPick }: { step: number; onPick: (to: number) => void
   );
 }
 
-function Heading({ id, eyebrow, title, children }: { id: string; eyebrow?: string; title: string; children?: ReactNode }) {
+function Heading({ id, eyebrow, title, children }: { id: string; eyebrow?: ReactNode; title: string; children?: ReactNode }) {
   return (
     <div className="max-w-[640px]">
-      {eyebrow && <p className="mb-3 text-xs font-medium tracking-[0.08em] text-[color:var(--muted)] uppercase">{eyebrow}</p>}
+      {eyebrow && <div className="mb-3">{eyebrow}</div>}
       <h1 id={`titre-${id}`} className="font-serif text-2xl sm:text-[36px] sm:leading-[1.15]">
         {title}
       </h1>
@@ -181,30 +208,41 @@ function Heading({ id, eyebrow, title, children }: { id: string; eyebrow?: strin
   );
 }
 
+const Eyebrow = ({ children }: { children: ReactNode }) => (
+  <p className="text-xs font-medium tracking-[0.08em] text-[color:var(--muted)] uppercase">{children}</p>
+);
+
 function Intro() {
   return (
     <div className="flex flex-1 flex-col justify-center">
-      <Symbol className="welcome-float h-16 text-midnight-blue sm:h-20" />
-      <div className="mt-10">
-        <Heading id="bienvenue" title="Bienvenue chez Mosaic">
-          <p>
-            Nous avons construit pour vous des outils qui envoient vos notes, vos réunions et vos échanges directement
-            dans votre espace Notion, sans ressaisie.
-          </p>
-          <p className="mt-3">
-            En quelques minutes, nous allons voir ensemble comment les installer et comment vous en servir au quotidien.
-          </p>
-        </Heading>
-      </div>
-      <ol className="mt-10 grid gap-3 sm:grid-cols-3">
+      <Heading
+        id="bienvenue"
+        eyebrow={
+          <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white-smoke px-3 text-xs font-medium text-navy">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="12" cy="12" r="8.5" />
+              <path d="M12 7.5V12l3 2" />
+            </svg>
+            Temps estimé : 15 min
+          </span>
+        }
+        title="La solution pour enrichir votre CRM est prête"
+      >
+        <p>
+          Dans les prochaines pages, vous retrouverez un guide détaillé pour installer les différentes solutions et
+          commencer à en profiter.
+        </p>
+      </Heading>
+      <ol className="mt-10 grid gap-3 sm:grid-cols-2">
         {[
           ["L'application", "Dictée vocale et réunions Read AI, depuis votre téléphone."],
           ["Outlook", "Classez un e-mail dans Notion en un clic."],
-          ["Un rendez-vous", "Pour faire le point ensemble."],
         ].map(([title, text], index) => (
           <li key={title} className="rounded-2xl bg-white-smoke p-5">
-            <span className="font-serif text-xl text-navy">{index + 1}</span>
-            <p className="mt-2 text-base font-medium">{title}</p>
+            <p className="flex items-baseline gap-2.5 text-base font-medium">
+              <span className="font-serif text-xl text-navy">{index + 1}</span>
+              {title}
+            </p>
             <p className="mt-1 text-base text-[color:var(--muted)]">{text}</p>
           </li>
         ))}
@@ -213,81 +251,41 @@ function Intro() {
   );
 }
 
-function AppStep() {
+function AppStep({ active, load }: { active: boolean; load: boolean }) {
+  // The QR code is for a computer's screen (a mouse, a wide window); on a
+  // phone or a tablet, a button that opens the app there.
+  const desktop = useMedia("(hover: hover) and (pointer: fine) and (min-width: 768px)");
   return (
     <div>
-      <Heading id="application" eyebrow="Étape 1 sur 3" title="L'application sur votre téléphone">
-        <p>
-          Dictez une note après un rendez-vous, validez les réunions enregistrées par Read AI : tout part dans Notion.
-          La vidéo vous montre l'installation et l'usage, de bout en bout.
-        </p>
-      </Heading>
-      <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <Video src={VIDEO_PWA} title="Installer et utiliser l'application Mosaic" />
-        <div className="flex flex-col items-center rounded-3xl bg-white-smoke p-6 text-center">
-          {/* Dark on light in both themes: scanned inverted, a code fails on some cameras. */}
-          <div className="w-full max-w-[240px] rounded-2xl bg-[color:var(--qr-paper)] p-4">
-            <LogoQr value={APP_URL} className="w-full" />
+      <Heading id="application" eyebrow={<Eyebrow>Étape 1 sur 2</Eyebrow>} title="L'application sur votre téléphone" />
+      <div className={cn("mt-8 grid items-start gap-6", desktop && "lg:grid-cols-[minmax(0,1fr)_260px]")}>
+        <Video video={VIDEO_APP} active={active} load={load} />
+        {desktop ? (
+          <div className="flex flex-col items-center gap-4">
+            {/* Dark on light in both themes: scanned inverted, a code fails on some cameras. */}
+            <div className="w-full max-w-[260px] rounded-3xl bg-[color:var(--qr-paper)] p-5 shadow-[0_0_0_1px_var(--hairline)]">
+              <LogoQr value={APP_URL} className="w-full" />
+            </div>
+            <CopyButton value={APP_URL} label="Copier le lien" className="w-full max-w-[260px]" />
           </div>
-          <p className="mt-5 text-base font-medium">Scannez avec votre téléphone</p>
-          <p className="mt-1 text-base text-[color:var(--muted)]">
-            Ouvrez l'appareil photo et visez le code : la page de connexion s'ouvre.
-          </p>
-          <CopyField value={APP_URL} label="Copier le lien" className="mt-5 w-full" />
-        </div>
+        ) : (
+          <LinkButton href={APP_URL}>Ouvrir l'application</LinkButton>
+        )}
       </div>
     </div>
   );
 }
 
-function OutlookStep() {
+function OutlookStep({ active, load }: { active: boolean; load: boolean }) {
   return (
     <div>
-      <Heading id="outlook" eyebrow="Étape 2 sur 3" title="Le complément Outlook">
-        <p>
-          Il ajoute un bouton « Save to Notion » à Outlook pour classer un e-mail et ses pièces jointes dans Notion,
-          rattachés aux bons contacts. Un administrateur Microsoft 365 l'installe une fois pour toute l'équipe.
-        </p>
-      </Heading>
-      <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        {VIDEO_OUTLOOK ? (
-          <Video src={VIDEO_OUTLOOK} title="Installer le complément Outlook" />
-        ) : (
-          <div className="flex aspect-video w-full flex-col items-center justify-center rounded-3xl bg-white-smoke p-6 text-center">
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--color-white)] text-navy shadow-[0_0_0_1px_var(--hairline)]">
-              <svg viewBox="0 0 24 24" className="ml-0.5 h-6 w-6" fill="currentColor" aria-hidden>
-                <path d="M8 5.5v13a1 1 0 0 0 1.5.86l11-6.5a1 1 0 0 0 0-1.72l-11-6.5A1 1 0 0 0 8 5.5z" />
-              </svg>
-            </span>
-            <p className="mt-4 text-base font-medium">Vidéo bientôt disponible</p>
-            <p className="mt-1 text-base text-[color:var(--muted)]">En attendant, les étapes ci-contre suffisent.</p>
-          </div>
-        )}
-        <ol className="flex flex-col gap-3">
-          <Instruction n={1} title="Copiez l'adresse du manifeste">
-            <CopyField value={MANIFEST_URL} label="Copier l'URL du manifeste" className="mt-3" />
-          </Instruction>
-          <Instruction n={2} title="Ouvrez le centre d'administration">
-            <p className="mt-1 text-base text-[color:var(--muted)]">
-              Paramètres › Applications intégrées, puis « Charger des applications personnalisées ».
-            </p>
-            <a
-              href={ADMIN_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-navy px-4 text-base font-medium text-on-accent"
-            >
-              Ouvrir Microsoft 365 Admin
-              <External />
-            </a>
-          </Instruction>
-          <Instruction n={3} title="Collez l'adresse et déployez">
-            <p className="mt-1 text-base text-[color:var(--muted)]">
-              Choisissez « Fournir un lien vers le fichier manifeste », collez l'adresse, puis attribuez le complément
-              aux utilisateurs concernés. Il apparaît dans Outlook sous quelques heures.
-            </p>
-          </Instruction>
-        </ol>
+      <Heading id="outlook" eyebrow={<Eyebrow>Étape 2 sur 2</Eyebrow>} title="Le complément Outlook" />
+      <div className="mt-8">
+        <Video video={VIDEO_OUTLOOK} active={active} load={load} />
+      </div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <CopyButton value={MANIFEST_URL} label="Copier l'URL du manifeste" />
+        <LinkButton href={ADMIN_URL}>Ouvrir Microsoft 365 Admin</LinkButton>
       </div>
     </div>
   );
@@ -296,7 +294,7 @@ function OutlookStep() {
 function BookingStep() {
   return (
     <div className="flex flex-1 flex-col">
-      <Heading id="rendez-vous" eyebrow="Étape 3 sur 3" title="Prenons rendez-vous">
+      <Heading id="rendez-vous" title="Prenons rendez-vous">
         <p>Choisissez un créneau : nous vérifierons ensemble que tout fonctionne et répondrons à vos questions.</p>
       </Heading>
       {BOOKING_EMBED ? (
@@ -330,31 +328,58 @@ function BookingStep() {
   );
 }
 
-function Video({ src, title }: { src: string; title: string }) {
+/**
+ * A Tella player, mounted as soon as `load` holds — a step ahead of its own —
+ * and kept, so it is ready when its step comes. Loaded on show it plays at
+ * once; loaded ahead it waits for a click, since a hidden player that starts
+ * on its own would be heard over the step on show. Leaving the step reloads
+ * it (from the cache): the player has no pause to call from outside, and a
+ * video still playing out of sight would be heard too.
+ */
+function Video({ video, active, load }: { video: VideoSource; active: boolean; load: boolean }) {
+  const [src, setSrc] = useState<string | null>(() => (load ? embed(video, active) : null));
+  const [generation, setGeneration] = useState(0);
+  const shown = useRef(active);
+  useEffect(() => {
+    if (load && src === null) setSrc(embed(video, active));
+  }, [load, src, video, active]);
+  useEffect(() => {
+    if (active) shown.current = true;
+    else if (shown.current) {
+      shown.current = false;
+      setSrc(embed(video, false));
+      setGeneration((n) => n + 1);
+    }
+  }, [active, video]);
+
   return (
-    <div className="aspect-video w-full overflow-hidden rounded-3xl bg-white-smoke shadow-[0_0_0_1px_var(--hairline)]">
-      <iframe
-        src={src}
-        title={title}
-        className="block h-full w-full"
-        allow="autoplay; fullscreen; picture-in-picture; clipboard-write"
-        allowFullScreen
-      />
+    <div
+      className="w-full overflow-hidden rounded-3xl bg-white-smoke shadow-[0_0_0_1px_var(--hairline)]"
+      style={{ aspectRatio: `${video.width} / ${video.height}` }}
+    >
+      {src && (
+        <iframe
+          key={`${generation}-${src}`}
+          src={src}
+          title={video.title}
+          className="block h-full w-full"
+          allow="autoplay; fullscreen; picture-in-picture; clipboard-write"
+          allowFullScreen
+        />
+      )}
     </div>
   );
 }
 
-function Instruction({ n, title, children }: { n: number; title: string; children?: ReactNode }) {
+const BUTTON =
+  "inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl px-5 text-base font-medium transition-colors duration-300";
+
+function LinkButton({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <li className="rounded-2xl bg-white-smoke p-5">
-      <div className="flex items-center gap-3">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold text-on-accent">
-          {n}
-        </span>
-        <p className="text-base font-medium">{title}</p>
-      </div>
+    <a href={href} target="_blank" rel="noreferrer" className={cn(BUTTON, "welcome-next bg-navy text-on-accent")}>
       {children}
-    </li>
+      <External />
+    </a>
   );
 }
 
@@ -377,7 +402,7 @@ async function copy(text: string) {
   }
 }
 
-function CopyField({ value, label, className }: { value: string; label: string; className?: string }) {
+function CopyButton({ value, label, className }: { value: string; label: string; className?: string }) {
   const [state, setState] = useState<"idle" | "done" | "failed">("idle");
   const timer = useRef(0);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -389,50 +414,47 @@ function CopyField({ value, label, className }: { value: string; label: string; 
   };
 
   return (
-    <div className={cn("flex items-center gap-2 rounded-2xl bg-[color:var(--color-white)] p-1.5 pl-4 shadow-[0_0_0_1px_var(--hairline)]", className)}>
-      <span className="min-w-0 flex-1 truncate text-left text-xs text-[color:var(--muted)] select-all" title={value}>
-        {value.replace(/^https:\/\//, "")}
-      </span>
-      <button
-        type="button"
-        onClick={() => void onCopy()}
-        aria-label={label}
-        className={cn(
-          "relative inline-flex h-10 shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-xl px-3.5 text-xs font-semibold transition-colors duration-300",
-          state === "done" ? "bg-navy text-on-accent" : "bg-white-smoke text-navy",
-        )}
-      >
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.span
-            key={state}
-            initial={{ opacity: 0, y: 8, filter: "blur(2px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: -8, filter: "blur(2px)" }}
-            transition={{ duration: 0.22, ease: EASE }}
-            className="inline-flex items-center gap-1.5"
-          >
-            {state === "done" ? (
-              <>
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M5 12.5l4.5 4.5L19 7.5" />
-                </svg>
-                Copié
-              </>
-            ) : state === "failed" ? (
-              "Sélectionnez le lien"
-            ) : (
-              <>
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <rect x="8.5" y="8.5" width="11" height="11" rx="2.5" />
-                  <path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" />
-                </svg>
-                Copier
-              </>
-            )}
-          </motion.span>
-        </AnimatePresence>
-      </button>
-    </div>
+    <button
+      type="button"
+      onClick={() => void onCopy()}
+      title={value}
+      className={cn(
+        BUTTON,
+        "overflow-hidden",
+        state === "done" ? "bg-navy text-on-accent" : "bg-white-smoke text-navy",
+        className,
+      )}
+    >
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={state}
+          initial={{ opacity: 0, y: 10, filter: "blur(2px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          exit={{ opacity: 0, y: -10, filter: "blur(2px)" }}
+          transition={{ duration: 0.22, ease: EASE }}
+          className="inline-flex items-center gap-2"
+        >
+          {state === "done" ? (
+            <>
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M5 12.5l4.5 4.5L19 7.5" />
+              </svg>
+              Copié
+            </>
+          ) : state === "failed" ? (
+            "Copie impossible"
+          ) : (
+            <>
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="8.5" y="8.5" width="11" height="11" rx="2.5" />
+                <path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" />
+              </svg>
+              {label}
+            </>
+          )}
+        </motion.span>
+      </AnimatePresence>
+    </button>
   );
 }
 
