@@ -223,7 +223,7 @@ export default defineConfig(async ({ mode }) => {
       VitePWA({
         registerType: "autoUpdate",
         // Shared with /api/auth/manifest, which serves it with another start address.
-        manifest: { ...MANIFEST, icons: [...MANIFEST.icons] },
+        manifest: { ...MANIFEST, icons: [...MANIFEST.icons], screenshots: [...MANIFEST.screenshots] },
         workbox: {
           // The push and notification click listeners (feature 002). Added
           // to the generated worker rather than switching to injectManifest,
@@ -240,7 +240,7 @@ export default defineConfig(async ({ mode }) => {
           // served from the dictation's cache — the denylist below only governs
           // the navigation fallback, never an exact precache hit — and the
           // add-in would run on a stale build with no way to notice.
-          globIgnores: ["splash/**", "pwa-install-animation.html", "pwa-anim/**", "outlook.html", "outlook/**", "assets/outlook-*.js", "assets/outlook-*.css", "maquette.html", "assets/maquette-*", "welcome.html", "assets/welcome-*"],
+          globIgnores: ["splash/**", "screenshots/**", "pwa-install-animation.html", "pwa-anim/**", "outlook.html", "outlook/**", "assets/outlook-*.js", "assets/outlook-*.css", "maquette.html", "assets/maquette-*", "welcome.html", "assets/welcome-*"],
           navigateFallback: "index.html",
           // The dictation's service worker has scope "/", so without /outlook
           // on this list it answers a taskpane navigation with the dictation
