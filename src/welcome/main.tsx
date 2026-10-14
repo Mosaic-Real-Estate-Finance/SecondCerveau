@@ -6,7 +6,7 @@ import "@/styles/index.css";
 import "./welcome.css";
 import { Symbol } from "@/components/logo";
 import { cn } from "@/lib/utils";
-import { LogoQr } from "./logo-qr";
+import { Qr } from "./qr";
 
 // /welcome: the clients' onboarding, apart from the app — no sign-in, no
 // server, nothing read or written. Four steps: a word of welcome, the phone
@@ -266,8 +266,8 @@ function AppStep({ active, load }: { active: boolean; load: boolean }) {
         {desktop ? (
           <div className="flex flex-col items-center rounded-3xl bg-white-smoke p-5 text-center">
             {/* Dark on light in both themes: scanned inverted, a code fails on some cameras. */}
-            <div className="w-full max-w-[260px] rounded-2xl bg-[color:var(--qr-paper)] p-3 shadow-[0_0_0_1px_var(--hairline)]">
-              <LogoQr value={APP_URL} className="w-full" />
+            <div className="w-full max-w-[220px] overflow-hidden rounded-2xl shadow-[0_0_0_1px_var(--hairline)]">
+              <Qr value={APP_URL} className="block w-full" />
             </div>
             <p className="mt-4 text-base font-medium">Scannez ce QR code pour accéder à l'app depuis votre mobile</p>
             <CopyButton value={APP_URL} label="Copier le lien" onCard className="mt-4" />

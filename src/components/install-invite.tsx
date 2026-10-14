@@ -1,28 +1,25 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import {
-  canPromptInstall,
-  detectPlatform,
-  installPrompt,
-  isMobile,
-  isStandalone,
-  promptInstall,
-  subscribeInstall,
-  yourDevice,
-  type Platform,
-} from "@/lib/standalone";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { installPrompt, isMobile, isStandalone, yourDevice } from "@/lib/standalone";
 import { cssVar, useColorScheme } from "@/lib/theme";
+import { useInstallPrompt } from "@/lib/use-install-prompt";
 import { cn } from "@/lib/utils";
 
-// Shown once, a moment after the app opens on a signed in phone that is still
-// running in a browser tab. The layout is the one the animation was built for:
-// the phone is inset in the top of the sheet, edge to edge and running off the
-// upper edge, with the steps listed underneath it.
+// Shown a moment after the app opens on a signed in phone that is still
+// running in a browser tab:
+//   - iPhone (Safari): the steps through the Share sheet, under an animation
+//     of them — the phone inset in the top of the sheet, edge to edge;
+//   - Android (Chromium): the native install dialog, from « Installer l'app ».
+//     Only once the browser has offered it (beforeinstallprompt): a browser
+//     that never does (Firefox…) gets no guide at all;
+//   - an in-app browser (Instagram, LinkedIn…): where to open the link instead.
+// Closed or refused, it stays away INSTALL_SNOOZE_DAYS (lib/standalone).
+//
+// Rules that keep it to one clean sheet, whatever happens around it:
+//   - one guide at a time: a second instance renders nothing;
+//   - opening an open guide does nothing;
+//   - the animation is shown only once its frame is known to hold it — a
+//     frame answered with anything else (the app itself, an error page)
+//     is dropped and the sheet closes up over it.
 
 const OPEN_DELAY_MS = 2200;
 const CLOSE_MS = 320;
@@ -60,13 +57,26 @@ function PlusAppIcon({ className }: { className?: string }) {
   );
 }
 
-const STEPS = [
+type Step = { text: string; icon?: React.ReactNode };
+
+const STEPS_IOS: Step[] = [
   { text: "Touchez Partager", icon: <ShareIcon className="h-[18px] w-auto" /> },
-  {
-    text: "Touchez « Sur l'écran d'accueil »",
-    icon: <PlusAppIcon className="h-[17px] w-[17px]" />,
-  },
-  { text: "« Ajouter »", icon: null },
+  { text: "Touchez « Sur l'écran d'accueil »", icon: <PlusAppIcon className="h-[17px] w-[17px]" /> },
+  { text: "« Ajouter »" },
+];
+
+// The native dialog, from the button below.
+const STEPS_NATIVE: Step[] = [
+  { text: "Touchez « Installer l'app »" },
+  { text: "Confirmez « Installer » dans la fenêtre" },
+  { text: "Ouvrez Mosaic depuis l'écran d'accueil" },
+];
+
+// Asked for from the settings while the browser offers no dialog: its menu.
+const STEPS_MENU: Step[] = [
+  { text: "Touchez le menu ⋮ du navigateur" },
+  { text: "« Installer l'application » ou « Ajouter à l'écran d'accueil »" },
+  { text: "Confirmez « Installer »" },
 ];
 
 const OPEN_EVENT = "mosaic:install-invite";
@@ -74,59 +84,93 @@ const OPEN_EVENT = "mosaic:install-invite";
 /** Opens the invitation from anywhere in the app. */
 export const openInstallInvite = () => window.dispatchEvent(new Event(OPEN_EVENT));
 
+// Claimed by the first guide mounted; any other renders nothing.
+let owner: symbol | null = null;
+function useSingleInstance() {
+  const [me] = useState(() => Symbol("install-invite"));
+  const [mine, setMine] = useState(false);
+  useEffect(() => {
+    if (owner === null) owner = me;
+    setMine(owner === me);
+    return () => {
+      if (owner === me) owner = null;
+    };
+  }, [me]);
+  return mine;
+}
+
+type Anim = "loading" | "ready" | "failed";
+
 /** `auto`: opens by itself on a phone's browser; the mockup only on request. */
 export function InstallInvite({ auto = true }: { auto?: boolean } = {}) {
+  const single = useSingleInstance();
+  const { canInstall, platform, promptInstall, dismiss } = useInstallPrompt();
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
+  const [anim, setAnim] = useState<Anim>("loading");
   const scheme = useColorScheme();
-  const [loaded, setLoaded] = useState(false);
-  const [platform, setPlatform] = useState<Platform>("desktop");
   const frame = useRef<HTMLIFrameElement>(null);
-  const installable = useSyncExternalStore(
-    subscribeInstall,
-    canPromptInstall,
-    () => false,
-  );
+  const openRef = useRef(false);
+  const autoShown = useRef(false);
   const ios = platform === "ios-safari";
   const inApp = platform === "ios-inapp" || platform === "android-inapp";
+  // The native dialog is there: the button is the way, on Android or not.
+  const native = canInstall && !ios && !inApp;
+
+  const show = useCallback((delay: number) => {
+    if (openRef.current || isStandalone()) return;
+    openRef.current = true;
+    setMounted(true);
+    window.setTimeout(() => setOpen(true), delay);
+  }, []);
 
   // The settings screen sends its reader here when notifications need the
   // installed app: the sheet opens on request, dismissed or not.
   useEffect(() => {
-    const show = () => {
-      if (isStandalone()) return;
-      setPlatform(detectPlatform());
-      setMounted(true);
-      window.setTimeout(() => setOpen(true), 60);
-    };
-    window.addEventListener(OPEN_EVENT, show);
-    return () => window.removeEventListener(OPEN_EVENT, show);
-  }, []);
+    if (!single) return;
+    const onRequest = () => show(60);
+    window.addEventListener(OPEN_EVENT, onRequest);
+    return () => window.removeEventListener(OPEN_EVENT, onRequest);
+  }, [single, show]);
 
+  // By itself, once per visit, on a phone's browser. Mounted at once but
+  // closed, so the animation is loaded and paused by the time the sheet
+  // slides up. On Android it waits for the browser to offer the dialog.
   useEffect(() => {
-    if (!auto || isStandalone() || !isMobile() || installPrompt.dismissed()) return;
-    // Mounted at once but closed, so the animation is loaded and paused by the
-    // time the sheet slides up; opened after the app has had a moment.
-    setPlatform(detectPlatform());
-    setMounted(true);
-    const timer = window.setTimeout(() => setOpen(true), OPEN_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [auto]);
+    if (!single || !auto || autoShown.current) return;
+    if (isStandalone() || !isMobile() || installPrompt.installed() || installPrompt.dismissed()) return;
+    if (platform === "android" && !canInstall) return;
+    if (platform === "desktop") return;
+    autoShown.current = true;
+    show(OPEN_DELAY_MS);
+  }, [single, auto, platform, canInstall, show]);
 
   const close = useCallback(() => {
-    installPrompt.dismiss();
+    dismiss();
+    openRef.current = false;
     setOpen(false);
     window.setTimeout(() => setMounted(false), CLOSE_MS);
-  }, []);
+  }, [dismiss]);
+
+  // The frame must hold the animation, nothing else. Same origin, so its
+  // document can be read: the animation's stage is #scene; the app has #root.
+  const checkFrame = () => {
+    try {
+      const doc = frame.current?.contentDocument;
+      setAnim(doc?.getElementById("scene") && !doc.getElementById("root") ? "ready" : "failed");
+    } catch {
+      setAnim("failed");
+    }
+  };
 
   // The animation loops forever, so it only runs while the sheet is open.
   useEffect(() => {
-    if (!loaded) return;
+    if (anim !== "ready") return;
     frame.current?.contentWindow?.postMessage(
       { type: open ? "pwa-anim:play" : "pwa-anim:pause", bg: panelBg() },
       location.origin,
     );
-  }, [open, loaded, scheme]);
+  }, [open, anim, scheme]);
 
   useEffect(() => {
     if (!open) return;
@@ -135,11 +179,18 @@ export function InstallInvite({ auto = true }: { auto?: boolean } = {}) {
     return () => document.removeEventListener("keydown", onKey);
   }, [open, close]);
 
-  if (!mounted) return null;
+  if (!single || !mounted) return null;
 
   const install = async () => {
-    if (await promptInstall()) close();
+    const outcome = await promptInstall();
+    if (outcome === "unavailable") return;
+    // Accepted: installed (appinstalled remembers it). Refused: snoozed.
+    openRef.current = false;
+    setOpen(false);
+    window.setTimeout(() => setMounted(false), CLOSE_MS);
   };
+
+  const steps = ios ? STEPS_IOS : native ? STEPS_NATIVE : STEPS_MENU;
 
   return (
     <div
@@ -170,7 +221,7 @@ export function InstallInvite({ auto = true }: { auto?: boolean } = {}) {
           transitionTimingFunction: "var(--page-slide-ease)",
         }}
       >
-        {ios && (
+        {ios && anim !== "failed" && (
           // Inset: the animation takes the top of the sheet, edge to edge, so
           // the phone runs off the upper edge with no frame around it.
           <div className="-mx-5 -mt-5 mb-4 shrink-0 overflow-hidden rounded-t-3xl">
@@ -178,14 +229,14 @@ export function InstallInvite({ auto = true }: { auto?: boolean } = {}) {
               ref={frame}
               src="/pwa-install-animation.html#paused"
               title="Comment ajouter l'application à l'écran d'accueil depuis Safari"
-              onLoad={() => setLoaded(true)}
+              onLoad={checkFrame}
               scrolling="no"
               tabIndex={-1}
               aria-hidden
               loading="eager"
               className={cn(
                 "block h-[420px] w-full border-0 transition-opacity duration-300",
-                loaded ? "opacity-100" : "opacity-0",
+                anim === "ready" ? "opacity-100" : "opacity-0",
               )}
               style={{ maxHeight: "40dvh" }}
             />
@@ -213,19 +264,23 @@ export function InstallInvite({ auto = true }: { auto?: boolean } = {}) {
         {/* The only part that may be scrolled: on a short phone the steps give
             way rather than the button, which stays within reach. */}
         <div className="min-h-0 overflow-y-auto">
-          {/* On a phone the title holds one line: its size follows the width of
-            the sheet, and the cross sits on the animation, not beside it. */}
+          {/* With the animation above, the title holds one line: its size
+              follows the width of the sheet, and the cross sits on the
+              animation, not beside it. Without it, the title leaves the
+              cross its room. */}
           <h2
             id="install-title"
             className={cn(
               "font-serif",
-              ios
+              ios && anim !== "failed"
                 ? "whitespace-nowrap text-[min(23px,calc((min(100vw,480px)-40px)*0.052))] leading-tight"
                 : "pr-10 text-xl leading-tight",
             )}
           >
             {inApp
-              ? "Ouvrez ce lien dans Safari"
+              ? platform === "ios-inapp"
+                ? "Ouvrez ce lien dans Safari"
+                : "Ouvrez ce lien dans votre navigateur"
               : `Installez Mosaic sur ${yourDevice()}`}
           </h2>
 
@@ -242,59 +297,35 @@ export function InstallInvite({ auto = true }: { auto?: boolean } = {}) {
               <p className="mt-2 text-base text-[color:var(--muted)]">
                 Dictez une note en un geste.
               </p>
-              {ios ? (
-                <ol className="mt-4 flex flex-col gap-2">
-                  {STEPS.map((step, index) => (
-                    <li
-                      key={step.text}
-                      className="flex items-center gap-3 text-base text-[color:var(--muted)]"
-                    >
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white-smoke text-xs font-semibold text-navy">
-                        {index + 1}
+              <ol className="mt-4 flex flex-col gap-2">
+                {steps.map((step, index) => (
+                  <li
+                    key={step.text}
+                    className="flex items-center gap-3 text-base text-[color:var(--muted)]"
+                  >
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white-smoke text-xs font-semibold text-navy">
+                      {index + 1}
+                    </span>
+                    <span>{step.text}</span>
+                    {step.icon && (
+                      <span className="flex shrink-0 items-center text-midnight-blue">
+                        {step.icon}
                       </span>
-                      <span>{step.text}</span>
-                      {step.icon && (
-                        <span className="flex shrink-0 items-center text-midnight-blue">
-                          {step.icon}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="mt-3 text-base text-[color:var(--muted)]">
-                  {installable
-                    ? "Ajoutez Mosaic à votre écran d'accueil : elle s'ouvre comme une app et démarre plus vite."
-                    : "Utilisez le menu de votre navigateur puis « Installer l'application » ou « Ajouter à l'écran d'accueil »."}
-                </p>
-              )}
+                    )}
+                  </li>
+                ))}
+              </ol>
             </>
           )}
         </div>
 
-        <div className="mt-6 flex shrink-0 flex-col gap-2">
-          {installable && !ios && !inApp && (
-            <button
-              type="button"
-              onClick={install}
-              className="flex h-12 w-full items-center justify-center rounded-2xl bg-navy px-6 text-base font-medium text-on-accent"
-            >
-              Installer l'app
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={close}
-            className={cn(
-              "flex h-12 w-full items-center justify-center rounded-2xl px-6 text-base font-medium",
-              installable && !ios && !inApp
-                ? "border border-midnight-blue/15 text-midnight-blue"
-                : "bg-navy text-on-accent",
-            )}
-          >
-            J'ai compris
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={native ? () => void install() : close}
+          className="mt-6 flex h-12 w-full shrink-0 items-center justify-center rounded-2xl bg-navy px-6 text-base font-medium text-on-accent"
+        >
+          {native ? "Installer l'app" : "J'ai compris"}
+        </button>
       </div>
     </div>
   );

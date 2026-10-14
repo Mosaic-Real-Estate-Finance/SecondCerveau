@@ -6,10 +6,16 @@ import { busy } from "@/lib/pipeline";
 import { guardSafeTop } from "@/lib/safe-area";
 import "./styles/index.css";
 
+// The app never runs inside a frame of its own. Its install guide frames a
+// page of this origin; were that page ever answered with the app (a service
+// worker serving the shell for it did exactly that), the app would open its
+// guide inside the guide, and again inside that one.
+const framed = window.self !== window.top;
+
 // A new version takes over at once, but the page reloads into it only when
 // nothing is under way: a reload in the middle of a dictation would cut the
 // recording and its live stream.
-registerSW({
+if (!framed) registerSW({
   immediate: true,
   onNeedReload() {
     const reloadWhenIdle = () => (busy() ? window.setTimeout(reloadWhenIdle, 5000) : window.location.reload());
@@ -18,11 +24,12 @@ registerSW({
 });
 guardSafeTop();
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+if (!framed)
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
 
 // Two frames after mount the first paint is on screen: the cover can go.
 const cover = document.getElementById("splash-cover");
