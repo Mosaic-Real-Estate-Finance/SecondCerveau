@@ -133,12 +133,6 @@ async function sttToken(request: Request, env: Parameters<Handler>[0]["env"]) {
     expiresAt: body.expires_at ?? null,
     wsUrl,
     model: env.SONIOX_MODEL || SONIOX_MODEL_DEFAULT,
-    // The names to expect, from Notion (_lib/vocabulary): never more than a
-    // moment's wait, an empty list rather than a late dictation.
-    terms: await Promise.race([
-      import("../_lib/vocabulary.js").then(({ dictationTerms }) => dictationTerms(env)),
-      new Promise<string[]>((resolve) => setTimeout(() => resolve([]), 800)),
-    ]).catch(() => []),
   });
 }
 

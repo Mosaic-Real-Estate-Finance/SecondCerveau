@@ -3,13 +3,58 @@
 // general model goes wrong, and a few hundred of them cost nothing: the
 // context allows about 8,000 tokens.
 //
-// Two parts. Here, the trade's own words — sigles, English and French jargon
-// of real-estate financing — which do not change. The names — contacts,
-// companies, the team, the projects in the subjects of the notes — come from
-// Notion with the stream key (functions/_lib/vocabulary.ts): they follow the
-// base as it grows, and they are never written into the code.
+// A fixed list: nothing is fetched when a dictation starts. It holds public
+// terms only — the trade's jargon and sigles, the banks and lenders the team
+// deals with, places — never the name of a client or of a person.
 
-const BANKS = ["SOCFIM", "BPCE", "Arkea"];
+const INSTITUTIONS = [
+  "Mosaic",
+  "SOCFIM",
+  "BPCE",
+  "Arkéa",
+  "Natixis",
+  "BNP Paribas",
+  "Société Générale",
+  "CIC",
+  "Crédit Agricole",
+  "HSBC",
+  "CEPAC",
+  "CECAZ",
+  "CERA",
+  "Caisse d'Épargne",
+  "Banque Palatine",
+  "Bpifrance",
+  "Caisse des Dépôts",
+  "Euroclear",
+  "Raizers",
+  "Eiffel Investment Group",
+  "Roundshield",
+  "Harrison Street",
+  "Alantra",
+  "Zencap",
+  "OFI",
+  "SMABTP",
+  "CBRE",
+  "JLL",
+];
+
+const PLACES = [
+  "Levallois",
+  "Boulogne",
+  "Neuilly",
+  "Versailles",
+  "Saint-Tropez",
+  "Saint-Barth",
+  "Saint-Cyr-sur-Mer",
+  "Vieux-Port",
+  "Tignes",
+  "Megève",
+  "Chamonix",
+  "Monaco",
+  "Ibiza",
+  "Lisbonne",
+  "Strasbourg",
+];
 
 const SIGLES = [
   "LTV",
@@ -123,15 +168,4 @@ const JARGON_FR = [
   "exclusivité",
 ];
 
-export const VOCABULARY: string[] = ["Mosaic", ...BANKS, ...SIGLES, ...JARGON_EN, ...JARGON_FR];
-
-/** The fixed jargon, then the names from Notion, once each. */
-export function vocabularyFor(names: string[] = []): string[] {
-  const seen = new Set<string>();
-  return [...VOCABULARY, ...names].filter((term) => {
-    const key = term.trim().toLowerCase();
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
+export const VOCABULARY: string[] = [...INSTITUTIONS, ...PLACES, ...SIGLES, ...JARGON_EN, ...JARGON_FR];
