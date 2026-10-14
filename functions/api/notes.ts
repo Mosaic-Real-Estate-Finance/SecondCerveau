@@ -10,7 +10,7 @@ import {
   SOURCE,
   type Handler,
 } from "../_lib/notion.js";
-import { contactProperty, defaultTemplateId } from "../_lib/notes-db.js";
+import { contactProperty, noteTemplateId } from "../_lib/notes-db.js";
 import { exclusive } from "../_lib/redis.js";
 import { richText } from "../_lib/thread.js";
 
@@ -106,7 +106,7 @@ export const onRequestPost: Handler = async ({ request, env }) => {
         };
       }
 
-      const templateId = await defaultTemplateId(env, sourceId);
+      const templateId = await noteTemplateId(env, sourceId);
       const page = await notion<{ id: string; url: string }>(env, "/pages", {
         method: "POST",
         body: {
