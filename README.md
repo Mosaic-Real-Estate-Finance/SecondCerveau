@@ -73,7 +73,8 @@ Dans l'app installée (iOS 16.4 et plus), « Recevoir les notifications » dans 
 | `src/lib/use-recorder.ts` | MediaRecorder + AnalyserNode, sauvegarde partielle toutes les 5 s, mise en pause quand le lien ou l'onglet tombe |
 | `src/lib/audio-capture.ts` | Le PCM 16 kHz pris en direct sur le graphe audio, en flux continu |
 | `src/lib/soniox.ts` | Le WebSocket Soniox : configuration, audio, tokens, tampon des dernières secondes et reconnexion |
-| `src/lib/vocabulary.ts` | Les termes métier envoyés comme contexte à chaque flux |
+| `src/lib/vocabulary.ts` | Le jargon métier (sigles, termes anglais et français) envoyé comme contexte à chaque flux |
+| `functions/_lib/vocabulary.ts` | Les noms tirés de Notion (contacts, sociétés, équipe, sujets des notes), joints à la clé de dictée |
 | `src/lib/notes.ts` | Cache IndexedDB : l'audio y reste jusqu'à confirmation Notion |
 | `src/lib/pipeline.ts` | Reprise au lancement, finalisation du flux ou retranscription de l'enregistrement, envoi, wake lock |
 | `functions/api/auth.ts` | Connexion, et `stt-token` : la clé Soniox temporaire, réservée à un utilisateur connecté |
@@ -153,9 +154,15 @@ la clé dans le premier message est dépréciée chez Soniox.
 **Le son est pris sur le graphe audio**, à côté de l'enregistrement mp4 qui,
 lui, est gardé. `audio-capture.ts` en tire du PCM 16 kHz mono, rééchantillonné
 par quarts de seconde, et `soniox.ts` l'envoie en continu. Le flux est
-configuré en français (`language_hints`) avec le glossaire de
-`vocabulary.ts` comme contexte : les noms propres et le jargon sont ce qu'un
-modèle généraliste rate, et quelques centaines de termes ne coûtent rien.
+configuré en français (`language_hints`) avec un vocabulaire comme contexte :
+les noms propres et le jargon sont ce qu'un modèle généraliste rate, et
+quelques centaines de termes ne coûtent rien. Le jargon du métier est dans
+`src/lib/vocabulary.ts`. Les noms — contacts, sociétés, membres de l'espace
+Notion, noms qui reviennent dans les sujets des notes — sont lus dans Notion
+par le serveur et joints à la clé de dictée : ils suivent la base sans jamais
+être écrits dans le code. Ils sont gardés dans Redis et relus toutes les six
+heures, après la réponse : une dictée n'attend jamais Notion, et démarre avec
+le seul jargon si la liste n'existe pas encore.
 
 **Deux sortes de mots reviennent.** Les non-finaux sont une hypothèse qui
 peut encore changer ; les finaux ne sont envoyés qu'une fois et ne bougent

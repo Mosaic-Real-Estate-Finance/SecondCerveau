@@ -1,6 +1,6 @@
 import { ApiError, fetchSttToken } from "./api";
 import { signalOutage, type OutageReason } from "./outage";
-import { VOCABULARY } from "./vocabulary";
+import { vocabularyFor } from "./vocabulary";
 
 // One dictation, streamed to Soniox while it is spoken.
 // https://soniox.com/docs/stt/rt/real-time-transcription
@@ -317,7 +317,7 @@ export function openStream({
           language_hints: ["fr"],
           context: {
             general: [{ key: "domain", value: "Financement immobilier" }],
-            terms: VOCABULARY,
+            terms: vocabularyFor(token.terms),
           },
         }),
       );
