@@ -17,6 +17,7 @@ import {
   validEmail,
 } from "../_lib/session.js";
 import { findUser } from "../_lib/users.js";
+import { onRequestPost as track } from "./track.js";
 
 // /api/auth/code, /api/auth/verify, /api/auth/logout — one function for the
 // three (research E-1: the Hobby plan stops at twelve). contracts/auth.md.
@@ -256,6 +257,10 @@ export const onRequestPost: Handler = async ({ request, env }) => {
       return sttAlert(request, env);
     case "stt-resolved":
       return sttResolved(request, env);
+    // Usage events (./track.ts). Here rather than in a function of its own:
+    // the Hobby plan deploys twelve functions at most, and all are taken.
+    case "track":
+      return track({ request, env });
     default:
       return json({ error: "Route inconnue" }, 404);
   }
