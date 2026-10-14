@@ -128,14 +128,7 @@ export const redeemHandoff = (token: string) =>
 // ---- Real-time transcription --------------------------------------------------
 
 /** Everything needed to open one Soniox stream. The key opens one, once. */
-export type SttToken = {
-  apiKey: string;
-  expiresAt: string | null;
-  wsUrl: string;
-  model: string;
-  /** Names from Notion to expect: contacts, companies, the team, the subjects of the notes. */
-  terms?: string[];
-};
+export type SttToken = { apiKey: string; expiresAt: string | null; wsUrl: string; model: string };
 
 export const fetchSttToken = () => call<SttToken>("/api/auth/stt-token", { method: "POST", body: "{}" });
 
