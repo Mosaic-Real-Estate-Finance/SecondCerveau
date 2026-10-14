@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PrimaryButton, TextButton } from "@/components/screen";
 import { SheetPages } from "@/components/sheet";
 import { cssVar } from "@/lib/theme";
+import { safeAreaLog } from "@/lib/safe-area";
 import { cn } from "@/lib/utils";
 import { Shimmer } from "@/components/shimmer";
 import { useToast } from "@/components/toast";
@@ -32,6 +33,8 @@ export function SettingsScreen({
 }) {
   const toast = useToast();
   const [view, setView] = useState<"main" | "excluded" | "phone">(initialView);
+  // Five taps on the title: what the screen measured at launch (safe-area.ts).
+  const [titleTaps, setTitleTaps] = useState(0);
   useEffect(() => {
     if (initialView === "excluded") onExpand(true);
     // At the opening only.
@@ -104,7 +107,9 @@ export function SettingsScreen({
         <div>
           {/* A sheet's header: the title, and the way out on the right. */}
           <header className="mb-4 flex items-center justify-between">
-            <h1 className="font-serif text-2xl">Réglages</h1>
+            <h1 className="font-serif text-2xl" onClick={() => setTitleTaps((n) => n + 1)}>
+              Réglages
+            </h1>
             <TextButton onClick={onBack} className="-mr-3">
               OK
             </TextButton>
@@ -194,6 +199,8 @@ export function SettingsScreen({
       <PrimaryButton onClick={() => void signOut()} disabled={busy} className="mt-6">
         Se déconnecter
       </PrimaryButton>
+
+      {titleTaps >= 5 && <ScreenDiagnosis />}
     </div>
       )}
     </SheetPages>
@@ -372,5 +379,27 @@ function PhoneHandoff({ onBack, onUnauthorized }: { onBack: () => void; onUnauth
           : "Il ouvre votre compte : ne le partagez pas."}
       </p>
     </div>
+  );
+}
+
+// Hidden, for a layout that went wrong on a phone that cannot be watched from
+// a computer: the launch's measurements, ready to screenshot.
+function ScreenDiagnosis() {
+  const log = safeAreaLog();
+  return (
+    <section className="mt-6 rounded-2xl bg-white-smoke p-4">
+      <h2 className="text-base font-medium">Diagnostic d'affichage</h2>
+      <p className="mt-1 text-xs text-[color:var(--muted)]">
+        {log ? `Lancement du ${new Date(log.launch).toLocaleString("fr-FR")}` : "Aucune mesure (app non installée ou pas un iPhone)."}
+      </p>
+      {log && (
+        <pre className="mt-3 overflow-x-auto text-[11px] leading-snug">
+          {"ms     page écran vue  env barre appliqué\n" +
+            log.samples
+              .map((x) => [x.at, x.inner, x.screen, x.viewport, x.reported, x.bar, x.applied].map((v) => String(v).padEnd(5)).join(" "))
+              .join("\n")}
+        </pre>
+      )}
+    </section>
   );
 }
