@@ -97,6 +97,15 @@ export const onRequestPost: Handler = async ({ request, env }) => {
   const body = (await request.json().catch(() => ({}))) as { action?: string; user?: string };
   const action = ACTIONS.find((known) => known === body.action);
   if (!action || !env.NOTION_TOKEN) return accepted();
-  later("track", record(env, request, action, body.user));
+  // Notion's own answer is logged when it refuses: an event holds no meeting
+  // content nor any address, and without it a wrong base or column cannot
+  // be told from a network blip.
+  later(
+    "track",
+    record(env, request, action, body.user).catch((error: unknown) => {
+      const status = (error as { status?: number }).status ?? "";
+      console.error(`[track] Notion ${status} : ${(error as Error).message ?? error}`.slice(0, 300));
+    }),
+  );
   return accepted();
 };
