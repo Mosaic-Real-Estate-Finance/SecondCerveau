@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { VoiceBeam } from "voice-glow";
 import { Icon } from "@/components/icon";
@@ -36,30 +36,8 @@ const BEAM_DENSITY = {
   idle: 0.26,
 } as const;
 
-// The microphone is fixed, so it can grow into the recording panel in place;
-// its centre is computed rather than left to the middle of the window. On a
-// short window — a desktop browser, a phone in landscape — the middle of the
-// window is inside the greeting, and the button covered it.
-const BUTTON = 96;
-/** The open panel's height, as in index.css (.record-morph[data-open]). */
-const PANEL = 236;
-const GAP = 16;
-
-/**
- * Where the button's centre goes: the middle of the screen, as long as that
- * keeps it clear of the greeting and leaves the open panel room to fit.
- * The middle of the space under the greeting put it far down once that space
- * ran to the bottom of the screen.
- */
-function placeButton(greeting: HTMLElement | null): number {
-  const height = window.innerHeight;
-  const top = greeting ? greeting.getBoundingClientRect().bottom + greeting.closest(".t-page")!.scrollTop : 0;
-  const highest = top + GAP + BUTTON / 2;
-  const lowest = height - GAP - PANEL / 2;
-  // No room at all: under the greeting, whatever is below. The greeting is
-  // what the button must not hide.
-  return Math.max(highest, Math.min(height / 2, lowest));
-}
+/** The panel's opening, as in index.css (.record-panel). */
+const OPEN_MS = 420;
 
 const PROMPTS = ["Qu'est-ce qu'on note aujourd'hui ?", "Un point à enregistrer ?", "Une info à enregistrer ?"];
 
@@ -92,8 +70,6 @@ export function RecordScreen({
   // not interrupted by this — it holds and resumes on its own (use-recorder).
   const connectivity = useConnectivity(active);
 
-  const greetingRef = useRef<HTMLDivElement>(null);
-  const [centre, setCentre] = useState<number | null>(null);
   const blocked = !open && !recording && connectivity.status !== "online" && connectivity.status !== "checking";
   // While a bad link is being checked again, the screen stays on what it said.
   const [shownBlocked, setShownBlocked] = useState(false);
@@ -113,30 +89,15 @@ export function RecordScreen({
   // Pointer down, not click: the recording starts as the finger lands, about
   // a tenth of a second before the click would fire. The click stays for
   // keyboards and screen readers.
-  // Measured after layout and again whenever anything it depends on may have
-  // moved: the window, the greeting, the visible viewport (Safari's bars),
-  // the fonts (Lora arriving after the first paint takes the greeting from
-  // two lines to three — measured before, the button sat on the third),
-  // a return to the page or to this screen.
-  useLayoutEffect(() => {
-    const place = () => setCentre(placeButton(greetingRef.current));
-    place();
-    const observer = new ResizeObserver(place);
-    if (greetingRef.current) observer.observe(greetingRef.current);
-    observer.observe(document.documentElement);
-    window.addEventListener("resize", place);
-    window.addEventListener("pageshow", place);
-    window.visualViewport?.addEventListener("resize", place);
-    document.fonts?.addEventListener("loadingdone", place);
-    void document.fonts?.ready.then(place);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", place);
-      window.removeEventListener("pageshow", place);
-      window.visualViewport?.removeEventListener("resize", place);
-      document.fonts?.removeEventListener("loadingdone", place);
-    };
-  }, [offline, active]);
+  // The glow comes once the panel is open: mounting it is heavy (blurred
+  // layers the size of the screen), and done mid opening it took frames from
+  // the panel's own animation.
+  const [beamOn, setBeamOn] = useState(false);
+  useEffect(() => {
+    if (!active || recorder.state !== "recording") return setBeamOn(false);
+    const timer = window.setTimeout(() => setBeamOn(true), OPEN_MS);
+    return () => window.clearTimeout(timer);
+  }, [active, recorder.state]);
 
   const openPanel = () => {
     if (open || offline) return;
@@ -224,7 +185,7 @@ export function RecordScreen({
         <>
           {/* On a short window the logo goes first, then the type tightens:
               the greeting and the button must both fit above the fold. */}
-          <div ref={greetingRef} className="flex flex-col items-center pt-[5vh] text-center">
+          <div className="flex flex-col items-center pt-[5vh] text-center">
             <Symbol className="h-16 text-midnight-blue [@media(max-height:640px)]:hidden" />
             <h1 className="mt-8 text-balance font-serif text-2xl [@media(max-height:640px)]:mt-0 [@media(max-height:520px)]:text-xl">
               Bonjour {firstName},
@@ -232,7 +193,60 @@ export function RecordScreen({
               {prompt}
             </h1>
           </div>
-          <div className="flex-1" aria-hidden />
+          {/* The rest of the screen, in the flow of the page, under the
+              greeting: the microphone in its middle, the panel opening over
+              it in place. Nothing is measured or positioned by script, so
+              nothing can put the button over the greeting — not fonts
+              arriving late, nor Safari's bars, nor a short window (the page
+              scrolls instead). */}
+          <div className="record-stage" data-open={open} data-quiet={quiet || undefined}>
+            <div className="record-anchor">
+              <div className="record-panel flex flex-col justify-between p-4" aria-hidden={!open} inert={!open}>
+                <div className="flex items-center justify-between">
+                  <span className="text-base text-on-accent" aria-live="polite">
+                    {recorder.state === "error"
+                      ? "Enregistrement impossible"
+                      : recorder.unavailable
+                        ? "Transcription indisponible"
+                        : recorder.hold
+                          ? "En pause, connexion perdue"
+                          : recorder.paused
+                            ? "En pause"
+                            : recorder.state === "recording"
+                              ? "Enregistrement"
+                              : "Ouverture du micro"}
+                  </span>
+                  <TextButton onClick={cancel} className="-mr-3 text-on-accent" tabIndex={open ? 0 : -1}>
+                    {recorder.state === "error" ? "Fermer" : "Annuler"}
+                  </TextButton>
+                </div>
+                {recorder.state === "error" ? (
+                  <p className="text-base text-on-accent">{recorder.error}</p>
+                ) : (
+                  <LiveText noteId={recorder.noteId} hold={recorder.hold} unavailable={recorder.unavailable} />
+                )}
+                {recorder.state !== "error" && (
+                  <LiveRecorder
+                    recording={recorder.state === "recording"}
+                    paused={recorder.paused}
+                    onTogglePause={recorder.togglePause}
+                    onFinish={finish}
+                  />
+                )}
+              </div>
+              <button
+                type="button"
+                className="record-mic"
+                aria-expanded={open}
+                aria-label="Dicter une note"
+                onPointerDown={openPanel}
+                onClick={openPanel}
+                tabIndex={open ? -1 : 0}
+              >
+                <Icon name="microphone" className="h-9" />
+              </button>
+            </div>
+          </div>
         </>
       )}
 
@@ -241,61 +255,8 @@ export function RecordScreen({
       {/* `active` as well as the state: the glow is rendered into <body>, so
           this screen leaving no longer takes it with it — opening a pending
           note mid dictation would have left it burning over the next page. */}
-      {active && recorder.state === "recording" && <Beam stream={recorder.stream} paused={recorder.paused} />}
+      {beamOn && <Beam stream={recorder.stream} paused={recorder.paused} />}
 
-      {/* Centred on the screen, growing into the recording panel. */}
-      <div
-        className="pointer-events-none fixed inset-x-0 z-20 mx-auto flex max-w-[480px] items-center justify-center px-4"
-        style={{ top: (centre ?? window.innerHeight / 2) - PANEL, height: PANEL * 2 }}
-        hidden={offline}
-      >
-        <div className="record-morph t-morph pointer-events-auto" data-open={open} data-quiet={quiet || undefined}>
-          <div className="t-morph-menu flex flex-col justify-between p-4" aria-hidden={!open}>
-            <div className="flex items-center justify-between">
-              <span className="text-base text-on-accent" aria-live="polite">
-                {recorder.state === "error"
-                  ? "Enregistrement impossible"
-                  : recorder.unavailable
-                    ? "Transcription indisponible"
-                    : recorder.hold
-                      ? "En pause, connexion perdue"
-                      : recorder.paused
-                        ? "En pause"
-                        : recorder.state === "recording"
-                          ? "Enregistrement"
-                          : "Ouverture du micro"}
-              </span>
-              <TextButton onClick={cancel} className="-mr-3 text-on-accent" tabIndex={open ? 0 : -1}>
-                {recorder.state === "error" ? "Fermer" : "Annuler"}
-              </TextButton>
-            </div>
-            {recorder.state === "error" ? (
-              <p className="text-base text-on-accent">{recorder.error}</p>
-            ) : (
-              <LiveText noteId={recorder.noteId} hold={recorder.hold} unavailable={recorder.unavailable} />
-            )}
-            {recorder.state !== "error" && (
-              <LiveRecorder
-                recording={recorder.state === "recording"}
-                paused={recorder.paused}
-                onTogglePause={recorder.togglePause}
-                onFinish={finish}
-              />
-            )}
-          </div>
-          <button
-            type="button"
-            className="t-morph-plus"
-            aria-expanded={open}
-            aria-label="Dicter une note"
-            onPointerDown={openPanel}
-            onClick={openPanel}
-            tabIndex={open ? -1 : 0}
-          >
-            <Icon name="microphone" className="h-9" />
-          </button>
-        </div>
-      </div>
     </Screen>
   );
 }

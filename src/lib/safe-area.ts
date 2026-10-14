@@ -32,8 +32,22 @@ function apply() {
   root.setProperty("--safe-top", `${statusBar()}px`);
 }
 
+// Evaluated whenever the layout may have changed, not once: at launch iOS
+// settles the page under or below the status bar, and reports the inset,
+// over the first moments — a single check made too early left the
+// settings and the bell under the clock for the whole session.
 export function guardSafeTop() {
   if (!isIOS() || !isStandalone()) return;
+  let frame = 0;
+  const schedule = () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(apply);
+  };
   apply();
-  window.addEventListener("orientationchange", () => setTimeout(apply, 300));
+  for (const ms of [100, 400, 1000, 2500]) setTimeout(schedule, ms);
+  window.addEventListener("resize", schedule);
+  window.visualViewport?.addEventListener("resize", schedule);
+  window.addEventListener("orientationchange", () => setTimeout(schedule, 300));
+  window.addEventListener("pageshow", schedule);
+  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && schedule());
 }

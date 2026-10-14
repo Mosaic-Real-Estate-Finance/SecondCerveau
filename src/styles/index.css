@@ -475,36 +475,90 @@ a {
   -webkit-overflow-scrolling: touch;
 }
 
-/* ---- Record morph ---------------------------------------------------
-   Real sizes for the snippet's placeholder 40px / 183 x 172 box: a 96px
-   microphone, centred, that opens into a panel as wide as the column. The
-   button is pinned to the bottom centre instead of a corner, so it stays
-   put while the box grows to both sides. */
-.record-morph.t-morph {
+/* ---- Microphone and recording panel ---------------------------------
+   The stage is the rest of the screen under the greeting, in the flow of
+   the page, and the panel opens over the microphone in place. The anchor
+   is as tall as the open panel, so the panel can never reach up into the
+   greeting either.
+
+   The panel is laid out at its full size from the start, closed by a
+   transform: opening is transform and opacity only, which the browser runs
+   off the page's main thread. Starting the microphone holds that thread —
+   for seconds, sometimes, on an iPhone — and a panel that grew by width and
+   height froze mid way, its text spilling out of the 96px circle. Its
+   content only ever shows with the panel itself. */
+.record-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+/* The free space shared a quarter above, three quarters below: the
+   microphone sits high, near the middle of the screen, on a tall phone,
+   and the stage asks for no more than the panel's height on a short one. */
+.record-stage::before,
+.record-stage::after {
+  content: "";
+  flex: 1 1 16px;
+  min-height: 16px;
+}
+.record-stage::after {
+  flex-grow: 3;
+}
+.record-anchor {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 236px;
+}
+.record-mic {
   width: 96px;
   height: 96px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
   background: var(--color-navy);
   color: var(--color-on-accent);
-  --morph-r-closed: 48px;
-  --morph-r-open: 24px;
+  transition:
+    transform 260ms var(--morph-close-ease),
+    opacity 200ms var(--morph-close-ease);
 }
-.record-morph.t-morph[data-open="true"] {
+.record-panel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
   width: min(calc(100vw - 32px), 448px);
   /* Room for three or four lines of live text between the status and the pill. */
   height: 236px;
+  border-radius: 24px;
+  background: var(--color-navy);
+  color: var(--color-on-accent);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.3);
+  pointer-events: none;
+  will-change: transform, opacity;
+  transition:
+    transform 260ms var(--morph-close-ease),
+    opacity 180ms var(--morph-close-ease);
 }
-.record-morph .t-morph-plus {
-  inset: auto auto 0 calc(50% - 48px);
-  width: 96px;
-  height: 96px;
-  color: inherit;
+.record-stage[data-open="true"] .record-panel {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: auto;
+  transition:
+    transform 420ms var(--morph-ease),
+    opacity 160ms ease-out;
+}
+.record-stage[data-open="true"] .record-mic {
+  opacity: 0;
+  transform: scale(1.25);
+  pointer-events: none;
 }
 /* Reset behind a screen that has already slid away: there is nothing to
    animate for, and its clock would run against the page transition. */
-.t-morph[data-quiet],
-.t-morph[data-quiet] .t-morph-plus,
-.t-morph[data-quiet] .t-morph-plus svg,
-.t-morph[data-quiet] .t-morph-menu {
+.record-stage[data-quiet] .record-panel,
+.record-stage[data-quiet] .record-mic {
   transition: none !important;
 }
 
@@ -610,7 +664,8 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .record-morph.t-morph {
+  .record-panel,
+  .record-mic {
     transition: none !important;
   }
 }
