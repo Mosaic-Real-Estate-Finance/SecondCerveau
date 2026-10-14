@@ -259,14 +259,14 @@ function AppStep({ active, load }: { active: boolean; load: boolean }) {
   return (
     <div>
       <Heading id="application" eyebrow={<Eyebrow>Étape 1 sur 2</Eyebrow>} title="L'application sur votre téléphone" />
-      <div className={cn("mt-6 grid items-start gap-6", desktop && "lg:grid-cols-[minmax(0,1fr)_280px]")}>
+      <div className={cn("mt-6 grid items-start gap-6", desktop && "lg:grid-cols-[minmax(0,1fr)_300px]")}>
         <Fit video={VIDEO_APP} reserve={320}>
           <Video video={VIDEO_APP} active={active} load={load} />
         </Fit>
         {desktop ? (
           <div className="flex flex-col items-center rounded-3xl bg-white-smoke p-5 text-center">
             {/* Dark on light in both themes: scanned inverted, a code fails on some cameras. */}
-            <div className="w-full max-w-[200px] rounded-2xl bg-[color:var(--qr-paper)] p-4 shadow-[0_0_0_1px_var(--hairline)]">
+            <div className="w-full max-w-[260px] rounded-2xl bg-[color:var(--qr-paper)] p-3 shadow-[0_0_0_1px_var(--hairline)]">
               <LogoQr value={APP_URL} className="w-full" />
             </div>
             <p className="mt-4 text-base font-medium">Scannez ce QR code pour accéder à l'app depuis votre mobile</p>
