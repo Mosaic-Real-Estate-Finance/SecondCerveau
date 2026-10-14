@@ -24,4 +24,16 @@ export const MANIFEST = {
     { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
     { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
   ],
+  // The richer install dialog of Chrome on Android: phone screenshots
+  // ("narrow"), all of one size. Captured from the app's own screens with
+  // made-up data: `npm run screenshots` (scripts/store-screenshots.mjs).
+  screenshots: [
+    {
+      src: "/screenshots/dictee.png",
+      sizes: "1170x2532",
+      type: "image/png",
+      form_factor: "narrow",
+      label: "Une dictée en cours : le texte s'écrit pendant que vous parlez",
+    },
+  ],
 } as const;
