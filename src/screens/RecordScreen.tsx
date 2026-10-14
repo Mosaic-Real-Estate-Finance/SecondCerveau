@@ -113,19 +113,30 @@ export function RecordScreen({
   // Pointer down, not click: the recording starts as the finger lands, about
   // a tenth of a second before the click would fire. The click stays for
   // keyboards and screen readers.
-  // Measured after layout and again whenever the window, the greeting or the
-  // list changes size.
+  // Measured after layout and again whenever anything it depends on may have
+  // moved: the window, the greeting, the visible viewport (Safari's bars),
+  // the fonts (Lora arriving after the first paint takes the greeting from
+  // two lines to three — measured before, the button sat on the third),
+  // a return to the page or to this screen.
   useLayoutEffect(() => {
     const place = () => setCentre(placeButton(greetingRef.current));
     place();
     const observer = new ResizeObserver(place);
     if (greetingRef.current) observer.observe(greetingRef.current);
+    observer.observe(document.documentElement);
     window.addEventListener("resize", place);
+    window.addEventListener("pageshow", place);
+    window.visualViewport?.addEventListener("resize", place);
+    document.fonts?.addEventListener("loadingdone", place);
+    void document.fonts?.ready.then(place);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", place);
+      window.removeEventListener("pageshow", place);
+      window.visualViewport?.removeEventListener("resize", place);
+      document.fonts?.removeEventListener("loadingdone", place);
     };
-  }, [offline]);
+  }, [offline, active]);
 
   const openPanel = () => {
     if (open || offline) return;

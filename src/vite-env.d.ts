@@ -16,6 +16,8 @@ interface ImportMetaEnv {
   readonly VITE_NOTION_NOTES_DB?: string;
   /** Web Push application server key. Public by design. */
   readonly VITE_VAPID_PUBLIC_KEY?: string;
+  /** Days the install guide stays away once closed or refused (14 if unset). */
+  readonly VITE_INSTALL_SNOOZE_DAYS?: string;
 }
 
 interface ImportMeta {

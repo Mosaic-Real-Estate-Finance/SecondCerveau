@@ -40,23 +40,63 @@ export function detectPlatform(): Platform {
   return "desktop";
 }
 
-// Chromium fires this instead of offering the browser's own bar; keeping the
-// event lets the app show the native dialog from its own button. Captured at
-// module load because the event fires early, often before React mounts.
-type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
+// ---- Installing from the app's own button -----------------------------------
+// Chromium (Chrome, Edge, Samsung Internet on Android) fires
+// `beforeinstallprompt` once the app meets its install criteria. The event is
+// kept, its mini-infobar suppressed, and the native dialog is shown later
+// from the app's own button: `prompt()` only works inside a user gesture, and
+// only once per event. iOS has no such API: Safari is the Share sheet.
+//
+// Listened to at module load, before React mounts: the event often fires
+// first. Nothing here touches `window` unless it exists.
+
+type InstallEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
 
 let deferred: InstallEvent | null = null;
 const listeners = new Set<() => void>();
+const notify = () => listeners.forEach((listener) => listener());
+
+const INSTALLED_KEY = "mosaic-installed";
+const DISMISSED_KEY = "mosaic-install-dismissed";
+
+/**
+ * Days the install guide stays away once closed or refused. Configurable at
+ * build time with VITE_INSTALL_SNOOZE_DAYS; 14 by default.
+ */
+export const INSTALL_SNOOZE_DAYS = Number(import.meta.env.VITE_INSTALL_SNOOZE_DAYS) || 14;
+
+// Storage may be refused (private browsing, blocked site data): every access
+// is guarded, and a failure only means the guide may show again.
+const store = {
+  get(key: string) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set(key: string, value: string) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Nothing to remember it with; not worth blocking on.
+    }
+  },
+};
 
 if (typeof window !== "undefined") {
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     deferred = event as InstallEvent;
-    listeners.forEach((listener) => listener());
+    notify();
   });
   window.addEventListener("appinstalled", () => {
     deferred = null;
-    listeners.forEach((listener) => listener());
+    store.set(INSTALLED_KEY, "1");
+    notify();
   });
 }
 
@@ -64,38 +104,33 @@ export const canPromptInstall = () => deferred !== null;
 
 export function subscribeInstall(listener: () => void) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => void listeners.delete(listener);
 }
 
-// Resolves true when the app was installed through the native dialog.
-export async function promptInstall(): Promise<boolean> {
-  if (!deferred) return false;
+export type InstallOutcome = "accepted" | "dismissed" | "unavailable";
+
+/** Shows the native install dialog. Call it from a click, never on its own. */
+export async function promptInstall(): Promise<InstallOutcome> {
+  if (!deferred) return "unavailable";
+  // Good for one prompt only: dropped before it is used.
   const event = deferred;
   deferred = null;
-  listeners.forEach((listener) => listener());
+  notify();
   await event.prompt();
   const { outcome } = await event.userChoice;
-  return outcome === "accepted";
+  return outcome;
 }
 
-const DISMISSED_KEY = "mosaic-install-dismissed";
-
 export const installPrompt = {
+  /** Installed from this browser (appinstalled), even if not running so now. */
+  installed: () => store.get(INSTALLED_KEY) === "1",
+  /** Closed or refused less than INSTALL_SNOOZE_DAYS ago. */
   dismissed(): boolean {
-    try {
-      return localStorage.getItem(DISMISSED_KEY) === "1";
-    } catch {
-      // Storage blocked (private mode): the invitation shows again later.
-      return false;
-    }
+    const at = Number(store.get(DISMISSED_KEY));
+    // "1", the old permanent flag, reads as a dismissal in 1970: expired.
+    return at > 0 && Date.now() - at < INSTALL_SNOOZE_DAYS * 86_400_000;
   },
-  dismiss() {
-    try {
-      localStorage.setItem(DISMISSED_KEY, "1");
-    } catch {
-      // Nothing to remember it with; not worth blocking on.
-    }
-  },
+  dismiss: () => store.set(DISMISSED_KEY, String(Date.now())),
 };
 
 // ---- Saying which device this is -------------------------------------------

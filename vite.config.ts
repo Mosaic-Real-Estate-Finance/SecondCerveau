@@ -245,7 +245,13 @@ export default defineConfig(async ({ mode }) => {
           // The dictation's service worker has scope "/", so without /outlook
           // on this list it answers a taskpane navigation with the dictation
           // shell — and the add-in shows the wrong application entirely.
-          navigateFallbackDenylist: [/^\/api\//, /^\/outlook/, /^\/maquette/, /^\/welcome/],
+          //
+          // And never for an address that names a file. The install guide
+          // shows /pwa-install-animation.html in an iframe — a navigation, to
+          // this worker — and was handed the app shell instead: the app then
+          // ran inside its own guide, which opened its guide, and so on, each
+          // sheet stacked in the one before.
+          navigateFallbackDenylist: [/^\/api\//, /^\/outlook/, /^\/maquette/, /^\/welcome/, /^\/[^?#]*\.[a-z0-9]+(?:[?#]|$)/i],
           // A cold launch of the installed app on a poor connection would
           // otherwise wait for the network with no time limit, which on iOS
           // shows a white screen for up to a minute. Past three seconds the
