@@ -1,6 +1,7 @@
 import { StrictMode, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import type { Options as ConfettiOptions } from "canvas-confetti";
 import "@/styles/index.css";
 import "./welcome.css";
 import { Symbol } from "@/components/logo";
@@ -100,7 +101,7 @@ function Welcome() {
     <Intro key="0" />,
     <AppStep key="1" active={step === 1} load={reached >= 0} />,
     <OutlookStep key="2" active={step === 2} load={reached >= 1} />,
-    <BookingStep key="3" />,
+    <BookingStep key="3" active={step === 3} />,
   ];
 
   return (
@@ -291,28 +292,42 @@ function OutlookStep({ active, load }: { active: boolean; load: boolean }) {
   );
 }
 
-function BookingStep() {
+function BookingStep({ active }: { active: boolean }) {
+  useEffect(() => {
+    if (active) void celebrate();
+  }, [active]);
+
+  const title = (
+    <>
+      <h1 id="titre-rendez-vous" className="font-serif text-2xl sm:text-[36px] sm:leading-[1.15]">
+        C'est terminé&#8239;!
+      </h1>
+      <p className="mt-3 max-w-[460px] text-base text-[color:var(--muted)]">
+        Vous pouvez dès à présent utiliser les solutions.
+        <br />
+        Besoin d'aide ou des questions&#8239;? Réservez un appel
+      </p>
+    </>
+  );
+
   return (
     <div className="flex flex-1 flex-col">
-      <Heading id="rendez-vous" title="Prenons rendez-vous">
-        <p>Choisissez un créneau : nous vérifierons ensemble que tout fonctionne et répondrons à vos questions.</p>
-      </Heading>
       {BOOKING_EMBED ? (
-        <div className="mt-8 overflow-hidden rounded-3xl bg-white shadow-[0_0_0_1px_var(--hairline)]">
-          <iframe src={BOOKING_EMBED} title="Prendre rendez-vous" className="block h-[720px] w-full" loading="lazy" />
-        </div>
+        <>
+          {title}
+          <div className="mt-8 overflow-hidden rounded-3xl bg-white shadow-[0_0_0_1px_var(--hairline)]">
+            <iframe src={BOOKING_EMBED} title="Prendre rendez-vous" className="block h-[720px] w-full" loading="lazy" />
+          </div>
+        </>
       ) : (
-        <div className="mt-8 flex flex-col items-center rounded-3xl bg-white-smoke px-6 py-12 text-center sm:py-16">
-          <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-navy text-on-accent">
+        <div className="flex flex-col items-center rounded-3xl bg-white-smoke px-6 py-12 text-center sm:py-16">
+          <span className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-navy text-on-accent">
             <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <rect x="3.5" y="5" width="17" height="15.5" rx="3" />
               <path d="M3.5 10h17M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2" />
             </svg>
           </span>
-          <p className="mt-6 font-serif text-xl">Notre agenda</p>
-          <p className="mt-2 max-w-[420px] text-base text-[color:var(--muted)]">
-            Les créneaux disponibles s'ouvrent dans un nouvel onglet. La réservation prend moins d'une minute.
-          </p>
+          {title}
           <a
             href={BOOKING_URL}
             target="_blank"
@@ -326,6 +341,36 @@ function BookingStep() {
       )}
     </div>
   );
+}
+
+// The finish line: three bursts of shapes from the centre, weightless, that
+// fade where they stop. The library is loaded only when the step is reached,
+// and it stays still for anyone who asked for less motion.
+async function celebrate() {
+  const { default: confetti } = await import("canvas-confetti");
+  const scalar = 2;
+  const triangle = confetti.shapeFromPath({ path: "M0 10 L5 0 L10 10z" });
+  const square = confetti.shapeFromPath({ path: "M0 0 L10 0 L10 10 L0 10 Z" });
+  const coin = confetti.shapeFromPath({ path: "M5 0 A5 5 0 1 0 5 10 A5 5 0 1 0 5 0 Z" });
+  const tree = confetti.shapeFromPath({ path: "M5 0 L10 10 L0 10 Z" });
+  const defaults: ConfettiOptions = {
+    spread: 360,
+    ticks: 60,
+    gravity: 0,
+    decay: 0.96,
+    startVelocity: 20,
+    shapes: [triangle, square, coin, tree],
+    scalar,
+    disableForReducedMotion: true,
+  };
+  const shoot = () => {
+    void confetti({ ...defaults, particleCount: 30 });
+    void confetti({ ...defaults, particleCount: 5 });
+    void confetti({ ...defaults, particleCount: 15, scalar: scalar / 2, shapes: ["circle"] });
+  };
+  setTimeout(shoot, 0);
+  setTimeout(shoot, 100);
+  setTimeout(shoot, 200);
 }
 
 /**
