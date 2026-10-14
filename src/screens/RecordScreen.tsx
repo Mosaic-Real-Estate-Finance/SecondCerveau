@@ -7,6 +7,7 @@ import { Screen, TextButton } from "@/components/screen";
 import { useToast } from "@/components/toast";
 import { VoiceRecorder } from "@/components/voice-recorder";
 import { useConnectivity, type Connectivity } from "@/lib/connectivity";
+import { haptic, hapticOnRelease } from "@/lib/haptics";
 import { storageIsDurable, useNote, useNotes, type Note } from "@/lib/notes";
 import { pageSlideMs } from "@/lib/schedule";
 import { cssVar, useColorScheme } from "@/lib/theme";
@@ -105,7 +106,19 @@ export function RecordScreen({
     void recorder.start();
   };
 
+  // The press opens the panel at once; the tick comes as the finger lifts,
+  // the moment the browser counts as a gesture (a keyboard's click has no
+  // finger: it ticks right away). Felt once, and only when a recording can
+  // actually start.
+  const press = (event: React.PointerEvent | React.MouseEvent) => {
+    if (open || offline) return;
+    if (event.type === "pointerdown") hapticOnRelease();
+    else haptic();
+    openPanel();
+  };
+
   const finish = async () => {
+    haptic();
     // Saving no longer fails on its own — the note is held in memory and the
     // database is only the safety net under it — but reading the recording
     // out of the recorder still can. Without this the panel simply stayed
@@ -136,6 +149,7 @@ export function RecordScreen({
   };
 
   const cancel = async () => {
+    haptic();
     await recorder.cancel();
     setOpen(false);
   };
@@ -239,8 +253,8 @@ export function RecordScreen({
                 className="record-mic"
                 aria-expanded={open}
                 aria-label="Dicter une note"
-                onPointerDown={openPanel}
-                onClick={openPanel}
+                onPointerDown={press}
+                onClick={press}
                 tabIndex={open ? -1 : 0}
               >
                 <Icon name="microphone" className="h-9" />
