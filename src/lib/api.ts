@@ -1,3 +1,5 @@
+import { track } from "@/lib/track";
+
 // Client for the functions in /functions.
 //
 // Identity travels in an HttpOnly session cookie, opened with a code received
@@ -273,17 +275,19 @@ export const settleCall = (itemId: string, people: ({ email: string } & Exclude<
   call<{ item: ReviewItem } | Closed>("/api/readai/settle", {
     method: "POST",
     body: JSON.stringify({ itemId, people }),
-  });
+  }).then((result) => (track("Les notifications ont été approuvées"), result));
 
 export const decidePerson = (itemId: string, email: string, decision: DecideBody) =>
   call<{ item: ReviewItem } | Closed>("/api/readai/decide", {
     method: "POST",
     body: JSON.stringify({ itemId, email, ...decision }),
-  });
+  }).then((result) => (decision.action === "exclude" && track("Un utilisateur a été exclu"), result));
 
 /** Set aside; the addresses in `exclude` (« Toujours ignorer ») are not proposed again. */
 export const ignoreCall = (itemId: string, exclude: string[] = []) =>
-  call<Closed>("/api/readai/ignore", { method: "POST", body: JSON.stringify({ itemId, exclude }) });
+  call<Closed>("/api/readai/ignore", { method: "POST", body: JSON.stringify({ itemId, exclude }) }).then(
+    (result) => (exclude.forEach(() => track("Un utilisateur a été exclu")), result),
+  );
 
 export const retryCall = (itemId: string) =>
   call<Closed | { outcome: string }>("/api/readai/retry", { method: "POST", body: JSON.stringify({ itemId }) });

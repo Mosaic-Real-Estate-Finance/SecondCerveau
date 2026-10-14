@@ -5,6 +5,7 @@ import "./outlook.css";
 import { Panel } from "./Panel";
 import { selectEntraConfig } from "./auth";
 import { currentUser, ready } from "./office";
+import { track } from "@/lib/track";
 
 // The taskpane boots only once Office is ready: reading the open mail before
 // that returns nothing, and the panel would show an empty thread as if the
@@ -18,6 +19,7 @@ import { currentUser, ready } from "./office";
 // choice is made (./entra-config.ts).
 void ready().then((inOutlook) => {
   if (inOutlook) selectEntraConfig(currentUser());
+  if (inOutlook) track("Le panneau Outlook a été ouvert", currentUser() || undefined);
   const root = document.getElementById("root");
   if (root) createRoot(root).render(<Panel inOutlook={inOutlook} />);
 });
