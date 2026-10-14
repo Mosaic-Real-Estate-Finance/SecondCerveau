@@ -29,7 +29,7 @@ const panelBg = () => cssVar("--color-white").replace("#", "");
 
 // The two iOS glyphs the steps point at, from Apple's SF Symbols set:
 // square.and.arrow.up and plus.app, the exact shapes of the Safari toolbar.
-function ShareIcon({ className }: { className?: string }) {
+export function ShareIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 433.35 670.654"
@@ -43,7 +43,7 @@ function ShareIcon({ className }: { className?: string }) {
   );
 }
 
-function PlusAppIcon({ className }: { className?: string }) {
+export function PlusAppIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 450.195 449.951"
@@ -57,23 +57,23 @@ function PlusAppIcon({ className }: { className?: string }) {
   );
 }
 
-type Step = { text: string; icon?: React.ReactNode };
+export type Step = { text: string; icon?: React.ReactNode };
 
-const STEPS_IOS: Step[] = [
+export const STEPS_IOS: Step[] = [
   { text: "Touchez Partager", icon: <ShareIcon className="h-[18px] w-auto" /> },
   { text: "Touchez « Sur l'écran d'accueil »", icon: <PlusAppIcon className="h-[17px] w-[17px]" /> },
   { text: "« Ajouter »" },
 ];
 
 // The native dialog, from the button below.
-const STEPS_NATIVE: Step[] = [
+export const STEPS_NATIVE: Step[] = [
   { text: "Touchez « Installer l'app »" },
   { text: "Confirmez « Installer » dans la fenêtre" },
   { text: "Ouvrez Mosaic depuis l'écran d'accueil" },
 ];
 
 // Asked for from the settings while the browser offers no dialog: its menu.
-const STEPS_MENU: Step[] = [
+export const STEPS_MENU: Step[] = [
   { text: "Touchez le menu ⋮ du navigateur" },
   { text: "« Installer l'application » ou « Ajouter à l'écran d'accueil »" },
   { text: "Confirmez « Installer »" },

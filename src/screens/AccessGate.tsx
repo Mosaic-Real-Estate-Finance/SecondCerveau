@@ -111,7 +111,12 @@ export function AccessGate({
   };
 
   return (
-    <Screen className="relative mx-auto max-w-[480px] justify-center">
+    <Screen className="relative mx-auto max-w-[480px]">
+      {/* Anchored near the top rather than centred: centred, the field sat so
+          low that the keyboard covered it, iOS scrolled the page to reach it
+          and the logo went off the top. svh is the viewport with all its bars
+          out, which the keyboard does not change: the anchor stays put. */}
+      <div aria-hidden className="h-[max(8px,4svh)] shrink-0" />
       <motion.div className="mx-auto" layout={!reduceMotion} transition={{ duration: 0.42, ease: EASE }}>
         <Symbol className="mx-auto h-16 text-midnight-blue" />
       </motion.div>
