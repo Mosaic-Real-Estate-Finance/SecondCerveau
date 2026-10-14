@@ -21,6 +21,12 @@ body {
   min-height: 100dvh;
 }
 
+/* Titles and texts wrap into even lines — no long line over a short one. */
+#root h1,
+#root p {
+  text-wrap: balance;
+}
+
 /* The symbol on the welcome step breathes, barely. */
 .welcome-float {
   animation: welcome-float 6s cubic-bezier(0.45, 0, 0.55, 1) infinite;

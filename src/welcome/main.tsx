@@ -118,7 +118,7 @@ function Welcome() {
         <Progress step={step} onPick={go} />
       </header>
 
-      <main className="relative flex flex-1 flex-col overflow-x-clip pt-10 sm:pt-14">
+      <main className="relative flex flex-1 flex-col overflow-x-clip pt-8 sm:pt-10">
         {pages.map((page, index) => {
           const current = index === step;
           return (
@@ -133,7 +133,7 @@ function Welcome() {
               transition={{ duration: reduceMotion ? 0 : current ? 0.5 : 0.26, delay: current && !reduceMotion ? 0.08 : 0, ease: EASE }}
               // The step on show sets the height; the others lie over it,
               // out of sight and out of reach.
-              className={cn("flex flex-col", current ? "relative flex-1" : "pointer-events-none absolute inset-x-0 top-10 sm:top-14")}
+              className={cn("flex flex-col", current ? "relative flex-1" : "pointer-events-none absolute inset-x-0 top-8 sm:top-10")}
               aria-hidden={!current}
               inert={!current}
               aria-labelledby={`titre-${STEPS[index].id}`}
@@ -144,7 +144,7 @@ function Welcome() {
         })}
       </main>
 
-      <nav className="mt-10 flex items-center justify-between gap-3" aria-label="Étapes">
+      <nav className="mt-8 flex items-center justify-between gap-3" aria-label="Étapes">
         <button
           type="button"
           onClick={() => go(step - 1)}
@@ -259,15 +259,18 @@ function AppStep({ active, load }: { active: boolean; load: boolean }) {
   return (
     <div>
       <Heading id="application" eyebrow={<Eyebrow>Étape 1 sur 2</Eyebrow>} title="L'application sur votre téléphone" />
-      <div className={cn("mt-8 grid items-start gap-6", desktop && "lg:grid-cols-[minmax(0,1fr)_260px]")}>
-        <Video video={VIDEO_APP} active={active} load={load} />
+      <div className={cn("mt-6 grid items-start gap-6", desktop && "lg:grid-cols-[minmax(0,1fr)_280px]")}>
+        <Fit video={VIDEO_APP} reserve={320}>
+          <Video video={VIDEO_APP} active={active} load={load} />
+        </Fit>
         {desktop ? (
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center rounded-3xl bg-white-smoke p-5 text-center">
             {/* Dark on light in both themes: scanned inverted, a code fails on some cameras. */}
-            <div className="w-full max-w-[260px] rounded-3xl bg-[color:var(--qr-paper)] p-5 shadow-[0_0_0_1px_var(--hairline)]">
+            <div className="w-full max-w-[200px] rounded-2xl bg-[color:var(--qr-paper)] p-4 shadow-[0_0_0_1px_var(--hairline)]">
               <LogoQr value={APP_URL} className="w-full" />
             </div>
-            <CopyButton value={APP_URL} label="Copier le lien" className="w-full max-w-[260px]" />
+            <p className="mt-4 text-base font-medium">Scannez ce QR code pour accéder à l'app depuis votre mobile</p>
+            <CopyButton value={APP_URL} label="Copier le lien" onCard className="mt-4" />
           </div>
         ) : (
           <LinkButton href={APP_URL}>Ouvrir l'application</LinkButton>
@@ -281,13 +284,13 @@ function OutlookStep({ active, load }: { active: boolean; load: boolean }) {
   return (
     <div>
       <Heading id="outlook" eyebrow={<Eyebrow>Étape 2 sur 2</Eyebrow>} title="Le complément Outlook" />
-      <div className="mt-8">
+      <Fit video={VIDEO_OUTLOOK} reserve={400} className="mt-6">
         <Video video={VIDEO_OUTLOOK} active={active} load={load} />
-      </div>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        <CopyButton value={MANIFEST_URL} label="Copier l'URL du manifeste" />
-        <LinkButton href={ADMIN_URL}>Ouvrir Microsoft 365 Admin</LinkButton>
-      </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <CopyButton value={MANIFEST_URL} label="Copier l'URL du manifeste" />
+          <LinkButton href={ADMIN_URL}>Ouvrir Microsoft 365 Admin</LinkButton>
+        </div>
+      </Fit>
     </div>
   );
 }
@@ -374,6 +377,22 @@ async function celebrate() {
 }
 
 /**
+ * On a computer, a step with a video fits the window: the video is as wide as
+ * the height left to it allows (the window, minus `reserve` px for the rest of
+ * the step), never narrower than 420px. A phone scrolls instead.
+ */
+function Fit({ video, reserve, className, children }: { video: VideoSource; reserve: number; className?: string; children: ReactNode }) {
+  return (
+    <div
+      className={cn("w-full lg:max-w-[var(--fit)]", className)}
+      style={{ "--fit": `max(420px, calc((100dvh - ${reserve}px) * ${video.width / video.height}))` } as React.CSSProperties}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
  * A Tella player, mounted as soon as `load` holds — a step ahead of its own —
  * and kept, so it is ready when its step comes. Loaded on show it plays at
  * once; loaded ahead it waits for a click, since a hidden player that starts
@@ -447,7 +466,7 @@ async function copy(text: string) {
   }
 }
 
-function CopyButton({ value, label, className }: { value: string; label: string; className?: string }) {
+function CopyButton({ value, label, onCard = false, className }: { value: string; label: string; onCard?: boolean; className?: string }) {
   const [state, setState] = useState<"idle" | "done" | "failed">("idle");
   const timer = useRef(0);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -466,7 +485,7 @@ function CopyButton({ value, label, className }: { value: string; label: string;
       className={cn(
         BUTTON,
         "overflow-hidden",
-        state === "done" ? "bg-navy text-on-accent" : "bg-white-smoke text-navy",
+        state === "done" ? "bg-navy text-on-accent" : cn("text-navy", onCard ? "bg-[color:var(--color-white)]" : "bg-white-smoke"),
         className,
       )}
     >
