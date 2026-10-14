@@ -5,7 +5,9 @@ import { dataSourceId, notion, type Env, type Handler } from "../_lib/notion.js"
 import { redis } from "../_lib/redis.js";
 
 // POST /api/auth/track — usage events, one page each in a Notion base (NOTION_EVENTS_DB): Action
-// (title), Utilisateur (select), Date, Localisation (text).
+// (title), Utilisateur (select), Date, Localisation (text). That base is in
+// another workspace than the notes and contacts: it is written with its own
+// integration, NOTION_EVENTS_TOKEN, and nothing is written without it.
 //
 // Silent by design: the answer goes out at once (202), before anything is
 // read or written, and the page is created after it (background.ts). The
@@ -68,12 +70,12 @@ async function allowed(env: Env, request: Request): Promise<boolean> {
   }
 }
 
-async function record(env: Env, request: Request, action: string, hint: string | undefined) {
-  if (!(await allowed(env, request))) return;
-  const [user, sourceId] = await Promise.all([
-    who(env, request, hint),
-    dataSourceId(env, env.NOTION_EVENTS_DB?.trim() || DEFAULT_DB),
-  ]);
+async function record(app: Env, request: Request, action: string, hint: string | undefined) {
+  if (!(await allowed(app, request))) return;
+  const user = await who(app, request, hint);
+  // Every Notion call below goes to the events workspace.
+  const env: Env = { ...app, NOTION_TOKEN: app.NOTION_EVENTS_TOKEN!.trim() };
+  const sourceId = await dataSourceId(env, env.NOTION_EVENTS_DB?.trim() || DEFAULT_DB);
   await notion(env, "/pages", {
     method: "POST",
     body: {
@@ -96,7 +98,7 @@ export const onRequestPost: Handler = async ({ request, env }) => {
 
   const body = (await request.json().catch(() => ({}))) as { action?: string; user?: string };
   const action = ACTIONS.find((known) => known === body.action);
-  if (!action || !env.NOTION_TOKEN) return accepted();
+  if (!action || !env.NOTION_EVENTS_TOKEN?.trim()) return accepted();
   // Notion's own answer is logged when it refuses: an event holds no meeting
   // content nor any address, and without it a wrong base or column cannot
   // be told from a network blip.
