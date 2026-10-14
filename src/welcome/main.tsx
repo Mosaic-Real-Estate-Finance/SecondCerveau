@@ -5,6 +5,7 @@ import type { Options as ConfettiOptions } from "canvas-confetti";
 import "@/styles/index.css";
 import "./welcome.css";
 import { Symbol } from "@/components/logo";
+import { track } from "@/lib/track";
 import { cn } from "@/lib/utils";
 import { Qr } from "./qr";
 
@@ -537,6 +538,8 @@ function External() {
     </svg>
   );
 }
+
+track("Le guide /welcome a été ouvert");
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

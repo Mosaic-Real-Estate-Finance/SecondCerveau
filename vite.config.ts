@@ -81,6 +81,7 @@ function pagesFunctions(env: Record<string, string>): Plugin {
     "POST /api/readai/excluded": { file: "/functions/api/readai/screen.ts", name: "onRequestPost" },
     "POST /api/readai/push": { file: "/functions/api/readai/screen.ts", name: "onRequestPost" },
     "DELETE /api/readai/push": { file: "/functions/api/readai/screen.ts", name: "onRequestDelete" },
+    "POST /api/track": { file: "/functions/api/track.ts", name: "onRequestPost" },
     "POST /api/auth/code": { file: "/functions/api/auth.ts", name: "onRequestPost" },
     "POST /api/auth/verify": { file: "/functions/api/auth.ts", name: "onRequestPost" },
     "POST /api/auth/logout": { file: "/functions/api/auth.ts", name: "onRequestPost" },

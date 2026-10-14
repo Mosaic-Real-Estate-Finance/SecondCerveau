@@ -11,6 +11,8 @@ export type Env = {
   NOTION_NOTES_DB: string;
   /** The companies base. Unset: the one Contacts' Société relation points at. */
   NOTION_COMPANIES_DB?: string;
+  /** The usage events base (api/track). Unset: the one in functions/api/track.ts. */
+  NOTION_EVENTS_DB?: string;
   /** The template page every note is created from. Unset: the base's default. */
   NOTION_NOTES_TEMPLATE?: string;
   // Property names, overridable when the client renames a column in Notion.

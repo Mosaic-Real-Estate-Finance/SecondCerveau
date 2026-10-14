@@ -8,6 +8,7 @@ import { useToast } from "@/components/toast";
 import { VoiceRecorder } from "@/components/voice-recorder";
 import { useConnectivity, type Connectivity } from "@/lib/connectivity";
 import { haptic, hapticOnRelease } from "@/lib/haptics";
+import { track } from "@/lib/track";
 import { storageIsDurable, useNote, useNotes, type Note } from "@/lib/notes";
 import { pageSlideMs } from "@/lib/schedule";
 import { cssVar, useColorScheme } from "@/lib/theme";
@@ -130,6 +131,7 @@ export function RecordScreen({
       toast.show("L'enregistrement n'a pas pu être relu. Réessayez.");
     }
     if (!note) return setOpen(false);
+    track("Une dictée a été enregistrée");
     // The dictation is safe in memory; what failed is only the copy that
     // would survive the tab being closed. Worth saying, not worth blocking.
     if (!storageIsDurable()) {

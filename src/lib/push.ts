@@ -1,3 +1,4 @@
+import { track } from "@/lib/track";
 import { deletePushSubscription, savePushSubscription } from "@/lib/api";
 
 // Web Push on this device (brief §9). On an iPhone it only exists inside the
@@ -56,6 +57,7 @@ export async function enablePush(): Promise<boolean> {
     (await registration.pushManager.getSubscription()) ??
     (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(KEY) }));
   await savePushSubscription(subscription.toJSON());
+  track("Les notifications ont été activées");
   return true;
 }
 

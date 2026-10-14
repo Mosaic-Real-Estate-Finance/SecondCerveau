@@ -38,6 +38,7 @@ const ROUTES = {
   "api/readai/webhook.js": ["POST"],
   "api/readai/[action].js": ["GET", "POST", "DELETE"],
   "api/auth/[action].js": ["POST"],
+  "api/track.js": ["POST"],
 };
 
 try {

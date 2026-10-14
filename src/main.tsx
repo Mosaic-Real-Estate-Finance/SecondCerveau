@@ -4,6 +4,7 @@ import { registerSW } from "virtual:pwa-register";
 import App from "./App";
 import { busy } from "@/lib/pipeline";
 import { guardSafeTop } from "@/lib/safe-area";
+import { track } from "@/lib/track";
 import "./styles/index.css";
 
 // The app never runs inside a frame of its own. Its install guide frames a
@@ -23,6 +24,8 @@ if (!framed) registerSW({
   },
 });
 guardSafeTop();
+
+if (!framed) track("Le site a été ouvert");
 
 if (!framed)
   createRoot(document.getElementById("root")!).render(
