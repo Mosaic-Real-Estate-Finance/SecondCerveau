@@ -204,10 +204,38 @@ export async function maxUploadBytes(env: Env): Promise<number> {
 // isolate.
 const dataSources = new Map<string, string>();
 
+/** The first database a page holds, for an id that turned out to be the page. */
+async function databaseInPage(env: Env, pageId: string): Promise<string> {
+  let cursor: string | undefined;
+  do {
+    const children = await notion<{
+      results: { id: string; type: string }[];
+      has_more?: boolean;
+      next_cursor?: string | null;
+    }>(env, `/blocks/${pageId}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`);
+    const found = children.results.find((block) => block.type === "child_database");
+    if (found) return found.id;
+    cursor = children.has_more ? (children.next_cursor ?? undefined) : undefined;
+  } while (cursor);
+  throw new NotionError(500, `La page ${pageId} ne contient aucune base de données`);
+}
+
+//
+// The id copied from a Notion link is sometimes the page the database sits
+// in rather than the database (a full-page database opened from a page,
+// a team space page holding it): Notion then answers « is a page, not a
+// database ». The database inside that page is used instead.
 export async function dataSourceId(env: Env, databaseId: string): Promise<string> {
   const cached = dataSources.get(databaseId);
   if (cached) return cached;
-  const database = await notion<{ data_sources?: { id: string }[] }>(env, `/databases/${databaseId}`);
+  type Database = { data_sources?: { id: string }[] };
+  let database: Database;
+  try {
+    database = await notion<Database>(env, `/databases/${databaseId}`);
+  } catch (error) {
+    if (!(error instanceof NotionError) || !/is a page/i.test(error.message)) throw error;
+    database = await notion<Database>(env, `/databases/${await databaseInPage(env, databaseId)}`);
+  }
   const id = database.data_sources?.[0]?.id;
   if (!id) throw new NotionError(500, `La base ${databaseId} n'expose aucune source de données`);
   dataSources.set(databaseId, id);
