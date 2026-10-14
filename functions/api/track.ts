@@ -4,7 +4,7 @@ import { findUser } from "../_lib/users.js";
 import { dataSourceId, notion, type Env, type Handler } from "../_lib/notion.js";
 import { redis } from "../_lib/redis.js";
 
-// Usage events, one page each in a Notion base (NOTION_EVENTS_DB): Action
+// POST /api/auth/track — usage events, one page each in a Notion base (NOTION_EVENTS_DB): Action
 // (title), Utilisateur (select), Date, Localisation (text).
 //
 // Silent by design: the answer goes out at once (202), before anything is

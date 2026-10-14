@@ -1,4 +1,4 @@
-// Usage events, sent to /api/track (functions/api/track.ts), which writes
+// Usage events, sent to /api/auth/track (functions/api/track.ts), which writes
 // them to Notion after it has answered.
 //
 // Fire and forget: a beacon, queued by the browser and sent even as the page
@@ -22,8 +22,8 @@ export function track(action: TrackAction, user?: string) {
   if (location.pathname.startsWith("/maquette")) return;
   try {
     const body = JSON.stringify(user ? { action, user } : { action });
-    if (navigator.sendBeacon?.("/api/track", new Blob([body], { type: "application/json" }))) return;
-    void fetch("/api/track", {
+    if (navigator.sendBeacon?.("/api/auth/track", new Blob([body], { type: "application/json" }))) return;
+    void fetch("/api/auth/track", {
       method: "POST",
       body,
       headers: { "Content-Type": "application/json" },
