@@ -93,6 +93,9 @@ export default function App() {
   const dictating = notes.some((note) => note.status === "recording");
   const pendingNotes = notes.filter((note) => note.status !== "recording").length;
   const [pushAsked, setPushAsked] = useState(false);
+  // Counts the openings of the app (launch, back to the front), each once
+  // its count has been read: the pending banner shows at every one.
+  const [opening, setOpening] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const outage = useOutage();
   const [settingsExpanded, setSettingsExpanded] = useState(false);
@@ -200,17 +203,19 @@ export default function App() {
   // waiting for a notification to be tapped.
   useEffect(() => {
     if (!user) return;
-    const refresh = () => {
+    const refresh = (opened = false) => {
       if (document.visibilityState !== "visible") return;
       fetchReviewCount()
         .then(({ count }) => setReviewCount(count))
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(() => opened && setOpening((n) => n + 1));
     };
-    refresh();
-    document.addEventListener("visibilitychange", refresh);
+    const open = () => refresh(true);
+    open();
+    document.addEventListener("visibilitychange", open);
     const timer = isStandalone() ? window.setInterval(refresh, COUNT_EVERY_MS) : undefined;
     return () => {
-      document.removeEventListener("visibilitychange", refresh);
+      document.removeEventListener("visibilitychange", open);
       window.clearInterval(timer);
     };
   }, [user]);
@@ -356,6 +361,7 @@ export default function App() {
       <OutageBanner visible={page === 1 && !settingsOpen} />
       <PushBanner visible={page === 1 && !settingsOpen && !outage} onWanted={setPushAsked} />
       <PendingBanner
+        opening={opening}
         visible={isStandalone() && page === 1 && !settingsOpen && !outage && !pushAsked && !dictating}
         meetings={reviewCount}
         notes={pendingNotes}

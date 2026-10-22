@@ -6,8 +6,20 @@ import { cn } from "@/lib/utils";
 // Shared by the notifications banner and the transcription outage one.
 
 const LEAVE_MS = 250 + 60; // --stack-close, plus a frame or two
+const FADE_MS = 600 + 60; // .is-fading, in index.css
 
-export function StackBanner({ visible, label, children }: { visible: boolean; label: string; children: ReactNode }) {
+export function StackBanner({
+  visible,
+  label,
+  fade = false,
+  children,
+}: {
+  visible: boolean;
+  label: string;
+  /** Leaves in a plain fade, for a banner that goes away on its own. */
+  fade?: boolean;
+  children: ReactNode;
+}) {
   // Mounted with .is-enter, reflowed, then released in the same task, as the
   // snippet orchestrates it; unmounted only after its .is-leaving close.
   const [shown, setShown] = useState(visible);
@@ -20,7 +32,7 @@ export function StackBanner({ visible, label, children }: { visible: boolean; la
     }
     if (!shown) return;
     setLeaving(true);
-    const timer = window.setTimeout(() => setShown(false), LEAVE_MS);
+    const timer = window.setTimeout(() => setShown(false), fade ? FADE_MS : LEAVE_MS);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
@@ -38,7 +50,7 @@ export function StackBanner({ visible, label, children }: { visible: boolean; la
   return (
     <div className="push-banner-stage" role="region" aria-label={label}>
       <div className="t-stack">
-        <div ref={banner} className={cn("t-stack-banner push-banner", !entered && "is-enter", leaving && "is-leaving")} data-depth="0">
+        <div ref={banner} className={cn("t-stack-banner push-banner", !entered && "is-enter", leaving && (fade ? "is-fading" : "is-leaving"))} data-depth="0">
           {children}
         </div>
       </div>

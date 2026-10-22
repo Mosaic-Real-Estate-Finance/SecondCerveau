@@ -720,6 +720,12 @@ a {
   box-shadow: 0 8px 32px var(--shadow), 0 0 0 1px var(--hairline);
   pointer-events: auto;
 }
+/* Going away on its own: a slow fade in place, nothing else moves. */
+.t-stack-banner.push-banner.is-fading {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 600ms ease;
+}
 
 /* ---- Sliding tabs, full width --------------------------------------
    The snippet's bar hugs its labels (inline-flex); here it spans the
