@@ -62,6 +62,11 @@
      (3.4:1 against the bell, 4.5:1 against the page) and the dark theme
      turns it white. */
   --bell-badge: #6366f1;
+  /* The home banners stand off the page they sit on: a navy tint on the
+     white page, a lifted grey on the dark one; their fields go a step
+     further from the banner. */
+  --banner-bg: #ebebf8;
+  --banner-field: #ffffff;
   /* Sheets sit on the page's own white; in the dark they are lifted a
      shade, as iOS raises a presented sheet. */
   --sheet-bg: var(--color-white);
@@ -134,6 +139,8 @@
     --tabs-pill-bg: #3a3a4c;
     /* White on the lifted accent of the bell. */
     --bell-badge: #ffffff;
+    --banner-bg: #262633;
+    --banner-field: #363648;
   }
 }
 
@@ -716,7 +723,7 @@ a {
   gap: 12px;
   padding: 14px 14px 14px 16px;
   border-radius: 20px;
-  background: var(--color-white);
+  background: var(--banner-bg);
   box-shadow: 0 8px 32px var(--shadow), 0 0 0 1px var(--hairline);
   pointer-events: auto;
 }

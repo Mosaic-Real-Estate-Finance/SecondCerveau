@@ -171,7 +171,7 @@ function FeedbackMorph({ open, onOpen, onClose }: { open: boolean; onOpen: () =>
                 <button
                   type="button"
                   onClick={() => choose("problem")}
-                  className="h-11 flex-1 whitespace-nowrap rounded-xl bg-white-smoke px-3 font-medium text-midnight-blue"
+                  className="h-11 flex-1 whitespace-nowrap rounded-xl bg-[var(--banner-field)] px-3 font-medium text-midnight-blue"
                 >
                   J'ai eu un problème
                 </button>
@@ -189,7 +189,7 @@ function FeedbackMorph({ open, onOpen, onClose }: { open: boolean; onOpen: () =>
                       ? "Décrivez ce qui s'est passé : à quel moment, ce que vous avez vu…"
                       : "Facultatif"
                   }
-                  className="mt-2 w-full resize-none rounded-xl bg-white-smoke px-3 py-2.5 text-base leading-snug outline-none placeholder:text-[color:var(--muted)]"
+                  className="mt-2 w-full resize-none rounded-xl bg-[var(--banner-field)] px-3 py-2.5 text-base leading-snug outline-none placeholder:text-[color:var(--muted)]"
                 />
                 {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
                 <button
