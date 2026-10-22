@@ -1,5 +1,4 @@
 import bell from "@/assets/icons/bell.svg?raw";
-import bellBadge from "@/assets/icons/bell.badge.svg?raw";
 import checkmarkCircle from "@/assets/icons/checkmark.circle.svg?raw";
 import gear from "@/assets/icons/gear.svg?raw";
 import microphone from "@/assets/icons/microphone.svg?raw";
@@ -13,13 +12,12 @@ import { cn } from "@/lib/utils";
 
 // The SF Symbols exports, kept byte for byte in src/assets/icons. They paint in
 // white or black, as exported; inlined, that becomes currentColor so each
-// button gives the icon its own colour. The badge dot keeps the colour it was
-// drawn with.
+// button gives the icon its own colour. The bell with its badge is drawn apart
+// (notification-bell.tsx).
 const inline = (svg: string) => svg.slice(svg.indexOf("<svg")).replace(/fill="(?:white|black)"/g, 'fill="currentColor"');
 
 const ICONS = {
   bell: inline(bell),
-  "bell.badge": inline(bellBadge),
   gear: inline(gear),
   microphone: inline(microphone),
   "checkmark.circle": inline(checkmarkCircle),

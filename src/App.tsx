@@ -9,6 +9,7 @@ import { SettingsScreen } from "@/screens/SettingsScreen";
 import { Sheet } from "@/components/sheet";
 import { InstallInvite } from "@/components/install-invite";
 import { OutageBanner } from "@/components/outage-banner";
+import { PendingBanner } from "@/components/pending-banner";
 import { PushBanner } from "@/components/push-banner";
 import { ToastProvider } from "@/components/toast";
 import {
@@ -25,7 +26,7 @@ import {
 import { useOutage } from "@/lib/outage";
 import { isIOS, isMobile, isStandalone } from "@/lib/standalone";
 import { openInstallInvite } from "@/components/install-invite";
-import { persistStorage, updateNote, type Note, type NoteContact } from "@/lib/notes";
+import { persistStorage, updateNote, useNotes, type Note, type NoteContact } from "@/lib/notes";
 import { resumePending, transcribeNote } from "@/lib/pipeline";
 import { afterTransition } from "@/lib/schedule";
 
@@ -77,6 +78,9 @@ function forgetParam(name: string) {
   window.history.replaceState(null, "", url.pathname + url.search + url.hash);
 }
 
+/** How often the installed app reads the count of calls waiting. */
+const COUNT_EVERY_MS = 60_000;
+
 export default function App() {
   const [user, setUser] = useState<Session | null>(session.get());
   const [focusId, setFocusId] = useState<string | null>(linkedReview);
@@ -84,6 +88,11 @@ export default function App() {
   const [focusKey, setFocusKey] = useState(0);
   const [page, setPage] = useState<Page>(focusId !== null ? 4 : 1);
   const [reviewCount, setReviewCount] = useState(0);
+  // Dictations not yet in Notion, minus one being dictated right now.
+  const notes = useNotes();
+  const dictating = notes.some((note) => note.status === "recording");
+  const pendingNotes = notes.filter((note) => note.status !== "recording").length;
+  const [pushAsked, setPushAsked] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const outage = useOutage();
   const [settingsExpanded, setSettingsExpanded] = useState(false);
@@ -185,7 +194,10 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.email, signOut]);
 
-  // The count on the home screen, read when the app comes back to the front.
+  // The count on the home screen, read when the app comes back to the front
+  // and, in the installed app, every minute while it is on screen: a call
+  // that lands while the app is open lights the bell and the banner without
+  // waiting for a notification to be tapped.
   useEffect(() => {
     if (!user) return;
     const refresh = () => {
@@ -196,7 +208,11 @@ export default function App() {
     };
     refresh();
     document.addEventListener("visibilitychange", refresh);
-    return () => document.removeEventListener("visibilitychange", refresh);
+    const timer = isStandalone() ? window.setInterval(refresh, COUNT_EVERY_MS) : undefined;
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.clearInterval(timer);
+    };
   }, [user]);
 
   // A notification clicked while the app is already open: the service worker
@@ -338,7 +354,13 @@ export default function App() {
           sliding in as a page. */}
       {/* One banner at a time: an outage says more than a reminder. */}
       <OutageBanner visible={page === 1 && !settingsOpen} />
-      <PushBanner visible={page === 1 && !settingsOpen && !outage} />
+      <PushBanner visible={page === 1 && !settingsOpen && !outage} onWanted={setPushAsked} />
+      <PendingBanner
+        visible={isStandalone() && page === 1 && !settingsOpen && !outage && !pushAsked && !dictating}
+        meetings={reviewCount}
+        notes={pendingNotes}
+        onOpen={() => setPage(4)}
+      />
       <Sheet open={settingsOpen} onClose={closeSettings} label="Réglages" full={settingsExpanded}>
         <SettingsScreen
           key={settingsKey}

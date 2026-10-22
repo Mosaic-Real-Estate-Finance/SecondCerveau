@@ -57,6 +57,11 @@
   --scrim: rgb(2 3 66 / 0.18);
   --scrim-strong: rgb(2 3 66 / 0.3);
   --shadow: rgb(2 3 66 / 0.12);
+  /* The bell's badge, set apart from the bell it sits on: navy on navy read
+     as one shape, so the light theme lifts it to the accent's bright tint
+     (3.4:1 against the bell, 4.5:1 against the page) and the dark theme
+     turns it white. */
+  --bell-badge: #6366f1;
   /* Sheets sit on the page's own white; in the dark they are lifted a
      shade, as iOS raises a presented sheet. */
   --sheet-bg: var(--color-white);
@@ -127,11 +132,8 @@
     /* The page is darker than the bar here: the pill is lifted above it
        instead, as iOS draws a dark segmented control. */
     --tabs-pill-bg: #3a3a4c;
-  }
-  /* The SF Symbol badge is drawn in a dark navy that vanishes on a dark
-     page; it takes the accent instead. */
-  [data-icon] path[fill="#002060"] {
-    fill: var(--color-navy);
+    /* White on the lifted accent of the bell. */
+    --bell-badge: #ffffff;
   }
 }
 
@@ -869,6 +871,52 @@ a {
   .person-working,
   .person-icon.is-flipped {
     transition: none;
+    animation: none;
+  }
+}
+
+/* ---- Notification bell ---------------------------------------------
+   Something new: the bell swings from its top and the badge springs in
+   from its own centre. Back to zero, the badge shrinks away. */
+.notification-bell {
+  overflow: visible;
+}
+.bell-body {
+  transform-box: view-box;
+  transform-origin: 294px 60px;
+}
+.bell-body.is-ringing {
+  animation: bell-ring 720ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+.bell-badge {
+  fill: var(--bell-badge);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bell-badge-in 460ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.bell-badge.is-leaving {
+  animation: bell-badge-out 200ms ease-in both;
+}
+@keyframes bell-ring {
+  0% { transform: rotate(0deg); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-12deg); }
+  45% { transform: rotate(8deg); }
+  60% { transform: rotate(-5deg); }
+  75% { transform: rotate(2deg); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes bell-badge-in {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+@keyframes bell-badge-out {
+  to { transform: scale(0); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bell-body.is-ringing,
+  .bell-badge,
+  .bell-badge.is-leaving {
     animation: none;
   }
 }

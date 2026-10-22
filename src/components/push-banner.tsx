@@ -18,7 +18,14 @@ type Permission = NotificationPermission | "unsupported";
 
 const read = (): Permission => (pushSupported() ? Notification.permission : "unsupported");
 
-export function PushBanner({ visible }: { visible: boolean }) {
+export function PushBanner({
+  visible,
+  onWanted,
+}: {
+  visible: boolean;
+  /** Told whether the banner is asking, so no other banner stacks on it. */
+  onWanted?: (wanted: boolean) => void;
+}) {
   const toast = useToast();
   const installed = isStandalone();
   const [permission, setPermission] = useState<Permission>(read);
@@ -72,6 +79,7 @@ export function PushBanner({ visible }: { visible: boolean }) {
   }, []);
 
   const wanted = installed && visible && permission !== "granted" && permission !== "unsupported";
+  useEffect(() => onWanted?.(wanted), [wanted, onWanted]);
 
   return (
     <StackBanner visible={wanted} label="Notifications">

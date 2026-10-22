@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { VoiceBeam } from "voice-glow";
 import { Icon } from "@/components/icon";
 import { Symbol } from "@/components/logo";
+import { NotificationBell } from "@/components/notification-bell";
 import { Screen, TextButton } from "@/components/screen";
 import { useToast } from "@/components/toast";
 import { VoiceRecorder } from "@/components/voice-recorder";
@@ -178,7 +179,8 @@ export function RecordScreen({
           className="flex h-11 w-11 items-center justify-center rounded-full text-navy"
           aria-label={waiting ? `Notifications, ${waiting} en attente` : "Notifications"}
         >
-          <Icon name={waiting > 0 ? "bell.badge" : "bell"} className="h-[22px]" />
+          {/* 22 px of bell, as the gear beside it; the badge rides above. */}
+          <NotificationBell count={waiting} className="h-[24.8px] w-auto" />
         </button>
         <button
           type="button"
