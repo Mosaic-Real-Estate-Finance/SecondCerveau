@@ -9,6 +9,7 @@ import { SettingsScreen } from "@/screens/SettingsScreen";
 import { Sheet } from "@/components/sheet";
 import { InstallInvite } from "@/components/install-invite";
 import { OutageBanner } from "@/components/outage-banner";
+import { FeedbackBanner } from "@/components/feedback-banner";
 import { PendingBanner } from "@/components/pending-banner";
 import { PushBanner } from "@/components/push-banner";
 import { ToastProvider } from "@/components/toast";
@@ -367,6 +368,7 @@ export default function App() {
         notes={pendingNotes}
         onOpen={() => setPage(4)}
       />
+      <FeedbackBanner visible={page === 1 && !settingsOpen && !outage && !pushAsked && !dictating} />
       <Sheet open={settingsOpen} onClose={closeSettings} label="Réglages" full={settingsExpanded}>
         <SettingsScreen
           key={settingsKey}

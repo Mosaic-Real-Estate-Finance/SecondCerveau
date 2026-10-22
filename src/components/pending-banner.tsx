@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { StackBanner } from "@/components/stack-banner";
+import { bannerSlot } from "@/lib/banner-slot";
 
 // What is still waiting to reach Notion, said on the home screen of the
 // installed app at each opening: Read AI calls to decide, dictations not yet
@@ -30,9 +31,10 @@ export function PendingBanner({
   const total = meetings + notes;
   const [showing, setShowing] = useState(false);
 
-  // Each opening, if there is something to say and room to say it.
+  // Each opening, if there is something to say and room to say it — the
+  // feedback question may hold the place, or have just left it.
   useEffect(() => {
-    if (!opening || !visible || total === 0) return;
+    if (!opening || !visible || total === 0 || !bannerSlot.claim("pending")) return;
     setShowing(true);
     const timer = window.setTimeout(() => setShowing(false), SHOWN_MS);
     return () => window.clearTimeout(timer);
@@ -44,6 +46,9 @@ export function PendingBanner({
   useEffect(() => {
     if (!visible) setShowing(false);
   }, [visible]);
+  useEffect(() => {
+    if (!showing) bannerSlot.release("pending");
+  }, [showing]);
 
   const detail = [
     meetings ? `${plural(meetings, "réunion")} à valider` : "",

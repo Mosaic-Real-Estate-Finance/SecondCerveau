@@ -1,5 +1,6 @@
 import { ApiError, createNotionNote, recentContacts } from "./api";
 import { decodeTo16k } from "./audio";
+import { noteSent } from "./feedback";
 import { getNote, listNotes, ready, removeNote, updateNote } from "./notes";
 import { openStream, SttError, type SonioxStream, type StreamState } from "./soniox";
 
@@ -218,6 +219,7 @@ export async function sendNote(id: string, files: { id: string; name: string }[]
     if (note.contact) recentContacts.push(note.contact.id);
     // Notion confirmed the page: only now is the audio let go.
     await removeNote(id);
+    noteSent();
     return page;
   } catch (error) {
     await updateNote(id, { status: "send-failed", error: (error as Error).message });

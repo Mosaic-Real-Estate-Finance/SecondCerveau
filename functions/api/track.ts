@@ -30,11 +30,17 @@ const DEFAULT_DB = "3f9bad05-6a95-80e6-9acd-e297c22f47fd";
 const PEOPLE = ["Philippe", "Oscar", "Théo"];
 const PER_MINUTE = 30;
 
+export const fromThisSite = (request: Request) => {
+  const origin = request.headers.get("origin");
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  return !(origin && host && origin !== "null" && new URL(origin).host !== host);
+};
+
 const accepted = () => new Response(null, { status: 202 });
 
 // Where the request came from, from the edge's own headers. Nothing precise:
 // a city and a country, as Vercel resolves them from the address.
-function place(request: Request): string {
+export function place(request: Request): string {
   const header = (name: string) => {
     const value = request.headers.get(name);
     try {
@@ -48,7 +54,7 @@ function place(request: Request): string {
     .join(", ");
 }
 
-async function who(env: Env, request: Request, hint: string | undefined): Promise<string> {
+export async function who(env: Env, request: Request, hint: string | undefined): Promise<string> {
   // The signed-in phone; the Outlook panel, which has no cookie here, says
   // whose mailbox it is open in.
   const session = await readSession(env, request).catch(() => null);
@@ -56,7 +62,7 @@ async function who(env: Env, request: Request, hint: string | undefined): Promis
   return name && PEOPLE.includes(name) ? name : "Unknown";
 }
 
-async function allowed(env: Env, request: Request): Promise<boolean> {
+export async function allowed(env: Env, request: Request): Promise<boolean> {
   const address = (request.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "local";
   try {
     const key = `track:${address}:${Math.floor(Date.now() / 60_000)}`;
@@ -92,9 +98,7 @@ async function record(app: Env, request: Request, action: string, hint: string |
 
 export const onRequestPost: Handler = async ({ request, env }) => {
   // From this site only: a page elsewhere cannot fill the base.
-  const origin = request.headers.get("origin");
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  if (origin && host && origin !== "null" && new URL(origin).host !== host) return accepted();
+  if (!fromThisSite(request)) return accepted();
 
   const body = (await request.json().catch(() => ({}))) as { action?: string; user?: string };
   const action = ACTIONS.find((known) => known === body.action);

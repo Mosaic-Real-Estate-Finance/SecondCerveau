@@ -12,12 +12,17 @@ export function StackBanner({
   visible,
   label,
   fade = false,
+  lift = 0,
+  className,
   children,
 }: {
   visible: boolean;
   label: string;
   /** Leaves in a plain fade, for a banner that goes away on its own. */
   fade?: boolean;
+  /** Raised by this much, above the keyboard. */
+  lift?: number;
+  className?: string;
   children: ReactNode;
 }) {
   // Mounted with .is-enter, reflowed, then released in the same task, as the
@@ -48,9 +53,14 @@ export function StackBanner({
 
   if (!shown) return null;
   return (
-    <div className="push-banner-stage" role="region" aria-label={label}>
+    <div
+      className="push-banner-stage"
+      role="region"
+      aria-label={label}
+      style={lift ? { bottom: `${lift + 12}px` } : undefined}
+    >
       <div className="t-stack">
-        <div ref={banner} className={cn("t-stack-banner push-banner", !entered && "is-enter", leaving && (fade ? "is-fading" : "is-leaving"))} data-depth="0">
+        <div ref={banner} className={cn("t-stack-banner push-banner", className, !entered && "is-enter", leaving && (fade ? "is-fading" : "is-leaving"))} data-depth="0">
           {children}
         </div>
       </div>

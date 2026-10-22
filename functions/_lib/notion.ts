@@ -15,6 +15,8 @@ export type Env = {
   NOTION_EVENTS_DB?: string;
   /** The integration of the workspace that base lives in, not the app's own. */
   NOTION_EVENTS_TOKEN?: string;
+  /** The feedback base (api/feedback). Unset: the one in functions/api/feedback.ts. */
+  NOTION_FEEDBACK_DB?: string;
   /** The template page every note is created from. Unset: the base's default. */
   NOTION_NOTES_TEMPLATE?: string;
   // Property names, overridable when the client renames a column in Notion.

@@ -17,6 +17,7 @@ import {
   validEmail,
 } from "../_lib/session.js";
 import { findUser } from "../_lib/users.js";
+import { onRequestPost as feedback } from "./feedback.js";
 import { onRequestPost as track } from "./track.js";
 
 // /api/auth/code, /api/auth/verify, /api/auth/logout — one function for the
@@ -261,6 +262,9 @@ export const onRequestPost: Handler = async ({ request, env }) => {
     // the Hobby plan deploys twelve functions at most, and all are taken.
     case "track":
       return track({ request, env });
+    // The app's feedback form (./feedback.ts), for the same reason.
+    case "feedback":
+      return feedback({ request, env });
     default:
       return json({ error: "Route inconnue" }, 404);
   }
