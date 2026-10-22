@@ -4,6 +4,7 @@ import { SheetPages } from "@/components/sheet";
 import { cssVar } from "@/lib/theme";
 import { safeAreaLog } from "@/lib/safe-area";
 import { cn } from "@/lib/utils";
+import { SettingsFeedback } from "@/components/feedback-banner";
 import { Shimmer } from "@/components/shimmer";
 import { useToast } from "@/components/toast";
 import { openInstallInvite } from "@/components/install-invite";
@@ -114,6 +115,8 @@ export function SettingsScreen({
               OK
             </TextButton>
           </header>
+
+          <SettingsFeedback />
 
           {desktop ? (
             <button

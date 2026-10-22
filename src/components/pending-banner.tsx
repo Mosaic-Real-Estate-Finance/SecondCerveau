@@ -50,12 +50,19 @@ export function PendingBanner({
     if (!showing) bannerSlot.release("pending");
   }, [showing]);
 
-  const detail = [
-    meetings ? `${plural(meetings, "réunion")} à valider` : "",
-    notes ? `${plural(notes, "dictée")} à envoyer` : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  // « 5 sujets attendent votre validation » ; « On ajoute ces 4 réunions
+  // dans Notion ? », « 2 réunions et 1 dictée » when both wait, « cette
+  // réunion » when there is one.
+  const title = total > 1 ? `${total} sujets attendent votre validation` : "1 sujet attend votre validation";
+  const what =
+    total === 1
+      ? meetings
+        ? "cette réunion"
+        : "cette dictée"
+      : meetings && notes
+        ? `${plural(meetings, "réunion")} et ${plural(notes, "dictée")}`
+        : `ces ${meetings ? plural(meetings, "réunion") : plural(notes, "dictée")}`;
+  const detail = `On ajoute ${what} dans Notion\u00a0?`;
 
   return (
     <StackBanner visible={showing && visible && total > 0} label="Sujets à traiter" fade>
@@ -68,7 +75,7 @@ export function PendingBanner({
         className="flex min-w-0 flex-1 items-center gap-3 text-left"
       >
         <span className="min-w-0 flex-1">
-          <span className="block font-semibold">{plural(total, "sujet")} à traiter</span>
+          <span className="block font-semibold">{title}</span>
           <span className="mt-0.5 block text-xs text-[color:var(--muted)]">{detail}</span>
         </span>
         <span className="shrink-0 rounded-full bg-navy px-4 py-2.5 font-medium text-on-accent">Voir →</span>

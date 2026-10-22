@@ -42,6 +42,7 @@ export function NotificationsScreen({
   onUnauthorized,
   notes: shownNotes,
   onDeleteNote,
+  warm = 0,
 }: {
   active: boolean;
   contacts: ContactsState;
@@ -62,6 +63,12 @@ export function NotificationsScreen({
   /** The mockup's own notes, kept away from the phone's store (same origin). */
   notes?: Note[];
   onDeleteNote?: (id: string) => unknown;
+  /**
+   * Changes at each opening of the app: the calls are read then, out of
+   * sight, so the screen opens on them rather than on its loading state —
+   * the pending banner leads here a few seconds later.
+   */
+  warm?: number;
 }) {
   const toast = useToast();
   const stored = useNotes();
@@ -94,6 +101,9 @@ export function NotificationsScreen({
   useEffect(() => {
     if (active) void load();
   }, [active, load]);
+  useEffect(() => {
+    if (warm) void load();
+  }, [warm, load]);
 
   const scroller = useRef<HTMLDivElement>(null);
   const head = useRef<HTMLElement>(null);

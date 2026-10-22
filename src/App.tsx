@@ -350,6 +350,7 @@ export default function App() {
               setPage(1);
             }}
             onCount={setReviewCount}
+            warm={opening}
             onOpenNote={openNote}
             onOpenExcluded={() => openSettings("excluded")}
             onUnauthorized={signOut}

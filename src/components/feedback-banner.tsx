@@ -66,12 +66,61 @@ export function FeedbackBanner({ visible }: { visible: boolean }) {
 
   return (
     <StackBanner visible={showing && visible} label="Votre avis" fade lift={lift} className="feedback-banner">
-      <FeedbackMorph open={open} onOpen={() => setOpen(true)} onClose={() => setShowing(false)} />
+      <FeedbackMorph
+        open={open}
+        onOpen={() => setOpen(true)}
+        onClose={() => setShowing(false)}
+        title="Comment ça s'est passé ?"
+        text="Dictée bien envoyée"
+        question="Êtes-vous satisfait de cette dictée ?"
+      />
     </StackBanner>
   );
 }
 
-function FeedbackMorph({ open, onOpen, onClose }: { open: boolean; onOpen: () => void; onClose: () => void }) {
+/**
+ * The same form at the top of the settings, there whenever wanted: the
+ * card's button morphs it open, and it closes back once answered.
+ */
+export function SettingsFeedback() {
+  const [open, setOpen] = useState(false);
+  // A new form at each opening: the last answer is not left in it.
+  const [round, setRound] = useState(0);
+  return (
+    <section className="mb-4 rounded-2xl bg-white-smoke p-4">
+      <FeedbackMorph
+        key={round}
+        open={open}
+        onOpen={() => setOpen(true)}
+        onClose={() => {
+          setOpen(false);
+          window.setTimeout(() => setRound((n) => n + 1), 300);
+        }}
+        title="Votre avis"
+        text="Un problème, une idée ? Dites-le-nous."
+        question="Êtes-vous satisfait de l'app ?"
+      />
+    </section>
+  );
+}
+
+function FeedbackMorph({
+  open,
+  onOpen,
+  onClose,
+  title,
+  text: lead,
+  question,
+  button = "Donner mon avis",
+}: {
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  title: string;
+  text: string;
+  question: string;
+  button?: string;
+}) {
   const [step, setStep] = useState<Step>("ask");
   const [feeling, setFeeling] = useState<Feeling>("satisfied");
   const [text, setText] = useState("");
@@ -118,15 +167,15 @@ function FeedbackMorph({ open, onOpen, onClose }: { open: boolean; onOpen: () =>
     <div className="feedback-morph" data-open={open} style={{ height }}>
       <div ref={closedFace} className="feedback-face feedback-closed" aria-hidden={open} inert={open}>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold">Dictée bien envoyée</p>
-          <p className="mt-0.5 text-xs text-[color:var(--muted)]">Comment ça s'est passé ?</p>
+          <p className="font-semibold">{title}</p>
+          <p className="mt-0.5 text-xs text-[color:var(--muted)]">{lead}</p>
         </div>
         <button
           type="button"
           onClick={onOpen}
           className="shrink-0 rounded-full bg-navy px-4 py-2.5 font-medium text-on-accent"
         >
-          Donner mon avis
+          {button}
         </button>
       </div>
 
@@ -142,7 +191,7 @@ function FeedbackMorph({ open, onOpen, onClose }: { open: boolean; onOpen: () =>
             <div className="flex items-start justify-between gap-2">
               <p className="pt-1 font-semibold">
                 {step === "ask"
-                  ? "Êtes-vous satisfait de cette dictée ?"
+                  ? question
                   : feeling === "problem"
                     ? "Que s'est-il passé ?"
                     : "Un mot pour améliorer l'app ?"}
