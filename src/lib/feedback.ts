@@ -55,7 +55,7 @@ export function useFeedbackDue(): boolean {
   );
 }
 
-export type Feeling = "satisfied" | "problem";
+export type Feeling = "satisfied" | "problem" | "free";
 
 const DEVICE = { iphone: "iPhone", ipad: "iPad", android: "Android", other: "Ordinateur" } as const;
 

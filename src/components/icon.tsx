@@ -2,9 +2,11 @@ import bell from "@/assets/icons/bell.svg?raw";
 import checkmarkCircle from "@/assets/icons/checkmark.circle.svg?raw";
 import gear from "@/assets/icons/gear.svg?raw";
 import microphone from "@/assets/icons/microphone.svg?raw";
+import microphoneCircleFill from "@/assets/icons/microphone.circle.fill.svg?raw";
 import minusCircle from "@/assets/icons/minus.circle.svg?raw";
 import personFillXmark from "@/assets/icons/person.fill.xmark.svg?raw";
 import personLineDottedPerson from "@/assets/icons/person.line.dotted.person.svg?raw";
+import plusMessage from "@/assets/icons/plus.message.svg?raw";
 import quoteBubble from "@/assets/icons/quote.bubble.svg?raw";
 import squareAndPencil from "@/assets/icons/square.and.pencil.svg?raw";
 import xmarkCircle from "@/assets/icons/xmark.circle.svg?raw";
@@ -20,11 +22,13 @@ const ICONS = {
   bell: inline(bell),
   gear: inline(gear),
   microphone: inline(microphone),
+  "microphone.circle.fill": inline(microphoneCircleFill),
   "checkmark.circle": inline(checkmarkCircle),
   "xmark.circle": inline(xmarkCircle),
   "minus.circle": inline(minusCircle),
   "person.fill.xmark": inline(personFillXmark),
   "person.line.dotted.person": inline(personLineDottedPerson),
+  "plus.message": inline(plusMessage),
   "quote.bubble": inline(quoteBubble),
   "square.and.pencil": inline(squareAndPencil),
 } as const;

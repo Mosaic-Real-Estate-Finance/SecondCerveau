@@ -45,35 +45,49 @@ export function NotificationsCta() {
     }
   };
 
-  return (
-    <section className="mb-5 rounded-2xl bg-navy p-4 text-on-accent" aria-labelledby="notifications-cta-title">
-      <div className="flex items-center gap-3">
+  const act = () => (state === "browser" ? openInstallInvite() : void enable());
+  const content = (
+    <>
+      <span className="flex items-center gap-3">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-on-accent/15">
           <Icon name="bell" className="h-4" />
         </span>
-        <h2 id="notifications-cta-title" className="text-base font-medium leading-snug">
+        <span id="notifications-cta-title" className="text-base font-medium leading-snug">
           {state === "browser"
             ? "Installez l'app pour recevoir les notifications"
             : state === "denied"
               ? "Les notifications sont bloquées"
               : "Activez les notifications"}
-        </h2>
-      </div>
-      <p className="mt-2 text-xs leading-snug text-on-accent/80">
+        </span>
+      </span>
+      <span className="mt-2 block text-balance text-xs leading-snug text-on-accent/80">
         {state === "denied"
           ? `Réactivez-les dans ${notificationSettingsPath()}.`
           : "Soyez prévenu dès qu'une dictée ou une réunion attend votre validation."}
-      </p>
+      </span>
       {state !== "denied" && (
-        <button
-          type="button"
-          onClick={() => (state === "browser" ? openInstallInvite() : void enable())}
-          disabled={busy}
-          className="mt-3 flex h-10 w-full items-center justify-center rounded-xl bg-on-accent font-medium text-navy disabled:opacity-60"
-        >
+        <span className="mt-3 flex h-10 w-full items-center justify-center rounded-xl bg-on-accent font-medium text-navy">
           {state === "browser" ? "Installer l'app" : busy ? "Activation…" : "Activer les notifications"}
-        </button>
+        </span>
       )}
+    </>
+  );
+
+  // Blocked, there is nothing to tap: only the device's settings undo it.
+  // Otherwise the whole card is the button, not only the pill inside it.
+  return state === "denied" ? (
+    <section className="mb-5 block rounded-2xl bg-navy p-4 text-on-accent" aria-labelledby="notifications-cta-title">
+      {content}
     </section>
+  ) : (
+    <button
+      type="button"
+      onClick={act}
+      disabled={busy}
+      aria-labelledby="notifications-cta-title"
+      className="mb-5 block w-full rounded-2xl bg-navy p-4 text-left text-on-accent transition-transform active:scale-[0.98] disabled:opacity-80"
+    >
+      {content}
+    </button>
   );
 }

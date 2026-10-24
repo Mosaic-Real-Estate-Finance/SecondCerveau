@@ -5,14 +5,15 @@ import { allowed, fromThisSite, place, who } from "./track.js";
 // screen after a dictation has reached Notion (src/components/feedback-banner).
 // One page each in « Retours sur l'app » (NOTION_FEEDBACK_DB), beside the
 // usage events and written with their integration, NOTION_EVENTS_TOKEN:
-// Retour (title), Ressenti (Satisfait | Problème), Commentaire, Utilisateur,
+// Retour (title), Ressenti (Satisfait | Problème | Retour libre — the
+// settings' open form), Commentaire, Utilisateur,
 // Date, Dictée n°, Appareil, Traité.
 //
 // Unlike an event, the answer waits for Notion: the form says « Merci » only
 // once the page exists, and offers to try again otherwise.
 
 const DEFAULT_DB = "3b6e5845-0a92-422d-bb6f-2c170c7610d1";
-const FEELINGS = { satisfied: "Satisfait", problem: "Problème" } as const;
+const FEELINGS = { satisfied: "Satisfait", problem: "Problème", free: "Retour libre" } as const;
 const MAX_TEXT = 2000;
 
 type Body = { feeling?: string; text?: string; count?: number; device?: string; user?: string };

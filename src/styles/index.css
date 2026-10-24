@@ -727,6 +727,20 @@ a {
   box-shadow: 0 8px 32px var(--shadow), 0 0 0 1px var(--hairline);
   pointer-events: auto;
 }
+/* A banner that is one button from edge to edge: the button takes the
+   padding, so a tap anywhere on the banner counts, and gives way a little
+   under the finger. */
+.push-banner.is-pressable {
+  padding: 0;
+}
+.push-banner.is-pressable > button {
+  padding: 14px 14px 14px 16px;
+  border-radius: inherit;
+  transition: transform 160ms var(--morph-close-ease);
+}
+.push-banner.is-pressable > button:active {
+  transform: scale(0.98);
+}
 /* Going away on its own: a slow fade in place, nothing else moves. */
 .t-stack-banner.push-banner.is-fading {
   opacity: 0;
@@ -734,62 +748,75 @@ a {
   transition: opacity 600ms ease;
 }
 
-/* ---- Feedback banner: the plus menu morph -------------------------
-   transitions.dev 20 on the banner itself. Its height follows the face on
-   show (measured in feedback-banner.tsx), on the bouncy ease opening and
-   the soft one closing; the banner's face leaves sliding left, blurred, as
-   the snippet's plus does, and the form arrives as its menu. */
+/* ---- Feedback: the plus menu morph -------------------------------
+   transitions.dev 20, on a box of any size (feedback-banner.tsx). Its
+   height follows the face on show, measured in script, on the bouncy ease
+   opening and the soft one closing; the first face leaves sliding left,
+   blurred, as the snippet's plus does, and the second arrives as its menu.
+   Child selectors only: a morph inside a morph (the field and its
+   dictation) answers to its own box, not to the one around it. */
 .push-banner.feedback-banner {
   display: block;
 }
-.feedback-morph {
+.morph-box {
   position: relative;
   overflow: hidden;
-  /* Room for the focus ring of the field, which the clip would cut. */
-  margin: -2px;
-  padding: 2px;
-  box-sizing: content-box;
   transition: height var(--morph-close-dur) var(--morph-close-ease);
 }
-.feedback-morph[data-open="true"] {
+.morph-box[data-open="true"] {
   transition: height var(--morph-open-dur) var(--morph-ease);
 }
-.feedback-face {
+.morph-box > .morph-face {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  right: 2px;
+  top: 0;
+  left: 0;
+  right: 0;
   transition:
     opacity var(--morph-fade-dur) var(--morph-close-ease),
     transform var(--morph-open-dur) var(--morph-close-ease),
     filter var(--morph-fade-dur) var(--morph-close-ease);
 }
-.feedback-closed {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.feedback-morph[data-open="true"] .feedback-closed {
+.morph-box[data-open="true"] > .morph-closed {
   opacity: 0;
   transform: translateX(calc(-1 * var(--morph-slide)));
   filter: blur(var(--morph-blur));
   pointer-events: none;
 }
-.feedback-open {
+.morph-box > .morph-open {
   opacity: 0;
   transform: translateX(var(--morph-slide)) scale(var(--morph-scale));
   filter: blur(var(--morph-blur));
   pointer-events: none;
 }
-.feedback-morph[data-open="true"] .feedback-open {
+.morph-box[data-open="true"] > .morph-open {
   opacity: 1;
   transform: translateX(0) scale(1);
   filter: blur(0);
   pointer-events: auto;
 }
+/* The field's ring is drawn inside it: outside, the box's clip cut its
+   edges off. */
+.feedback-field textarea {
+  outline: none;
+}
+.feedback-field textarea:focus,
+.feedback-field textarea:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-navy);
+}
+/* The live words: the newest in view, the oldest fading out above. */
+.feedback-live {
+  max-height: 110px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 35%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 35%);
+}
 @media (prefers-reduced-motion: reduce) {
-  .feedback-morph,
-  .feedback-face {
+  .morph-box,
+  .morph-box > .morph-face {
     transition: none !important;
   }
 }

@@ -359,16 +359,21 @@ export function NotificationsScreen({
   );
 }
 
+// Nothing waiting: the eyes from Telegram's animated emoji set (public/
+// eyes.webp, cut down to 192 px with its own frame timing), a title, a line.
+// Balanced, so the two lines of the text come out the same length.
 function Empty({ view }: { view: View }) {
   const text =
     view === "notes"
-      ? "Aucune dictée à envoyer. Une dictée qui n'est pas encore dans Notion apparaît ici."
+      ? "Les dictées pas encore envoyées dans Notion arriveront ici"
       : view === "meetings"
-        ? "Aucune réunion à valider. Une réunion Read AI avec une personne que le CRM ne connaît pas apparaît ici."
-        : "Rien en attente. Les dictées pas encore envoyées et les réunions Read AI à valider apparaissent ici.";
+        ? "Les réunions ReadAI à valider arriveront ici"
+        : "Les réunions ReadAI à valider et les dictées en attente arriveront ici";
   return (
-    <p className="rounded-2xl bg-white-smoke p-4 text-[color:var(--muted)]">
-      {text}
-    </p>
+    <div className="flex flex-col items-center px-6 pb-8 pt-[10vh] text-center">
+      <img src="/eyes.webp" alt="" width={96} height={96} className="h-24 w-24 select-none" draggable={false} />
+      <h2 className="mt-4 text-base font-semibold">Rien en attente</h2>
+      <p className="mt-1 max-w-[300px] text-balance text-xs text-[color:var(--muted)]">{text}</p>
+    </div>
   );
 }

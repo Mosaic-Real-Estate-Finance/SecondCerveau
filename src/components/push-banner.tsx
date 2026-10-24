@@ -82,19 +82,16 @@ export function PushBanner({
   useEffect(() => onWanted?.(wanted), [wanted, onWanted]);
 
   return (
-    <StackBanner visible={wanted} label="Notifications">
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold">Les notifications sont importantes</p>
-        <p className="mt-0.5 text-xs text-[color:var(--muted)]">
-          Elles permettent de valider l'ajout d'un résumé de Read AI dans Notion.
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={() => void ask()}
-        className="shrink-0 rounded-full bg-navy px-4 py-2.5 font-medium text-on-accent"
-      >
-        Activer →
+    <StackBanner visible={wanted} label="Notifications" className="is-pressable">
+      {/* The whole banner is the button, not only its pill. */}
+      <button type="button" onClick={() => void ask()} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+        <span className="min-w-0 flex-1">
+          <span className="block text-balance font-semibold">Les notifications sont importantes</span>
+          <span className="mt-0.5 block text-balance text-xs text-[color:var(--muted)]">
+            Elles permettent de valider l'ajout d'un résumé de Read AI dans Notion.
+          </span>
+        </span>
+        <span className="shrink-0 rounded-full bg-navy px-4 py-2.5 font-medium text-on-accent">Activer →</span>
       </button>
     </StackBanner>
   );
