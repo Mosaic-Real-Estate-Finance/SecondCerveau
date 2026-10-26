@@ -2,6 +2,7 @@ import { internalDomains } from "../auth.js";
 import type { Env } from "../notion.js";
 import { notifyAll } from "../push.js";
 import { redis } from "../redis.js";
+import { findUser } from "../users.js";
 import { findSame, keyOf, RECENT_MS, traceOf, type Trace } from "./meeting-key.js";
 import { matchExternals } from "./match.js";
 import { completeNote, createMeetingNote, findNoteByKey } from "./note.js";
@@ -186,8 +187,8 @@ async function run(env: Env, meeting: Meeting, lockWaitMs: number): Promise<Outc
     if (!people.length) {
       const created = await createMeetingNote(env, { meeting, key, authorIds, contactIds: recognized.map((c) => c.id) });
       await notifyAll(env, {
-        title: `Réunion ajoutée — ${titleOf(meeting)}`,
-        body: recognized.map((contact) => contact.name).filter(Boolean).join(", "),
+        title: "Réunion ajoutée ✅",
+        body: addedBody(meeting.start, recognized),
         // Nothing to decide: the tap opens the note itself, in Notion.
         url: created.url || valider(),
         tag: key,
@@ -259,6 +260,25 @@ const hourOf = (iso: string) => {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "" : PARIS.format(date).replace(":", "h");
 };
+
+// The team receives these notifications: one of its own is never named in
+// them — a user of the app, or a contact whose company is Mosaic (Oscar and
+// Philippe are both in the CRM).
+const isTeam = (contact: Pick<Recognized, "email" | "company">) =>
+  findUser(contact.email) !== null || /\bmosaic\b/i.test(contact.company ?? "");
+
+/**
+ * « La réunion de 10:30 avec Sébastien Chabrol a été ajoutée dans Notion » —
+ * named when there is one person outside the team, not when there are
+ * several: the note says who.
+ */
+export function addedBody(start: string, recognized: Recognized[]) {
+  const date = new Date(start);
+  const hour = Number.isNaN(date.getTime()) ? "" : PARIS.format(date);
+  const others = recognized.filter((contact) => !isTeam(contact) && contact.name?.trim());
+  const who = others.length === 1 ? ` avec ${others[0].name.trim()}` : "";
+  return `La réunion${hour ? ` de ${hour}` : ""}${who} a été ajoutée dans Notion`;
+}
 
 // One name, never a list: the first person still waiting for a decision —
 // someone the CRM does not know, which is the whole point of asking. With
