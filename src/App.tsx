@@ -30,6 +30,7 @@ import { openInstallInvite } from "@/components/install-invite";
 import { persistStorage, updateNote, useNotes, type Note, type NoteContact } from "@/lib/notes";
 import { resumePending, transcribeNote } from "@/lib/pipeline";
 import { afterTransition } from "@/lib/schedule";
+import { openInNotion } from "@/lib/open-notion";
 
 export type ContactsState = {
   status: "loading" | "ready" | "error";
@@ -226,6 +227,8 @@ export default function App() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     const onMessage = (event: MessageEvent) => {
+      // A meeting already in Notion: its page, in the Notion app.
+      if (typeof event.data?.notion === "string") return openInNotion(event.data.notion);
       const url = typeof event.data?.open === "string" ? new URL(event.data.open, location.origin) : null;
       const id = url?.searchParams.get("valider");
       if (id === null || id === undefined) return;

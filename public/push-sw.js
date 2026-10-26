@@ -31,15 +31,23 @@ self.addEventListener("notificationclick", (event) => {
   const target = new URL(event.notification.data?.url || "/", self.location.origin);
   event.waitUntil(
     (async () => {
-      // A Notion page opens where Notion lives; the app is not the place.
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
+      // A Notion page opens in the Notion app, not in the browser the
+      // installed app would show it in. The app open: it hands the page over
+      // itself (src/lib/open-notion.ts). Otherwise a page of the app does
+      // (public/notion.html), the web address as its fallback.
       if (target.origin !== self.location.origin) {
-        await self.clients.openWindow(target.href);
+        if (open) {
+          await open.focus();
+          open.postMessage({ notion: target.href });
+          return;
+        }
+        await self.clients.openWindow(`/notion.html?u=${encodeURIComponent(target.href)}`);
         return;
       }
       // The app already open: brought forward and told where to go, rather
       // than opened a second time.
-      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
       if (open) {
         await open.focus();
         open.postMessage({ open: target.pathname + target.search });
