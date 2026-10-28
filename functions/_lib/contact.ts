@@ -84,8 +84,10 @@ function international(dial: string | undefined, number: string) {
 
 // One phone column per country, and a catch-all. Several numbers for the same
 // country share their column, separated by a slash.
+export const PHONE_COLUMNS: Record<string, string> = { FR: "Téléphone FR", CH: "Téléphone CH", other: "Téléphone" };
+
 export function phoneProperties(schema: Schema, phones: NonNullable<NewContact["phones"]>) {
-  const columns: Record<string, string> = { FR: "Téléphone FR", CH: "Téléphone CH", other: "Téléphone" };
+  const columns = PHONE_COLUMNS;
   const buckets: Record<string, string[]> = { FR: [], CH: [], other: [] };
   for (const phone of phones) {
     const number = phone.number?.trim();

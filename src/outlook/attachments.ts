@@ -97,3 +97,10 @@ export function chosen(files: Candidate[]) {
   const picked = files.filter((file) => file.state === "ready" && file.selected);
   return { picked, bytes: picked.reduce((total, file) => total + file.size, 0) };
 }
+
+/**
+ * Every importable file ticked, or none: the whole list, not the part on
+ * screen. A file that cannot be imported keeps its state; it is never sent.
+ */
+export const selectAll = (files: Candidate[], selected: boolean): Candidate[] =>
+  files.map((file) => (file.state === "ready" ? { ...file, selected } : file));

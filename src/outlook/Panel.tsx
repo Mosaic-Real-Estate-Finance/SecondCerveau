@@ -5,6 +5,7 @@ import { SuccessCheck } from "@/components/success-check";
 import { dialOf } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import {
+  addPhones,
   ApiError,
   createContact,
   createNote,
@@ -22,13 +23,23 @@ import {
   type ThreadMessage,
   type UploadedFile,
 } from "./api";
-import { candidates, chosen as chosenFiles, sizeLabel, type Candidate } from "./attachments";
+import { candidates, chosen as chosenFiles, selectAll, sizeLabel, type Candidate } from "./attachments";
+import { companyKey, guessCompany } from "./company-match";
 import { apiToken, AuthError, configured, graphToken } from "./auth";
 import { NotionButton } from "./NotionButton";
 import { openNotes } from "./notion-link";
 import { INTERNAL_DOMAINS, USERS_EMAILS } from "./config";
 import { fetchThread, GraphError } from "./graph";
-import { draftReady, newDraft, ParticipantForm, type Draft } from "./ParticipantForm";
+import { OutlookFeedback } from "./OutlookFeedback";
+import {
+  draftPhone,
+  draftReady,
+  LABEL_TEXT,
+  newDraft,
+  ParticipantForm,
+  type Draft,
+  type DraftPhone,
+} from "./ParticipantForm";
 import {
   awaitItem,
   bodyReadable,
@@ -41,6 +52,7 @@ import {
   type MailContext,
 } from "./office";
 import { externals, fold, type Participant } from "./participants";
+import { phoneKey, signaturesOf } from "./signature";
 
 // The panel, about 320 px wide, one column, no horizontal scrolling.
 //
@@ -58,6 +70,12 @@ type Row = {
   match: MatchedContact | null;
   selected: boolean;
   draft: Draft | null;
+  /**
+   * A known contact: the numbers their signature gives that the fiche does
+   * not hold yet. Offered unticked; only the ticked ones are added, and
+   * nothing already on the fiche is touched.
+   */
+  extra: { phone: DraftPhone; picked: boolean }[];
 };
 
 type Loaded = {
@@ -84,7 +102,16 @@ type Stage =
   | { name: "failed"; message: string; retry: boolean; detail?: string | null }
   | { name: "ready"; data: Loaded }
   | { name: "sending"; data: Loaded; step: string }
-  | { name: "sent"; url: string; added: number; created: boolean; imported: number; skipped: SkippedFile[] };
+  | {
+      name: "sent";
+      url: string;
+      added: number;
+      created: boolean;
+      imported: number;
+      skipped: SkippedFile[];
+      /** Fiches whose new numbers could not be written; the note is written all the same. */
+      phonesFailed: string[];
+    };
 
 // About 320 px on a desktop taskpane, the whole screen on a phone (feature
 // 003): the cap only stops a tablet from stretching a line across the page.
@@ -131,6 +158,11 @@ const SkippedList = ({ files }: { files: SkippedFile[] }) =>
     </div>
   ) : null;
 
+const PhonesFailed = ({ names }: { names: string[] }) =>
+  names.length ? (
+    <Muted>{`Les numéros n'ont pas pu être ajoutés à la fiche de ${names.join(", ")}. À reprendre dans Notion.`}</Muted>
+  ) : null;
+
 const importedLine = (count: number) =>
   `${count} fichier${s_(count)} importé${s_(count)} dans la colonne Fichiers.`;
 
@@ -175,6 +207,8 @@ function Done({ title, url, children }: { title: string; url: string; children?:
       {children}
       <NotionButton label="Ouvrir dans Notion" url={url} />
       <CloseButton />
+      {/* After the note, never before: optional, and the note is already safe. */}
+      <OutlookFeedback />
     </Frame>
   );
 }
@@ -196,6 +230,9 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
   // Same idea for the files: an upload already in Notion is not sent twice
   // when the note fails and the user retries. Keyed on the file, not the row.
   const uploads = useRef(new Map<string, UploadedFile & { at: number }>());
+  // And for the numbers added to a known fiche: the server would not add one
+  // twice, but there is no reason to ask it again.
+  const phonesAdded = useRef(new Set<string>());
   const drafting = useRef(false);
 
   const generation = useRef(0);
@@ -217,6 +254,7 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
     set({ name: "loading", read: 0 });
     created.current.clear();
     uploads.current.clear();
+    phonesAdded.current.clear();
 
     // Waited for, not read once: see awaitItem in ./office.
     const mail = await awaitItem();
@@ -247,9 +285,36 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
         uploadLimit().catch(() => null),
       ]);
 
+      // What each sender's own signature says, over every message they wrote
+      // in the thread: a number belongs to the one who signed with it, never
+      // to everyone in copy.
+      const signatures = signaturesOf(messages, outside.map((one) => one.address));
       const rows: Row[] = outside.map((participant) => {
         const match_ = match.matched[participant.address] ?? null;
-        return { participant, match: match_, selected: true, draft: match_ ? null : newDraft(participant.name, participant.address) };
+        const signature = signatures.get(participant.address.toLowerCase());
+        const phones = (signature?.phones ?? []).map(draftPhone).filter((phone): phone is DraftPhone => !!phone);
+        if (match_) {
+          const held = new Set((match_.phones ?? []).map((number) => phoneKey(number)).filter(Boolean));
+          const extra = (signature?.phones ?? [])
+            .filter((phone) => !held.has(phone.e164))
+            .map(draftPhone)
+            .filter((phone): phone is DraftPhone => !!phone)
+            .map((phone) => ({ phone, picked: false }));
+          return { participant, match: match_, selected: true, draft: null, extra };
+        }
+        const guess = signature
+          ? guessCompany(signature, participant.address, companies.companies)
+          : { sure: null, maybe: [] };
+        const hint = signature
+          ? { sureId: guess.sure?.id ?? null, maybe: guess.maybe, name: signature.legalName, address: signature.address }
+          : undefined;
+        return {
+          participant,
+          match: null,
+          selected: true,
+          draft: newDraft(participant.name, participant.address, { phones, hint }),
+          extra: [],
+        };
       });
 
       // Everything after the mark the note carries. No mark — a note from
@@ -313,14 +378,26 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
   useEffect(() => {
     const rows = stage.name === "ready" || stage.name === "sending" ? stage.data.rows : [];
     drafting.current = rows.some(
-      (row) => row.draft && (row.draft.name.trim() || row.draft.role.trim() || row.draft.phone.number.trim()),
+      (row) =>
+        row.draft &&
+        (row.draft.name.trim() || row.draft.role.trim() || row.draft.phones.some((phone) => phone.number.trim())),
     );
   }, [stage]);
 
-  const patch = (data: Loaded, rows: Row[]) => setStage({ name: "ready", data: { ...data, rows } });
+  // Every change on the ready screen is applied to the state as it is now,
+  // not to the copy the render saw: two quick taps, or a tap racing a
+  // re-render, must not bring back what the other one changed.
+  const update = (change: (data: Loaded) => Loaded) =>
+    setStage((now) => (now.name === "ready" ? { name: "ready", data: change(now.data) } : now));
+  const patchRow = (index: number, change: (row: Row) => Row) =>
+    update((data) => ({ ...data, rows: data.rows.map((row, at) => (at === index ? change(row) : row)) }));
 
   async function send(data: Loaded) {
     const chosen = data.rows.filter((row) => row.selected);
+    // A company created for one contact is the company of the next one who
+    // names it, in the same send.
+    const companiesMade = new Map<string, string>();
+    const phonesFailed: string[] = [];
     try {
       // Contacts first, in series, keeping each id: a retry resumes where it
       // stopped instead of creating a second fiche for the same person.
@@ -328,6 +405,20 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
       for (const row of chosen) {
         if (row.match) {
           ids.push(row.match.id);
+          const picked = row.extra.filter((one) => one.picked && one.phone.number.trim());
+          if (picked.length && !phonesAdded.current.has(row.match.id)) {
+            setStage({ name: "sending", data, step: `Ajout des numéros de ${row.match.name}…` });
+            try {
+              await addPhones(
+                row.match.id,
+                picked.map(({ phone }) => ({ country: phone.country, dial: dialOf(phone.country), number: phone.number })),
+              );
+              phonesAdded.current.add(row.match.id);
+            } catch {
+              // The note matters more than a number: said on the last screen.
+              phonesFailed.push(row.match.name || row.participant.address);
+            }
+          }
           continue;
         }
         const held = created.current.get(row.participant.address);
@@ -337,17 +428,21 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
         }
         if (!row.draft || !draftReady(row.draft)) continue;
         setStage({ name: "sending", data, step: `Création de ${row.draft.name.trim()}…` });
+        const phones = row.draft.phones
+          .filter((phone) => phone.number.trim())
+          .map((phone) => ({ country: phone.country, number: phone.number, dial: dialOf(phone.country) }));
+        const newName = !row.draft.companyId ? row.draft.companyName?.trim() : undefined;
+        const madeId = newName ? companiesMade.get(companyKey(newName)) : undefined;
         const contact = await createContact({
           name: row.draft.name.trim(),
           email: row.draft.email.trim(),
           role: row.draft.role.trim() || undefined,
           types: row.draft.types.length ? row.draft.types : undefined,
-          phones: row.draft.phone.number.trim()
-            ? [{ ...row.draft.phone, dial: dialOf(row.draft.phone.country) }]
-            : undefined,
-          companyId: row.draft.companyId,
-          newCompany: !row.draft.companyId && row.draft.companyName ? { name: row.draft.companyName } : undefined,
+          phones: phones.length ? phones : undefined,
+          companyId: row.draft.companyId ?? madeId,
+          newCompany: newName && !madeId ? { name: newName, address: row.draft.companyAddress } : undefined,
         });
+        if (newName && contact.companyId) companiesMade.set(companyKey(newName), contact.companyId);
         created.current.set(row.participant.address, contact);
         ids.push(contact.id);
       }
@@ -414,6 +509,7 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
         created: !data.note,
         imported: written.filesAdded ?? 0,
         skipped: [...skipped, ...(written.filesSkipped ?? [])],
+        phonesFailed,
       });
     } catch (error) {
       const api = error as ApiError;
@@ -530,11 +626,13 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
         <Muted>{`${stage.added} message${s_(stage.added)} ${stage.added > 1 ? "ont" : "a"} été centralisé${s_(stage.added)}, Notion AI s'occupe du résumé.`}</Muted>
         {stage.imported > 0 && <Muted>{importedLine(stage.imported)}</Muted>}
         <SkippedList files={stage.skipped} />
+        <PhonesFailed names={stage.phonesFailed} />
       </Done>
     ) : (
       <Done title="La note a été enrichie" url={stage.url}>
         {stage.imported > 0 && <Muted>{importedLine(stage.imported)}</Muted>}
         <SkippedList files={stage.skipped} />
+        <PhonesFailed names={stage.phonesFailed} />
       </Done>
     );
   }
@@ -594,16 +692,13 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
           </p>
           <ul className="flex flex-col gap-2">
             {data.rows.map((row, index) => {
-              const toggle = () =>
-                patch(
-                  data,
-                  data.rows.map((other, at) => (at === index ? { ...other, selected: !other.selected } : other)),
-                );
-              const onDraft = (draft: Draft) =>
-                patch(
-                  data,
-                  data.rows.map((other, at) => (at === index ? { ...other, draft } : other)),
-                );
+              const toggle = () => patchRow(index, (other) => ({ ...other, selected: !other.selected }));
+              const onDraft = (draft: Draft) => patchRow(index, (other) => ({ ...other, draft }));
+              const pickExtra = (key: number) =>
+                patchRow(index, (other) => ({
+                  ...other,
+                  extra: other.extra.map((one, at) => (at === key ? { ...one, picked: !one.picked } : one)),
+                }));
               return (
                 <li key={row.participant.address} className="rounded-xl bg-white-smoke px-3 py-2.5">
                   {/* The whole row is the target, not the 16 px box: on a phone
@@ -638,6 +733,34 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
                       )}
                     </span>
                   </label>
+                  {row.match && row.selected && row.extra.length > 0 && (
+                    <div className="mt-2 rounded-xl bg-white-smoke/70 p-3">
+                      <p className="mb-1.5 text-2xs text-[color:var(--muted)]">
+                        {`Lu${s_(row.extra.length)} dans la signature, absent${s_(row.extra.length)} de la fiche. Coche ceux à ajouter :`}
+                      </p>
+                      <ul className="flex flex-col gap-1">
+                        {row.extra.map((one, key) => (
+                          <li key={`${one.phone.country}-${one.phone.number}`}>
+                            <label className="flex min-h-9 cursor-pointer items-center gap-2.5 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={one.picked}
+                                onChange={() => pickExtra(key)}
+                                disabled={sending}
+                                className="h-4 w-4 shrink-0 accent-[color:var(--color-navy)]"
+                              />
+                              <span>
+                                {`${dialOf(one.phone.country)} ${one.phone.number}`}
+                                {one.phone.label && (
+                                  <span className="text-2xs text-[color:var(--muted)]">{` · ${LABEL_TEXT[one.phone.label]}`}</span>
+                                )}
+                              </span>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {!row.match && row.selected && !sending && row.draft && (
                     <ParticipantForm
                       draft={row.draft}
@@ -657,13 +780,13 @@ export function Panel({ inOutlook }: { inOutlook: boolean }) {
             files={data.files}
             disabled={sending}
             onToggle={(key) =>
-              setStage({
-                name: "ready",
-                data: {
-                  ...data,
-                  files: data.files.map((file) => (file.key === key ? { ...file, selected: !file.selected } : file)),
-                },
-              })
+              update((now) => ({
+                ...now,
+                files: now.files.map((file) => (file.key === key ? { ...file, selected: !file.selected } : file)),
+              }))
+            }
+            onAll={(selected) =>
+              update((now) => ({ ...now, files: selectAll(now.files, selected) }))
             }
           />
         )}
@@ -690,18 +813,35 @@ function FilesBox({
   files,
   disabled,
   onToggle,
+  onAll,
 }: {
   files: Candidate[];
   disabled: boolean;
   onToggle: (key: string) => void;
+  onAll: (selected: boolean) => void;
 }) {
   const { picked, bytes } = chosenFiles(files);
+  const ready = files.filter((file) => file.state === "ready").length;
   const summary = picked.length
     ? `${picked.length} fichier${s_(picked.length)} · ${sizeLabel(bytes)} ${picked.length > 1 ? "seront joints" : "sera joint"}`
     : "Aucun fichier ne sera joint";
   return (
     <div className="rounded-2xl border border-[color:var(--color-white-smoke)] bg-white p-3">
-      <p className="mb-2.5 text-xs text-[color:var(--muted)]">{summary}</p>
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <p className="text-xs text-[color:var(--muted)]">{summary}</p>
+        {/* One tap from 27 to none, and back. Shown from two importable
+            files: for one, its own box is the same tap. */}
+        {ready > 1 && (
+          <button
+            type="button"
+            disabled={disabled}
+            className="shrink-0 text-2xs text-navy underline disabled:opacity-40"
+            onClick={() => onAll(picked.length === 0)}
+          >
+            {picked.length ? "Tout désélectionner" : "Tout sélectionner"}
+          </button>
+        )}
+      </div>
       <ul className="flex flex-col gap-2">
         {files.map((file) => {
           const ready = file.state === "ready";

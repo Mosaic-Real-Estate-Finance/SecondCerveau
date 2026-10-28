@@ -54,6 +54,18 @@ Le panneau ne transporte jamais les fichiers : le serveur Vercel n'accepte que 4
 
 Avant la mise en production : `node --env-file=.env.local scripts/check-attachments.mjs` vérifie sur la vraie base que Notion conserve les fichiers existants quand la colonne est réécrite. Tests : `npm run test:outlook`. Le manifeste changé doit être redéployé par l'administrateur Microsoft 365 (`https://mosaic.gouman.fr/outlook/manifest.xml`). Détails : `specs/003-outlook-mobile-pieces-jointes/`.
 
+### Signatures, sociétés et retours
+
+Le panneau lit la signature de chaque interlocuteur externe, sur tous les messages qu'il a écrits dans le fil (`src/outlook/signature.ts`), par règles et sans IA : numéros (France et international, fax écartés, étiquette « mobile / ligne directe / standard / fixe » seulement si la signature l'écrit), ligne de société, adresse, site. Un numéro va à celui qui l'a signé, jamais aux autres participants. Pour un nouveau contact, les numéros sont préremplis et modifiables ; pour un contact déjà en base, ceux absents de la fiche sont proposés décochés et ajoutés par `PATCH /api/outlook/contacts` sans toucher ceux déjà présents.
+
+La société est cherchée dans le CRM d'abord (`src/outlook/company-match.ts`) : un seul nom écrit dans la signature, à la casse, aux accents, à la ponctuation et à la forme juridique près, est présélectionné ; une faute de frappe, le site, le domaine de l'adresse ou plusieurs sociétés possibles ne donnent que des suggestions à confirmer. Sinon, « Créer une société » ouvre un formulaire prérempli du nom (ligne avec forme juridique) et de l'adresse lus dans la signature ; rien n'est créé sans action de l'utilisateur, et le serveur reprend une société existante de même nom au lieu d'en créer une seconde.
+
+Après l'envoi, un encart facultatif « Ça marche bien / J'ai eu un problème / Il manque une fonctionnalité » écrit dans « Retours sur l'app » par la même route que la dictée (`/api/auth/feedback`, appareil « Complément Outlook »). Rien du mail n'y part.
+
+### Le complément n'apparaît pas
+
+Constaté une fois chez Mosaic, à confirmer : quand le complément est déployé par l'administrateur mais n'apparaît pas dans Outlook, l'ouvrir depuis la gestion des applications (Outlook → Applications / « Obtenir des compléments » → l'application → **Essayer**) l'a fait apparaître. C'est un contournement observé, pas une correction garantie : à refaire sur le compte concerné et, si cela ne suffit pas, vérifier l'affectation de l'application dans le centre d'administration Microsoft 365 (le déploiement peut prendre jusqu'à 24 h).
+
 ## Notifications
 
 Dans l'app installée (iOS 16.4 et plus), « Recevoir les notifications » dans les réglages. Elles partent à tous ceux qui les ont activées : réunion ajoutée, personnes à valider, réunion non enregistrée. Jamais de résumé ni de transcription. Toucher une notification ouvre l'écran « Notifications », sur l'appel concerné quand il y en a un. Le service worker reste généré par `vite-plugin-pwa` ; `public/push-sw.js` lui ajoute les deux écouteurs `push` et `notificationclick` par `importScripts`, sans toucher au cache.

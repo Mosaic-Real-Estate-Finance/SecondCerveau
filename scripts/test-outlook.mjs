@@ -40,6 +40,8 @@ writeFileSync(
       join(root, "src/outlook/attachments.ts"),
       join(root, "src/outlook/entra-config.ts"),
       join(root, "src/outlook/auth-detail.ts"),
+      join(root, "src/outlook/signature.ts"),
+      join(root, "src/outlook/company-match.ts"),
     ],
   }),
 );
@@ -58,9 +60,13 @@ const upload = await load("functions/_lib/upload.js");
 const panel = await load("src/outlook/attachments.js");
 const attachments = await load("functions/api/outlook/attachments.js");
 const notes = await load("functions/api/outlook/notes.js");
+const contactsRoute = await load("functions/api/outlook/contacts/index.js");
+const matchRoute = await load("functions/api/outlook/contacts/match.js");
 const entra = await load("src/outlook/entra-config.js");
 const authDetail = await load("src/outlook/auth-detail.js");
 const auth = await load("functions/_lib/auth.js");
+const signature = await load("src/outlook/signature.js");
+const companyMatch = await load("src/outlook/company-match.js");
 
 // ---- Identity --------------------------------------------------------------
 
@@ -131,6 +137,8 @@ globalThis.fetch = async (input, init = {}) => {
 
   if (url.host === "api.notion.com") {
     const body = init.body;
+    const crmAnswer = crmRoute(method, path, body);
+    if (crmAnswer) return crmAnswer;
     if (path === "/v1/users/me") return reply({ bot: { workspace_limits: { max_file_upload_size_in_bytes: workspaceMax } } });
     if (path === "/v1/file_uploads" && method === "POST") {
       const created = JSON.parse(body);
@@ -276,6 +284,23 @@ test("panneau : un fichier déjà joint plus haut dans le fil n'est pas repropos
   ];
   const files = panel.candidates(written, earlier, MAX);
   assert.deepEqual(files.map((file) => `${file.messageId}/${file.id}`), ["m2/c"]);
+});
+
+test("panneau : tout désélectionner passe de 27 fichiers à 0 d'un coup, puis un seul se recoche", () => {
+  const many = Array.from({ length: 27 }, (_, at) => ref("m1", `f${at}`, `Pièce ${at}.pdf`, 1000 + at));
+  const files = panel.candidates([message("m1", [...many, ref("m1", "cloud", "Data room", 0, { kind: "reference" })])], [], MAX);
+  assert.equal(panel.chosen(files).picked.length, 27);
+
+  const none = panel.selectAll(files, false);
+  assert.equal(panel.chosen(none).picked.length, 0);
+  assert.equal(none.length, 28, "rien n'est retiré de la liste");
+
+  const one = none.map((file) => (file.id === "f4" ? { ...file, selected: true } : file));
+  assert.deepEqual(panel.chosen(one).picked.map((file) => file.label), ["Pièce 4.pdf"]);
+
+  const all = panel.selectAll(one, true);
+  assert.equal(panel.chosen(all).picked.length, 27);
+  assert.equal(all.find((file) => file.id === "cloud").selected, false, "un lien cloud ne se coche jamais");
 });
 
 // ---- Import route ----------------------------------------------------------
@@ -551,4 +576,331 @@ test("détail de connexion : message à défaut d'errorMessage, code seul, rien 
   assert.equal(authDetail.authDetail({}), null);
   assert.equal(authDetail.authDetail(null), null);
   assert.equal(authDetail.authDetail("chaîne"), null);
+});
+
+// ---- Signatures (synthetic people and companies) ---------------------------
+
+const wrote = (address, name, text) => ({ from: { address, name }, text });
+
+test("signature : mobile, ligne directe et fixe en 01 gardés, chacun avec ce que dit la signature", () => {
+  const read = signature.readSignature(
+    [
+      "Bonjour,",
+      "Le mandat est signé, je vous envoie la suite demain.",
+      "Cordialement,",
+      "Camille Exemple",
+      "Directrice des investissements",
+      "Foncière Lumen SAS",
+      "12 rue de l'Exemple",
+      "75008 Paris",
+      "Mobile : +33 6 12 34 56 78",
+      "Ligne directe : 01 23 45 67 89",
+      "Tél. +33 (0)1 98 76 54 32",
+      "Fax : 01 11 22 33 44",
+      "www.fonciere-lumen.example",
+    ].join("\n"),
+    "Camille Exemple",
+  );
+  assert.deepEqual(
+    read.phones.map((phone) => [phone.e164, phone.label]),
+    [
+      ["+33612345678", "mobile"],
+      ["+33123456789", "direct"],
+      ["+33198765432", "fixe"],
+    ],
+  );
+  assert.equal(read.legalName, "Foncière Lumen SAS");
+  assert.equal(read.address, "12 rue de l'Exemple, 75008 Paris");
+  assert.equal(read.website, "fonciere-lumen.example");
+  assert.ok(!read.lines.includes("Camille Exemple"), "le nom de la personne n'est jamais une société");
+});
+
+test("signature : un 01 seul n'est pas appelé standard ; un numéro écrit trois fois est gardé une fois", () => {
+  const read = signature.readSignature("Merci\nJean Test\n01 23 45 67 89\n01.23.45.67.89\n+33 1 23 45 67 89", "Jean Test");
+  assert.equal(read.phones.length, 1);
+  assert.equal(read.phones[0].e164, "+33123456789");
+  assert.equal(read.phones[0].label, null);
+});
+
+test("signature : international (Suisse, Royaume-Uni, 0041) et rien d'inventé dans un texte sans numéro", () => {
+  const read = signature.readSignature(
+    "Best regards,\nAnna Muster\nM +41 79 123 45 67\nOffice 0041 22 345 67 89\nLondon +44 20 7946 0958",
+    "Anna Muster",
+  );
+  assert.deepEqual(
+    read.phones.map((phone) => phone.e164),
+    ["+41791234567", "+41223456789", "+442079460958"],
+  );
+  assert.equal(read.phones[0].label, "mobile");
+  assert.deepEqual(signature.readSignature("Cordialement,\nPaul\nRéf. dossier 2024-118, lot 12", "Paul").phones, []);
+});
+
+test("signature : chaque numéro va à celui qui l'a écrit, sur tout le fil, pas seulement le dernier message", () => {
+  const messages = [
+    wrote("a@lumen.example", "Alice Un", "Bonjour\nCordialement\nAlice Un\nMobile 06 11 11 11 11\nStandard 01 40 00 00 00"),
+    wrote("b@autre.example", "Bruno Deux", "Vu.\nBien à vous\nBruno Deux\n07 22 22 22 22"),
+    wrote("moi@mosaic.example", "Moi", "Merci\nCordialement\nMoi\n06 99 99 99 99"),
+    wrote("a@lumen.example", "Alice Un", "Ok pour moi.\nAlice"),
+    wrote("A@Lumen.example", "Alice Un", "Suite\nCordialement\nAlice Un\n+33 6 11 11 11 11\nLigne directe 01 40 00 00 01"),
+  ];
+  const all = signature.signaturesOf(messages, ["a@lumen.example", "b@autre.example"]);
+  assert.deepEqual(
+    all.get("a@lumen.example").phones.map((phone) => [phone.e164, phone.label]),
+    [
+      ["+33611111111", "mobile"],
+      ["+33140000000", "standard"],
+      ["+33140000001", "direct"],
+    ],
+  );
+  assert.deepEqual(all.get("b@autre.example").phones.map((phone) => phone.e164), ["+33722222222"]);
+  assert.ok(!all.has("moi@mosaic.example"), "un interne ne reçoit rien");
+});
+
+test("signature : phoneKey rapproche les écritures d'un même numéro déjà en fiche", () => {
+  assert.equal(signature.phoneKey("+33 6 12 34 56 78"), "+33612345678");
+  assert.equal(signature.phoneKey("06.12.34.56.78"), "+33612345678");
+  assert.equal(signature.phoneKey("0033 (0)6 12 34 56 78"), "+33612345678");
+  assert.equal(signature.phoneKey("n/a"), null);
+});
+
+// ---- Company matching -------------------------------------------------------
+
+const crm = [
+  { id: "c1", name: "Foncière Lumen" },
+  { id: "c2", name: "LUMEN PARTNERS SAS" },
+  { id: "c3", name: "Atelier Nord" },
+  { id: "c4", name: "Ateliers Nord" },
+  { id: "c5", name: "Banque Exemple" },
+];
+
+test("société : le nom écrit dans la signature, casse, accents, ponctuation et forme juridique à part", () => {
+  const guess = (lines, email = "x@gmail.com", website = null) =>
+    companyMatch.guessCompany({ lines, website }, email, crm);
+  assert.equal(guess(["FONCIERE LUMEN SAS"]).sure?.id, "c1");
+  assert.equal(guess(["Lumen-Partners"]).sure?.id, "c2");
+  assert.equal(guess(["Directeur · Banque  Exemple, Paris"]).sure?.id, "c5");
+});
+
+test("société : une faute ou un domaine ne font qu'une suggestion ; deux sociétés nommées, deux suggestions", () => {
+  const typo = companyMatch.guessCompany({ lines: ["Fonciere Lumem"], website: null }, "x@gmail.com", crm);
+  assert.equal(typo.sure, null);
+  assert.deepEqual(typo.maybe.map((company) => company.id), ["c1"]);
+
+  const domain = companyMatch.guessCompany({ lines: [], website: null }, "jean@banque-exemple.example", crm);
+  assert.equal(domain.sure, null);
+  assert.deepEqual(domain.maybe.map((company) => company.id), ["c5"]);
+
+  const both = companyMatch.guessCompany({ lines: ["Atelier Nord", "Ateliers Nord"], website: null }, "x@gmail.com", crm);
+  assert.equal(both.sure, null);
+  assert.deepEqual(both.maybe.map((company) => company.id).sort(), ["c3", "c4"]);
+});
+
+test("société : un domaine de messagerie gratuite ne suggère rien, une ligne sans rapport non plus", () => {
+  const none = companyMatch.guessCompany({ lines: ["Directrice générale"], website: null }, "lumen@gmail.com", crm);
+  assert.equal(none.sure, null);
+  assert.deepEqual(none.maybe, []);
+});
+
+test("société : sameCompany trouve le doublon avant création, à la forme juridique près", () => {
+  assert.equal(companyMatch.sameCompany("Lumen Partners", crm)?.id, "c2");
+  assert.equal(companyMatch.sameCompany("foncière lumen sarl", crm)?.id, "c1");
+  assert.equal(companyMatch.sameCompany("Lumen Capital", crm), null);
+});
+
+test("signature : deux numéros sur une ligne, chacun son étiquette ; le fax écarté même en fin de ligne", () => {
+  const read = signature.phonesIn(["Mobile 06 12 12 12 12 / Fixe 01 34 34 34 34", "Tél : 01 56 56 56 56 – Fax : 01 78 78 78 78", "Port. 07 90 90 90 90"]);
+  assert.deepEqual(
+    read.map((phone) => [phone.e164, phone.label]),
+    [
+      ["+33612121212", "mobile"],
+      ["+33134343434", "fixe"],
+      ["+33156565656", "fixe"],
+      ["+33790909090", "mobile"],
+    ],
+  );
+});
+
+// ---- Contacts route: companies looked for before creation, numbers added ---
+
+// A tiny CRM: a Contacts base with its phone columns and a Société relation,
+// and a companies base. Synthetic names only.
+const CONTACT_ID = "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const fakeCrm = {
+  companies: new Map(),
+  contacts: new Map(),
+  writes: [],
+};
+const resetCrm = () => {
+  fakeCrm.companies = new Map([["co-1", "Foncière Lumen SAS"]]);
+  fakeCrm.contacts = new Map([
+    [
+      CONTACT_ID,
+      {
+        parent: { data_source_id: "contacts-src" },
+        properties: {
+          Nom: { type: "title", title: [{ plain_text: "Camille Exemple" }] },
+          Email: { type: "email", email: "camille@lumen.example" },
+          Société: { type: "relation", relation: [{ id: "co-1" }] },
+          "Téléphone FR": { type: "phone_number", phone_number: "06 12 34 56 78" },
+          Téléphone: { type: "phone_number", phone_number: null },
+        },
+      },
+    ],
+  ]);
+  fakeCrm.writes = [];
+};
+
+const CONTACTS_SCHEMA = {
+  Nom: { id: "n", name: "Nom", type: "title" },
+  Email: { id: "e", name: "Email", type: "email" },
+  Société: { id: "s", name: "Société", type: "relation", relation: { data_source_id: "companies-src" } },
+  "Téléphone FR": { id: "tf", name: "Téléphone FR", type: "phone_number" },
+  "Téléphone CH": { id: "tc", name: "Téléphone CH", type: "phone_number" },
+  Téléphone: { id: "t", name: "Téléphone", type: "phone_number" },
+  Type: { id: "ty", name: "Type", type: "multi_select", multi_select: { options: [] } },
+};
+const COMPANIES_SCHEMA = {
+  Nom: { id: "cn", name: "Nom", type: "title" },
+  Adresse: { id: "ca", name: "Adresse", type: "rich_text" },
+};
+
+function crmRoute(method, path, body) {
+  if (path === "/v1/databases/contacts-db") return reply({ data_sources: [{ id: "contacts-src" }] });
+  if (path === "/v1/data_sources/contacts-src") return reply({ properties: CONTACTS_SCHEMA });
+  if (path === "/v1/data_sources/companies-src") return reply({ properties: COMPANIES_SCHEMA });
+  if (path === "/v1/data_sources/companies-src/query") {
+    return reply({
+      results: [...fakeCrm.companies].map(([id, name]) => ({ id, properties: { Nom: { type: "title", title: [{ plain_text: name }] } } })),
+      has_more: false,
+    });
+  }
+  if (path === "/v1/data_sources/contacts-src/query") {
+    return reply({ results: [...fakeCrm.contacts].map(([id, held]) => ({ id, ...held })), has_more: false });
+  }
+  if (path === "/v1/pages" && method === "POST") {
+    const created = JSON.parse(body);
+    fakeCrm.writes.push({ method, path, body: created });
+    const id = `new-${fakeCrm.writes.length}`;
+    if (created.parent.data_source_id === "companies-src") fakeCrm.companies.set(id, created.properties.title.title[0].text.content);
+    return reply({ id });
+  }
+  const contact = path.match(/^\/v1\/pages\/(.+)$/);
+  if (contact && fakeCrm.contacts.has(contact[1])) {
+    if (method === "GET") return reply(fakeCrm.contacts.get(contact[1]));
+    if (method === "PATCH") {
+      const { properties } = JSON.parse(body);
+      fakeCrm.writes.push({ method, path, body: properties });
+      for (const [name, value] of Object.entries(properties)) fakeCrm.contacts.get(contact[1]).properties[name] = { type: "phone_number", ...value };
+      return reply({ id: contact[1] });
+    }
+  }
+  return null;
+}
+
+const crmRequest = (method, path, body) =>
+  new Request(`https://test${path}`, {
+    method,
+    headers: { authorization: `Bearer ${apiToken}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+test("contact Outlook : une société déjà au CRM, écrite autrement, est reprise et pas recréée", async () => {
+  resetCrm();
+  const response = await contactsRoute.onRequestPost({
+    request: crmRequest("POST", "/api/outlook/contacts", {
+      name: "Jean Test",
+      email: "jean@lumen.example",
+      newCompany: { name: "FONCIERE-LUMEN", address: "12 rue de l'Exemple, 75008 Paris" },
+    }),
+    env,
+  });
+  assert.equal(response.status, 201);
+  const result = await response.json();
+  assert.equal(result.companyId, "co-1");
+  assert.equal(result.company, "Foncière Lumen SAS");
+  const companyWrites = fakeCrm.writes.filter((write) => write.body.parent?.data_source_id === "companies-src");
+  assert.equal(companyWrites.length, 0, "aucune société créée");
+  const contactWrite = fakeCrm.writes.find((write) => write.body.parent?.data_source_id === "contacts-src");
+  assert.deepEqual(contactWrite.body.properties.Société, { relation: [{ id: "co-1" }] });
+});
+
+test("contact Outlook : une société nouvelle est créée avec le nom et l'adresse donnés, rien d'autre", async () => {
+  resetCrm();
+  const response = await contactsRoute.onRequestPost({
+    request: crmRequest("POST", "/api/outlook/contacts", {
+      name: "Anna Muster",
+      email: "anna@atelier.example",
+      phones: [
+        { country: "CH", dial: "+41", number: "79 123 45 67" },
+        { country: "FR", dial: "+33", number: "1 23 45 67 89" },
+      ],
+      newCompany: { name: "Atelier Nord SA", address: "Rue du Test 4, 1201 Genève" },
+    }),
+    env,
+  });
+  assert.equal(response.status, 201);
+  const [company, contact] = fakeCrm.writes;
+  assert.equal(company.body.parent.data_source_id, "companies-src");
+  assert.deepEqual(Object.keys(company.body.properties).sort(), ["Adresse", "title"]);
+  assert.equal(company.body.properties.Adresse.rich_text[0].text.content, "Rue du Test 4, 1201 Genève");
+  assert.equal(contact.body.properties["Téléphone CH"].phone_number, "+41 79 123 45 67");
+  assert.equal(contact.body.properties["Téléphone FR"].phone_number, "+33 1 23 45 67 89");
+  assert.equal((await response.json()).companyId, "new-1");
+});
+
+test("contact Outlook : les numéros ajoutés à une fiche s'ajoutent, ceux qu'elle a déjà ne bougent pas", async () => {
+  resetCrm();
+  const response = await contactsRoute.onRequestPatch({
+    request: crmRequest("PATCH", "/api/outlook/contacts", {
+      id: CONTACT_ID,
+      phones: [
+        { country: "FR", dial: "+33", number: "6 12 34 56 78" },
+        { country: "FR", dial: "+33", number: "1 40 00 00 00" },
+        { country: "GB", dial: "+44", number: "20 7946 0958" },
+      ],
+    }),
+    env,
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { added: 2 });
+  const [patch] = fakeCrm.writes;
+  assert.equal(patch.body["Téléphone FR"].phone_number, "06 12 34 56 78 / +33 1 40 00 00 00");
+  assert.equal(patch.body["Téléphone"].phone_number, "+44 20 7946 0958");
+
+  // Again: nothing left to add, nothing written.
+  fakeCrm.writes = [];
+  const again = await contactsRoute.onRequestPatch({
+    request: crmRequest("PATCH", "/api/outlook/contacts", {
+      id: CONTACT_ID,
+      phones: [{ country: "FR", dial: "+33", number: "1 40 00 00 00" }],
+    }),
+    env,
+  });
+  assert.deepEqual(await again.json(), { added: 0 });
+  assert.equal(fakeCrm.writes.length, 0);
+});
+
+test("contact Outlook : PATCH refuse un id qui n'est pas une page de la base Contacts", async () => {
+  resetCrm();
+  const bad = await contactsRoute.onRequestPatch({
+    request: crmRequest("PATCH", "/api/outlook/contacts", { id: "../users/me", phones: [{ country: "FR", number: "06 00 00 00 00" }] }),
+    env,
+  });
+  assert.equal(bad.status, 400);
+  const empty = await contactsRoute.onRequestPatch({
+    request: crmRequest("PATCH", "/api/outlook/contacts", { id: CONTACT_ID, phones: [] }),
+    env,
+  });
+  assert.equal(empty.status, 400);
+});
+
+test("reconnaissance : un contact connu revient avec les numéros de sa fiche", async () => {
+  resetCrm();
+  const response = await matchRoute.onRequestPost({
+    request: crmRequest("POST", "/api/outlook/contacts/match", { addresses: ["camille@lumen.example"] }),
+    env,
+  });
+  const body = await response.json();
+  assert.deepEqual(body.matched["camille@lumen.example"].phones, ["06 12 34 56 78"]);
+  assert.equal(body.matched["camille@lumen.example"].company, "Foncière Lumen SAS");
 });

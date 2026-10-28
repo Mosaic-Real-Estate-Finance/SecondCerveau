@@ -33,7 +33,7 @@ const ROUTES = {
   "api/files.js": ["POST"],
   "api/outlook/notes.js": ["GET", "POST", "PATCH"],
   "api/outlook/attachments.js": ["GET", "POST"],
-  "api/outlook/contacts/index.js": ["POST"],
+  "api/outlook/contacts/index.js": ["POST", "PATCH"],
   "api/outlook/contacts/match.js": ["POST"],
   "api/readai/webhook.js": ["POST"],
   "api/readai/[action].js": ["GET", "POST", "DELETE"],

@@ -59,17 +59,27 @@ export type Feeling = "satisfied" | "problem" | "free";
 
 const DEVICE = { iphone: "iPhone", ipad: "iPad", android: "Android", other: "Ordinateur" } as const;
 
-/** Written to « Retours sur l'app » (functions/api/feedback.ts). */
-export async function sendFeedback(feeling: Feeling, text: string) {
+/**
+ * Written to « Retours sur l'app » (functions/api/feedback.ts).
+ *
+ * `from` is for the Outlook panel: it has no dictation count and no session
+ * cookie, so it names its own device and the mailbox it is open in, and the
+ * count is left out (the « Dictée n° » column stays empty).
+ */
+export async function sendFeedback(feeling: Feeling, text: string, from?: { device: string; user?: string }) {
   const response = await fetch("/api/auth/feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      feeling,
-      text: text.trim(),
-      count: state.sent,
-      device: `${DEVICE[detectDevice()]}${isStandalone() ? " · app installée" : " · navigateur"}`,
-    }),
+    body: JSON.stringify(
+      from
+        ? { feeling, text: text.trim(), device: from.device, user: from.user || undefined }
+        : {
+            feeling,
+            text: text.trim(),
+            count: state.sent,
+            device: `${DEVICE[detectDevice()]}${isStandalone() ? " · app installée" : " · navigateur"}`,
+          },
+    ),
   });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: string } | null;

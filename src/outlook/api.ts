@@ -39,7 +39,15 @@ export type UploadedFile = { id: string; name: string; size: number };
 
 export type SkippedFile = { name: string; reason: string };
 
-export type MatchedContact = { id: string; name: string; company: string };
+export type MatchedContact = {
+  id: string;
+  name: string;
+  company: string;
+  /** The numbers the fiche already holds, as written there. */
+  phones?: string[];
+  /** Returned by a creation: the company it was linked to, new or found. */
+  companyId?: string;
+};
 
 export type MatchResult = {
   matched: Record<string, MatchedContact>;
@@ -72,8 +80,11 @@ export type NewContact = {
   types?: string[];
   phones?: { country: string; dial?: string; number: string }[];
   companyId?: string;
-  /** Same shape the dictation's form sends, so the server path is identical. */
-  newCompany?: { name: string };
+  /**
+   * A company to link, looked for by name on the server before it is created.
+   * The address is the one read in the signature, as the user left it.
+   */
+  newCompany?: { name: string; address?: string };
 };
 
 /** Why a 401 came back. The panel words these itself; see AUTH_COPY. */
@@ -171,6 +182,13 @@ export const createContact = (contact: NewContact) =>
   call<MatchedContact>("/api/outlook/contacts", {
     method: "POST",
     body: JSON.stringify(contact),
+  });
+
+/** Numbers added to a fiche already in the base; the ones it holds are kept. */
+export const addPhones = (id: string, phones: { country: string; dial: string; number: string }[]) =>
+  call<{ added: number }>("/api/outlook/contacts", {
+    method: "PATCH",
+    body: JSON.stringify({ id, phones }),
   });
 
 export const findNote = (conversationId: string) =>

@@ -1,4 +1,4 @@
-import { companyNames, rollupText, titleOf } from "../../../_lib/contact.js";
+import { companyNames, PHONE_COLUMNS, rollupText, titleOf } from "../../../_lib/contact.js";
 import {
   dataSourceId,
   fail,
@@ -26,7 +26,9 @@ const MAX = 100;
 
 const clean = (address: string) => address.trim().toLowerCase();
 
-type Matched = { id: string; name: string; company: string };
+// `phones`: what the fiche already holds, so the panel only offers the numbers
+// of a signature that are missing from it.
+type Matched = { id: string; name: string; company: string; phones: string[] };
 
 export const onRequestPost: Handler = async ({ request, env }) => {
   const denied = await guard(request, env);
@@ -50,7 +52,10 @@ export const onRequestPost: Handler = async ({ request, env }) => {
     const title = Object.values(schema).find((property) => property.type === "title");
     const rollup = schema[p.companyRollup]?.type === "rollup" ? schema[p.companyRollup] : undefined;
     const relation = schema[p.companyRelation]?.type === "relation" ? schema[p.companyRelation] : undefined;
-    const propertyIds = [title, emailColumn, rollup ?? relation]
+    const phoneColumns = Object.values(PHONE_COLUMNS)
+      .map((name) => schema[name])
+      .filter((property) => property?.type === "phone_number");
+    const propertyIds = [title, emailColumn, rollup ?? relation, ...phoneColumns]
       .filter((property) => property !== undefined)
       .map((property) => property.id);
 
@@ -92,6 +97,10 @@ export const onRequestPost: Handler = async ({ request, env }) => {
               .map((link: { id: string }) => companies?.get(link.id))
               .filter(Boolean)
               .join(", "),
+        phones: phoneColumns
+          .flatMap((column) => String(page.properties[column.name]?.phone_number ?? "").split("/"))
+          .map((number) => number.trim())
+          .filter(Boolean),
       };
 
       for (const address of held) {
