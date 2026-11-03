@@ -790,6 +790,7 @@ function PersonSheet({
         contacts={contacts}
         onBack={() => setPage("menu")}
         onPick={(contact) => choose({ kind: "attach", contact })}
+        onCreate={() => setPage("form")}
       />
     ) : (
       <div>

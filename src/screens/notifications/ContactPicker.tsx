@@ -11,11 +11,14 @@ export function ContactPicker({
   contacts,
   onBack,
   onPick,
+  onCreate,
 }: {
   person: PendingPerson;
   contacts: ContactsState;
   onBack: () => void;
   onPick: (contact: ContactRef) => void;
+  /** Nobody matches: the sheet's own « Créer le contact ». */
+  onCreate: () => void;
 }) {
   const [query, setQuery] = useState("");
   const suggestedNames = useMemo(
@@ -87,7 +90,17 @@ export function ContactPicker({
           <ul className="flex flex-col gap-2">{rest.map(row)}</ul>
           {contacts.status === "loading" && <p className="text-[color:var(--muted)]">Chargement des contacts…</p>}
           {contacts.status === "ready" && !suggested.length && !rest.length && !missing.length && (
-            <p className="px-2 text-[color:var(--muted)]">Aucun contact ne correspond.</p>
+            // Nobody to point at: the way forward is to make the contact.
+            <div className="flex flex-col items-center px-2 pt-6 text-center">
+              <p className="text-base font-semibold">Aucun contact ne correspond</p>
+              <button
+                type="button"
+                onClick={onCreate}
+                className="mt-4 flex h-12 items-center justify-center rounded-xl bg-navy px-6 font-medium text-on-accent transition-transform active:scale-[0.98]"
+              >
+                Créer le contact
+              </button>
+            </div>
           )}
         </section>
       </div>
